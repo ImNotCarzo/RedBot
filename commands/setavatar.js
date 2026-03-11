@@ -22,7 +22,7 @@ const data = {
       const res = await fetch(url);
       if (!res.ok) return ctx.send(`No pude descargar la imagen: ${res.status}`);
 
-      const buffer = await res.buffer();
+      const buffer = Buffer.from(await res.arrayBuffer());
       await ctx.bot.user.setAvatar(buffer);
       await ctx.send("Avatar actualizado");
 

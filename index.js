@@ -4,62 +4,11 @@ const { Partials, REST, Routes, EmbedBuilder } = require("discord.js");
 const mongoose = require("mongoose");
 const path = require("path");
 const fs = require("fs");
-const { GoogleGenAI } = require("@google/genai");
 
 const GuildConfig  = require("./models/GuildConfig");
 const prefixCache  = require("./utils/prefixCache");
-const { scheduleTempUnban, TempBan } = require("./commands/mod");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("./utils/askMemory");
-
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
-
-const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
-let currentKey = 0;
-
-function getAI() {
-  return new GoogleGenAI({ apiKey: GEMINI_KEYS[currentKey] });
-}
-
-function rotateKey() {
-  currentKey = (currentKey + 1) % GEMINI_KEYS.length;
-  console.log(`[AI] Rotando a key ${currentKey + 1}`);
-}
-
-async function generateWithFallback(params) {
-  try {
-    return await getAI().models.generateContent(params);
-  } catch (err) {
-    if (err.status === 429 && GEMINI_KEYS.length > 1) {
-      rotateKey();
-      return await getAI().models.generateContent(params);
-    }
-    throw err;
-  }
-}
-
-async function needsSearchAI(pregunta) {
-  try {
-    const res = await getAI().models.generateContent({
-      model: "gemini-3.1-flash-lite-preview",
-      contents: [{
-        role: "user",
-        parts: [{ text: `Answer only YES or NO. Does this question require current or real-time information from the internet (news, weather, sports results, prices, events, updates)?\nQuestion: ${pregunta}` }],
-      }],
-    });
-    return res.text.trim().toLowerCase().includes("yes");
-  } catch {
-    return false;
-  }
-}
-
-function toGeminiHistory(historial) {
-  return historial.map(m => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-}
+const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("./utils/ai");
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya.
@@ -184,20 +133,6 @@ bot.on("clientReady", async (bot) => {
     console.log("[Contexts] Todos actualizados");
   } catch (err) {
     console.error("[Contexts] Error:", err);
-  }
-
-  // Restaurar tempbans persistentes
-  try {
-    const pending = await TempBan.find({});
-    if (pending.length) {
-      console.log(`[TempBan] Restaurando ${pending.length} tempban(s)...`);
-      for (const entry of pending) {
-        scheduleTempUnban(bot, entry.guildId, entry.userId, entry.unbanAt);
-      }
-      console.log("[TempBan] Restaurados");
-    }
-  } catch (err) {
-    console.error("[TempBan] Error al restaurar:", err);
   }
 });
 

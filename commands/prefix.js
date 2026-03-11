@@ -26,7 +26,7 @@ const data = {
 
       if (!nuevo) {
         const data = await GuildConfig.findOne({ guildId: ctx.guild.id });
-        const prefix = data?.prefix || "!";
+        const prefix = data?.prefix ?? ".";
         const embed = new EmbedBuilder()
           .setTitle("Prefix actual")
           .setDescription(`\`${prefix}\``)

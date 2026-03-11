@@ -188,7 +188,7 @@ const data = {
 
       const prefixCache = require("../utils/prefixCache");
       const guildId = ctx.guild?.id;
-      const prefix = (guildId && prefixCache.get(guildId)) || "!";
+      const prefix = (guildId && prefixCache.get(guildId)) || ".";
 
       const formatCommand = (cmd) =>
         isSlash ? `</${cmd.slash}:${cmd.slashId}>` : `${prefix}${cmd.short}`;
