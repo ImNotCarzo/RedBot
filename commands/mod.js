@@ -496,7 +496,7 @@ const data = {
       .setTimestamp();
 
     if (failed.length)
-      logEmbed.addFields({ name: "No se puedo banear a", value: failed.map(m => m.user.tag).join(", ") });
+      logEmbed.addFields({ name: "No se pudo banear a", value: failed.map(m => m.user.tag).join(", ") });
 
     await sendLog(ctx.guild, logEmbed);
   },
@@ -532,9 +532,17 @@ const data = {
       return ctx.send({ content: "No puedes expulsar a alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
 
     try {
-      await member.kick(`${ctx.user?.tag ?? ctx.author?.tag}${reason ? `: ${reason}` : ""}`);
-
       const username = member.user.globalName || member.user.username;
+
+      // DM al usuario antes de expulsar
+      const dmEmbed = new EmbedBuilder()
+        .setColor(YELLOW)
+        .setDescription(`Fuiste expulsado de **${ctx.guild.name}**${reason ? `\nRazón: ${reason}` : ""}`)
+        .setTimestamp();
+
+      await member.user.send({ embeds: [dmEmbed] }).catch(() => {});
+
+      await member.kick(`${ctx.user?.tag ?? ctx.author?.tag}${reason ? `: ${reason}` : ""}`);
 
       // mensaje simple en el servidor
       const publicEmbed = new EmbedBuilder()
@@ -543,14 +551,6 @@ const data = {
         .setTimestamp();
 
       await ctx.send({ embeds: [publicEmbed] });
-
-      // DM al usuario
-      const dmEmbed = new EmbedBuilder()
-        .setColor(YELLOW)
-        .setDescription(`Fuiste expulsado de **${ctx.guild.name}**${reason ? `\nRazón: ${reason}` : ""}`)
-        .setTimestamp();
-
-      await member.user.send({ embeds: [dmEmbed] }).catch(() => {});
 
       // embed completo para logs
       const logEmbed = new EmbedBuilder()

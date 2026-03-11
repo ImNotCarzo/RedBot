@@ -1,33 +1,6 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { GoogleGenAI } = require("@google/genai");
-
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
-
-const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
-let currentKey = 0;
-
-function getAI() {
-  return new GoogleGenAI({ apiKey: GEMINI_KEYS[currentKey] });
-}
-
-function rotateKey() {
-  currentKey = (currentKey + 1) % GEMINI_KEYS.length;
-}
-
-async function generateWithFallback(params) {
-  try {
-    return await getAI().models.generateContent(params);
-  } catch (err) {
-    if (err.status === 429 && GEMINI_KEYS.length > 1) {
-      rotateKey();
-      return await getAI().models.generateContent(params);
-    }
-    throw err;
-  }
-}
+const { generateWithFallback } = require("../utils/ai");
 
 // ─────────────────────────────────────────────
 //  HELPERS

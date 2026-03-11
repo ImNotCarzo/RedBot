@@ -8,7 +8,6 @@ const {
   ButtonStyle,
   ComponentType,
   MessageFlags,
-  PermissionFlagBits,
 } = require("discord.js");
 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
