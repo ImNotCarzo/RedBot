@@ -1,7 +1,7 @@
 const { CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder, version: djsVersion } = require("discord.js");
-const { version: botVersion } = require("./package.json");
-const { version: erineVersion } = require("./node_modules/erine/package.json");
+const { version: botVersion } = require("../../package.json");
+const { version: erineVersion } = require("../../node_modules/erine/package.json");
 
 const formatUptime = (ms) => {
   const s = Math.floor(ms / 1000) % 60;
