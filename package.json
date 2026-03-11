@@ -1,0 +1,23 @@
+{
+  "name": "RedBot",
+  "version": "0.1.1",
+  "description": "erine bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node debug.js",
+    "audit": "npm audit fix"
+  },
+  "dependencies": {
+    "@google/genai": "^1.44.0",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.3.1",
+    "erine": "^2.7.5",
+    "form-data": "^4.0.5",
+    "groq-sdk": "^0.37.0",
+    "mongoose": "^9.2.4",
+    "node-fetch": "^3.3.2",
+    "openai": "^6.27.0"
+  },
+  "author": "carzo.",
+  "license": "MIT"
+}
