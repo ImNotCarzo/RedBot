@@ -83,8 +83,8 @@ const data = {
       if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
 
       const { version: djsVersion } = require("discord.js");
-      const { version: botVersion } = require("../../package.json");
-      const { version: erineVersion } = require("../../node_modules/erine/package.json");
+      const { version: botVersion } = require("../package.json");
+      const { version: erineVersion } = require("../node_modules/erine/package.json");
 
       const formatUptime = (ms) => {
         const s = Math.floor(ms / 1000) % 60;
