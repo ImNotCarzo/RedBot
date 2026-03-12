@@ -5,35 +5,9 @@ const {
   MessageFlags,
   ChannelType,
 } = require("discord.js");
-const mongoose = require("mongoose");
-
-// ─────────────────────────────────────────────
-//  SHARED LOG SCHEMA (mismo que mod.js)
-// ─────────────────────────────────────────────
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-// ─────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────
-
-const RED   = "#ff383d";
-const GREEN = "#23a55a";
-const BLUE  = "#5865f2";
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
+const Log = require("../models/Log");
+const sendLog = require("../utils/sendLog");
+const { RED, GREEN, BLUE } = require("../utils/colors");
 
 function formatSlowmode(seconds) {
   if (seconds === 0)    return "desactivado";
