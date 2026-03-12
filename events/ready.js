@@ -1,5 +1,6 @@
 const { ActivityType } = require("discord.js");
-const { scheduleTempUnban, TempBan } = require("../commands/mod");
+const TempBan = require("../models/TempBan");
+const { scheduleTempUnban } = require("../utils/helpers");
 
 async function restoreTempBans(client) {
   try {
@@ -16,6 +17,8 @@ async function restoreTempBans(client) {
   }
 }
 
+let presenceInterval = null;
+
 const event = {
   name: "clientReady",
   async code(bot) {
@@ -29,8 +32,10 @@ const event = {
       "/help",
     ];
 
+    if (presenceInterval) clearInterval(presenceInterval);
+
     let i = 0;
-    setInterval(() => {
+    presenceInterval = setInterval(() => {
       const activities = getActivities();
       bot.user.setPresence({
         activities: [{ name: activities[i], type: ActivityType.Watching }],

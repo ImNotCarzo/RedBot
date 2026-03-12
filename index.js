@@ -34,7 +34,6 @@ const bot = new Erine({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
-    GatewayIntentBits.DirectMessageTyping,
   ],
   partials: [Partials.Channel, Partials.Message],
   guildOnly: false,
@@ -188,7 +187,7 @@ bot.on("messageCreate", async (message) => {
         iconURL: message.author.displayAvatarURL({ size: 128 }),
       })
       .setDescription(texto)
-      .setColor("Red");
+      .setColor("#ff383d");
 
     const botMsg = await message.reply({ embeds: [embed] });
     setConversacion(message.author.id, historial, botMsg.id);
