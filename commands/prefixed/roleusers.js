@@ -64,7 +64,7 @@ const data = {
       });
 
       collector.on("collect", async (i) => {
-        if (i.user.id !== authorId) return i.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+        if (i.user.id !== authorId) return i.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
         if (i.customId === prevId) page--;
         if (i.customId === nextId) page++;
         await i.update({ embeds: [buildEmbed()], components: [buildRow()] });

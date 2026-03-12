@@ -125,7 +125,7 @@ const data = {
 
         // Botones de paginación de roles
         if ([prevId, nextId].includes(interaction.customId)) {
-          if (!isAuthor) return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          if (!isAuthor) return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
           return; // manejado en rolesCollector
         }
 
@@ -156,7 +156,7 @@ const data = {
               flags: MessageFlags.Ephemeral,
             });
           }
-          return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
         }
 
         if (selected === "info") return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });

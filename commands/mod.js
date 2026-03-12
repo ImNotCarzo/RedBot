@@ -8,104 +8,20 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const mongoose = require("mongoose");
 
-// ─────────────────────────────────────────────
-//  SCHEMAS
-// ─────────────────────────────────────────────
+const Log = require("../models/Log");
+const Warn = require("../models/Warn");
+const TempBan = require("../models/TempBan");
 
-const warnSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true },
-  userId:    { type: String, required: true },
-  moderator: { type: String, required: true },
-  reason:    { type: String, default: "Sin razón" },
-  warnId:    { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-});
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const tempBanSchema = new mongoose.Schema({
-  guildId:  { type: String, required: true },
-  userId:   { type: String, required: true },
-  unbanAt:  { type: Date,   required: true },
-});
-
-const TempBan = mongoose.models.TempBan || mongoose.model("TempBan", tempBanSchema);
-const Warn  = mongoose.models.Warn  || mongoose.model("Warn",  warnSchema);
-const Log   = mongoose.models.Log   || mongoose.model("Log",   logSchema);
-
-// ─────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────
-
-const RED    = "#ff383d";
-const YELLOW = "#f0b132";
-const GREEN  = "#23a55a";
-const BLUE   = "#5865f2";
-
-function generateId() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
-function parseDuration(str) {
-  const match = str.match(/^(\d+)(s|m|h|d)$/);
-  if (!match) return null;
-  const value = parseInt(match[1]);
-  const unit = match[2];
-  const multipliers = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
-  return value * multipliers[unit];
-}
-
-function formatDuration(ms) {
-  const s = Math.floor(ms / 1000);
-  if (s < 60)   return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60)   return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24)   return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const channel = guild.channels.cache.get(doc.channelId);
-    if (channel?.isTextBased()) await channel.send({ embeds: [embed] });
-  } catch {}
-}
+const { RED, YELLOW, GREEN, BLUE } = require("../utils/colors");
+const { generateId, parseDuration, formatDuration, scheduleTempUnban } = require("../utils/helpers");
+const sendLog = require("../utils/sendLog");
 
 function buildPagRow(prevId, nextId, page, total) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
     new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === total - 1)
   );
-}
-function scheduleTempUnban(client, guildId, userId, unbanAt) {
-  const delay = unbanAt.getTime() - Date.now();
-
-  const execute = async () => {
-    try {
-      const guild = await client.guilds.fetch(guildId).catch(() => null);
-      if (!guild) return;
-
-      await guild.members.unban(userId, "Tempban expirado");
-      await TempBan.deleteOne({ guildId, userId });
-    } catch {
-      // El usuario puede ya no estar baneado, limpiamos igual
-      await TempBan.deleteOne({ guildId, userId }).catch(() => {});
-    }
-  };
-
-  if (delay <= 0) {
-    // Ya venció — ejecutar de inmediato
-    execute();
-  } else {
-    setTimeout(execute, delay);
-  }
 }
 // ─────────────────────────────────────────────
 //  DATA
@@ -1110,10 +1026,10 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
       } catch {
-        await ctx.send({ content: "No se pudo los logs", flags: MessageFlags.Ephemeral });
+        await ctx.send({ content: "No se pudo configurar los logs", flags: MessageFlags.Ephemeral });
       }
     },
   }),
 };
 
-module.exports = { data, scheduleTempUnban, TempBan };
+module.exports = { data };

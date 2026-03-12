@@ -255,7 +255,7 @@ const data = {
           const isAuthor = interaction.user.id === authorId;
 
           if ([prevId, nextId].includes(interaction.customId)) {
-            if (!isAuthor) return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+            if (!isAuthor) return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -281,7 +281,7 @@ const data = {
               const embed = new EmbedBuilder().setAuthor({ name: usernameDisplay, iconURL: user.displayAvatarURL({ size: 128 }) }).setDescription(roles.join(", ")).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
-            return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+            return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
           }
 
           if (selected === "info") return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
@@ -604,7 +604,7 @@ const data = {
         });
 
         collector.on("collect", async (i) => {
-          if (i.user.id !== invoker.id) return i.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          if (i.user.id !== invoker.id) return i.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
           await i.update({

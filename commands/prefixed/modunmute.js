@@ -1,33 +1,8 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
-
-const GREEN = "#23a55a";
-
-async function resolveMember(ctx, input) {
-  if (!input) return null;
-  if (ctx.message?.mentions?.members?.size) return ctx.message.mentions.members.first();
-  if (/^\d{17,20}$/.test(input)) {
-    const byId = await ctx.guild.members.fetch(input).catch(() => null);
-    if (byId) return byId;
-  }
-  return null;
-}
+const sendLog = require("../../utils/sendLog");
+const { GREEN } = require("../../utils/colors");
+const { resolveMember } = require("../../utils/helpers");
 
 const data = {
   data: new CommandBuilder({
@@ -51,7 +26,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tengo permiso para desmutear");

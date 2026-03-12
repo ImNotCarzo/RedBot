@@ -1,24 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
-
-const RED   = "#ff383d";
-const GREEN = "#23a55a";
+const sendLog = require("../../utils/sendLog");
+const { RED, GREEN } = require("../../utils/colors");
 
 function roleHierarchyCheck(ctx, role) {
   if (role.managed) return "No puedo editar roles gestionados por integraciones";
@@ -56,7 +39,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send("No tenés el permiso `ManageRoles`");
+        return ctx.send("No tienes el permiso `ManageRoles`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tengo permiso para editar roles");

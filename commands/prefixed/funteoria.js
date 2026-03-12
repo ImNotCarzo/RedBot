@@ -48,7 +48,7 @@ const data = {
       });
     } catch (err) {
       console.error("[funteoría]", err);
-      await ctx.send("Me ratelimiteó google, f");
+      await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
     }
   },
 };

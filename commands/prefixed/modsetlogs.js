@@ -1,14 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-const GREEN = "#23a55a";
+const Log = require("../../models/Log");
+const { GREEN } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -25,7 +18,7 @@ const data = {
       if (!guild) return ctx.send("Solo se puede usar en servidores");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return ctx.send("No tenés el permiso `ManageGuild`");
+        return ctx.send("No tienes el permiso `ManageGuild`");
 
       const channel = ctx.message?.mentions?.channels?.first() ||
         (ctx.args?.[0] ? guild.channels.cache.get(ctx.args[0]) : null);

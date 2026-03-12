@@ -84,7 +84,7 @@ ${datosUsuario}`;
         }],
       });
 
-      const texto = response.text?.trim().slice(0, 4000) ?? "Me ratelimiteó google, f";
+      const texto = response.text?.trim().slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
 
       await ctx.send({
         embeds: [
@@ -98,7 +98,7 @@ ${datosUsuario}`;
       });
     } catch (err) {
       console.error("[funroast]", err);
-      await ctx.send("Me ratelimiteó google, f");
+      await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
     }
   },
 };

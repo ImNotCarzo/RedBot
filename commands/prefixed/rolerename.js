@@ -1,24 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
-
-const RED  = "#ff383d";
-const DARK = "#2b2d31";
+const sendLog = require("../../utils/sendLog");
+const { DARK } = require("../../utils/colors");
 
 function roleHierarchyCheck(ctx, role) {
   if (role.managed) return "No puedo editar roles gestionados por integraciones";
@@ -59,12 +42,12 @@ const data = {
         ? ctx.args?.join(" ").replace(/<@&\d+>/g, "").trim()
         : ctx.args?.slice(1).join(" ").trim();
 
-      if (!newName) return ctx.send("Proporcioná el nuevo nombre del rol");
+      if (!newName) return ctx.send("Proporciona el nuevo nombre del rol");
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send("No tenés el permiso `ManageRoles`");
+        return ctx.send("No tienes el permiso `ManageRoles`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tengo permiso para editar roles");

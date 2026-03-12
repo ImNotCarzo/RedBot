@@ -81,7 +81,7 @@ const data = {
       const embed = new EmbedBuilder()
         .setAuthor({ name: username, iconURL: invoker?.displayAvatarURL({ size: 128 }) })
         .setDescription(texto)
-        .setColor("Red");
+        .setColor("#ff383d");
 
       if (isSlash) {
         await ctx.interaction.editReply({ embeds: [embed] });
@@ -95,9 +95,9 @@ const data = {
     } catch (err) {
       console.error("Error en ask:", err);
       if (ctx.interaction) {
-        await ctx.interaction.editReply("Algo salió mal, intentá de nuevo").catch(() => {});
+        await ctx.interaction.editReply("Algo salió mal, intenta de nuevo").catch(() => {});
       } else {
-        await ctx.send("Me ratelimiteó google, f");
+        await ctx.send("Ocurrió un error, intenta de nuevo");
       }
     }
   },

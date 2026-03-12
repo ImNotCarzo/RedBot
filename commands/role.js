@@ -10,38 +10,10 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const mongoose = require("mongoose");
-
-// ─────────────────────────────────────────────
-//  SHARED LOG SCHEMA
-// ─────────────────────────────────────────────
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-// ─────────────────────────────────────────────
-//  CONSTANTS & HELPERS
-// ─────────────────────────────────────────────
-
-const RED    = "#ff383d";
-const GREEN  = "#23a55a";
-const BLUE   = "#5865f2";
-const DARK   = "#2b2d31";
+const sendLog = require("../utils/sendLog");
+const { RED, GREEN, BLUE, DARK } = require("../utils/colors");
 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
 
 function noGuildReply(ctx) {
   return ctx.send({

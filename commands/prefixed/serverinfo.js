@@ -104,7 +104,7 @@ const data = {
         const isAuthor = interaction.user.id === authorId;
 
         if ([prevId, nextId].includes(interaction.customId)) {
-          if (!isAuthor) return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          if (!isAuthor) return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
           return;
         }
 
@@ -145,7 +145,7 @@ const data = {
               flags: MessageFlags.Ephemeral,
             });
           }
-          return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
         }
 
         // ── Autor ──

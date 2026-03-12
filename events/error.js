@@ -31,7 +31,7 @@ const event = {
 
     if (is(err, Errors.MissingPermission)) {
       const permisos = err.permissions?.join(", ") || "los requeridos";
-      return err.ctx?.send(`No tenés permisos para usar este comando, necesitás: \`${permisos}\``);
+      return err.ctx?.send(`No tienes permisos para usar este comando, necesitas: \`${permisos}\``);
     }
 
     if (is(err, Errors.MissingBotPermission)) {
@@ -46,7 +46,7 @@ const event = {
 
     if (is(err, Errors.MissingChannelPermission)) {
       const permisos = err.permissions?.join(", ") || "los requeridos";
-      return err.ctx?.send(`No tenés permisos en este canal, necesitás: \`${permisos}\``);
+      return err.ctx?.send(`No tienes permisos en este canal, necesitas: \`${permisos}\``);
     }
 
     if (is(err, Errors.OnlyForIDs)) {
@@ -58,7 +58,7 @@ const event = {
     }
 
     if (is(err, Errors.NotInChannelType)) {
-      return err.ctx?.send("No podés usar este comando en este tipo de canal");
+      return err.ctx?.send("No puedes usar este comando en este tipo de canal");
     }
 
     if (is(err, Errors.InvalidParamMember)) {

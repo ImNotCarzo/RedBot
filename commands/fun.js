@@ -78,7 +78,7 @@ const data = {
         });
       } catch (err) {
         console.error("[fun opinion]", err);
-        await reply({ content: "Me ratelimiteó google, f", flags: MessageFlags.Ephemeral });
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
   })
@@ -122,7 +122,7 @@ const data = {
         });
       } catch (err) {
         console.error("[fun critica]", err);
-        await reply({ content: "Me ratelimiteó google, f", flags: MessageFlags.Ephemeral });
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
   })
@@ -166,7 +166,7 @@ const data = {
         });
       } catch (err) {
         console.error("[fun excusa]", err);
-        await reply({ content: "Me ratelimiteó google, f", flags: MessageFlags.Ephemeral });
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
   })
@@ -211,7 +211,7 @@ const data = {
         });
       } catch (err) {
         console.error("[fun teoria]", err);
-        await reply({ content: "Me ratelimiteó google, f", flags: MessageFlags.Ephemeral });
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
   })
@@ -304,7 +304,7 @@ ${datosUsuario}`;
           }],
         });
 
-        const texto = response.text?.trim().slice(0, 4000) ?? "Me ratelimiteó google, f";
+        const texto = response.text?.trim().slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
 
         await reply({
           embeds: [
@@ -318,7 +318,7 @@ ${datosUsuario}`;
         });
       } catch (err) {
         console.error("[fun roast]", err);
-        await reply({ content: "Me ratelimiteó google, f", flags: MessageFlags.Ephemeral });
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
   }),

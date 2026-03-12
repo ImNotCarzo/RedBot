@@ -1,33 +1,8 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
-
-const RED = "#ff383d";
-
-async function resolveMember(ctx, input) {
-  if (!input) return null;
-  if (ctx.message?.mentions?.members?.size) return ctx.message.mentions.members.first();
-  if (/^\d{17,20}$/.test(input)) {
-    const byId = await ctx.guild.members.fetch(input).catch(() => null);
-    if (byId) return byId;
-  }
-  return null;
-}
+const sendLog = require("../../utils/sendLog");
+const { RED } = require("../../utils/colors");
+const { resolveMember } = require("../../utils/helpers");
 
 const data = {
   data: new CommandBuilder({
@@ -51,7 +26,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return ctx.send("No tenés el permiso `BanMembers`");
+        return ctx.send("No tienes el permiso `BanMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
         return ctx.send("No tengo permiso para banear");
@@ -63,7 +38,7 @@ const data = {
         return ctx.send("No puedo actuar sobre alguien con igual o mayor rango que el mío");
 
       if (member.roles.highest.position >= ctx.member.roles.highest.position)
-        return ctx.send("No podés actuar sobre alguien con igual o mayor rango que el tuyo");
+        return ctx.send("No puedes actuar sobre alguien con igual o mayor rango que el tuyo");
 
       await member.user.send({
         embeds: [

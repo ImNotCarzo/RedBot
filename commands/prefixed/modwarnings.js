@@ -8,30 +8,9 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const mongoose = require("mongoose");
-
-const warnSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true },
-  userId:    { type: String, required: true },
-  moderator: { type: String, required: true },
-  reason:    { type: String, default: "Sin razón" },
-  warnId:    { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-});
-
-const Warn = mongoose.models.Warn || mongoose.model("Warn", warnSchema);
-
-const YELLOW = "#f0b132";
-
-async function resolveMember(ctx, input) {
-  if (!input) return null;
-  if (ctx.message?.mentions?.members?.size) return ctx.message.mentions.members.first();
-  if (/^\d{17,20}$/.test(input)) {
-    const byId = await ctx.guild.members.fetch(input).catch(() => null);
-    if (byId) return byId;
-  }
-  return null;
-}
+const Warn = require("../../models/Warn");
+const { YELLOW } = require("../../utils/colors");
+const { resolveMember } = require("../../utils/helpers");
 
 const data = {
   data: new CommandBuilder({
@@ -52,7 +31,7 @@ const data = {
       if (!member) return ctx.send("Uso: `.warnings @usuario`");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       const warns = await Warn.find({ guildId: guild.id, userId: member.id }).sort({ createdAt: -1 });
 
@@ -105,7 +84,7 @@ const data = {
 
       collector.on("collect", async i => {
         if (i.user.id !== authorId)
-          return i.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          return i.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
         if (i.customId === prevId) page--;
         if (i.customId === nextId) page++;
         await i.update({ embeds: [buildEmbed()], components: [buildRow(page)] });

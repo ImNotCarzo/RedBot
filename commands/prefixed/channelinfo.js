@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, ChannelType } = require("discord.js");
+const { BLUE } = require("../../utils/colors");
 
 const CHANNEL_TYPES = {
   [ChannelType.GuildText]:         "Texto",
@@ -18,8 +19,6 @@ function formatSlowmode(seconds) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
   return `${Math.floor(seconds / 3600)}h`;
 }
-
-const BLUE = "#5865f2";
 
 const data = {
   data: new CommandBuilder({
