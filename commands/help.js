@@ -23,7 +23,7 @@ const CATEGORY_LABELS = {
   servidor:   "Servidor",
   roles:      "Roles",
   canal:      "Canal",
-  diversion:  "Diversión"
+  diversion:  "IA"
 };
 
 const COMMANDS = {
@@ -57,7 +57,7 @@ const COMMANDS = {
       slash: "util setprefix",
       slashId: "1481436920075649286",
       usage: ".setprefix <nuevo>",
-      aliases: [],
+      aliases: ["prefix"],
       description: "Cambia o muestra el prefijo del bot en este servidor."
     },
     askreset: {
@@ -65,7 +65,7 @@ const COMMANDS = {
       slash: "util askreset",
       slashId: "1481436920075649286",
       usage: ".askreset",
-      aliases: ["reset"],
+      aliases: ["aireset"],
       description: "Limpia tu historial de conversación con la IA."
     },
     ask: {
@@ -111,109 +111,109 @@ const COMMANDS = {
       description: "Muestra los roles de un usuario."
     },
     permissions: {
-      short: null,
+      short: "perms",
       slash: "user permissions",
       slashId: "1481436920075649285",
-      usage: null,
-      aliases: [],
+      usage: ".perms <@opcional>",
+      aliases: ["userperms", "userpermissions"],
       description: "Muestra los permisos de un usuario en el servidor."
     }
   },
   moderacion: {
     ban: {
-      short: null,
+      short: "ban",
       slash: "mod ban",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".ban (usuario)",
       aliases: [],
       description: "Banea a un usuario del servidor."
     },
     unban: {
-      short: null,
+      short: "unban",
       slash: "mod unban",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".unban (usuario)",
       aliases: [],
       description: "Desbanea a un usuario por ID."
     },
     softban: {
-      short: null,
+      short: "softban",
       slash: "mod softban",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".softban (usuario)",
       aliases: [],
       description: "Banea y desbanea al instante para borrar mensajes recientes."
     },
     tempban: {
-      short: null,
+      short: "tempban",
       slash: "mod tempban",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".tempban (usuario) (tiempo)",
       aliases: [],
       description: "Banea a un usuario por un tiempo determinado."
     },
     massban: {
-      short: null,
+      short: "massban",
       slash: "mod massban",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".massban (usuario) <@opcional> <@opcional> <@opcional> <@opcional>",
       aliases: [],
       description: "Banea hasta 5 usuarios seleccionados."
     },
     kick: {
-      short: null,
+      short: "kick",
       slash: "mod kick",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".kick (usuario)",
       aliases: [],
       description: "Expulsa a un usuario del servidor."
     },
     mute: {
-      short: null,
+      short: "mute",
       slash: "mod mute",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
+      usage: ".mute (usuario) (tiempo) <razón_opcional>",
+      aliases: ["timeout"],
       description: "Silencia a un usuario."
     },
     unmute: {
-      short: null,
+      short: "unmute",
       slash: "mod unmute",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
+      usage: ".unmute (usuario) <razón_opcional>",
+      aliases: ["untimeout"],
       description: "Quita el timeout a un usuario."
     },
     purge: {
-      short: null,
+      short: "purge",
       slash: "mod purge",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
+      usage: ".purge (cantidad)",
+      aliases: ["clear"],
       description: "Elimina mensajes del canal."
     },
     warn: {
-      short: null,
+      short: "warn",
       slash: "mod warn",
       slashId: "1481436920075649282",
-      usage: null,
+      usage: ".warn (usuario) (razón)",
       aliases: [],
       description: "Advierte a un usuario."
     },
     removewarn: {
-      short: null,
+      short: "removewarn",
       slash: "mod removewarn",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
+      usage: ".removewarn (warnID)",
+      aliases: ["rwarn"],
       description: "Elimina una advertencia con su ID."
     },
     clearwarns: {
-      short: null,
-      slash: "mod clearwarns",
+      short: "clearwarns",
+      slash: "mod clearwarnings",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
+      usage: ".clearwarnings (usuario)",
+      aliases: ["clearwarns", "cwarns"],
       description: "Borra todas las advertencias de un usuario."
     },
     warnings: {
