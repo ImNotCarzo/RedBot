@@ -201,6 +201,7 @@ bot.on("messageCreate", async (message) => {
 // ─────────────────────────────────────────────
 //  UNHANDLED ERRORS
 // ─────────────────────────────────────────────
-
+process.on("SIGTERM", () => console.log("[Process] SIGTERM recibido — el host está apagando el servidor"));
+process.on("SIGINT",  () => console.log("[Process] SIGINT recibido"));
 process.on("unhandledRejection", (err) => console.error("[UnhandledRejection]", err));
 process.on("uncaughtException",  (err) => console.error("[UncaughtException]",  err));
