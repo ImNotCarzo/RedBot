@@ -18,7 +18,7 @@ const data = {
       if (!guild) return ctx.send("Solo se puede usar en servidores");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return ctx.send("No tenés el permiso `ManageGuild`");
+        return ctx.send("No tienes el permiso `ManageGuild`");
 
       const result = await Log.findOneAndDelete({ guildId: guild.id });
       if (!result) return ctx.send("No hay un canal de logs configurado");

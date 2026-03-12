@@ -31,7 +31,7 @@ const data = {
       if (!member) return ctx.send("Uso: `.warnings @usuario`");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       const warns = await Warn.find({ guildId: guild.id, userId: member.id }).sort({ createdAt: -1 });
 
@@ -84,7 +84,7 @@ const data = {
 
       collector.on("collect", async i => {
         if (i.user.id !== authorId)
-          return i.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          return i.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
         if (i.customId === prevId) page--;
         if (i.customId === nextId) page++;
         await i.update({ embeds: [buildEmbed()], components: [buildRow(page)] });

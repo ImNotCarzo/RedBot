@@ -26,7 +26,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return ctx.send("No tenés el permiso `BanMembers`");
+        return ctx.send("No tienes el permiso `BanMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
         return ctx.send("No tengo permiso para banear");
@@ -38,7 +38,7 @@ const data = {
         return ctx.send("No puedo actuar sobre alguien con igual o mayor rango que el mío");
 
       if (member.roles.highest.position >= ctx.member.roles.highest.position)
-        return ctx.send("No podés actuar sobre alguien con igual o mayor rango que el tuyo");
+        return ctx.send("No puedes actuar sobre alguien con igual o mayor rango que el tuyo");
 
       await member.user.send({
         embeds: [

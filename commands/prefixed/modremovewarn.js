@@ -22,7 +22,7 @@ const data = {
       if (!warnId) return ctx.send("Uso: `.removewarn <ID>`");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       const warn = await Warn.findOneAndDelete({ guildId: guild.id, warnId });
       if (!warn) return ctx.send(`No encontré la advertencia con ID \`${warnId}\``);

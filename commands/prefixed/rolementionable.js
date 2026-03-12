@@ -39,7 +39,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send("No tenés el permiso `ManageRoles`");
+        return ctx.send("No tienes el permiso `ManageRoles`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tengo permiso para editar roles");

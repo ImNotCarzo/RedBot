@@ -25,7 +25,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return ctx.send("No tenés el permiso `BanMembers`");
+        return ctx.send("No tienes el permiso `BanMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
         return ctx.send("No tengo permiso para desbanear");

@@ -26,7 +26,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tengo permiso para desmutear");

@@ -24,16 +24,16 @@ const data = {
       if (!member) return ctx.send("Uso: `.tempban @usuario <duración> [razón]` (ej: 1h, 30m, 2d)");
 
       const durationStr = ctx.args?.[1] || null;
-      if (!durationStr) return ctx.send("Proporcioná una duración (ej: 1h, 30m, 2d)");
+      if (!durationStr) return ctx.send("Proporciona una duración (ej: 1h, 30m, 2d)");
 
       const duration = parseDuration(durationStr);
-      if (!duration) return ctx.send("Duración inválida. Usá formato como `10m`, `1h`, `2d`");
+      if (!duration) return ctx.send("Duración inválida. Usa formato como `10m`, `1h`, `2d`");
 
       const reason = ctx.args?.slice(2).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return ctx.send("No tenés el permiso `BanMembers`");
+        return ctx.send("No tienes el permiso `BanMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
         return ctx.send("No tengo permiso para banear");
@@ -45,7 +45,7 @@ const data = {
         return ctx.send("No puedo actuar sobre alguien con igual o mayor rango que el mío");
 
       if (member.roles.highest.position >= ctx.member.roles.highest.position)
-        return ctx.send("No podés actuar sobre alguien con igual o mayor rango que el tuyo");
+        return ctx.send("No puedes actuar sobre alguien con igual o mayor rango que el tuyo");
 
       const unbanAt = new Date(Date.now() + duration);
 

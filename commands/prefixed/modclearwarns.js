@@ -24,7 +24,7 @@ const data = {
       if (!member) return ctx.send("Uso: `.clearwarns @usuario`");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       const result = await Warn.deleteMany({ guildId: guild.id, userId: member.id });
 

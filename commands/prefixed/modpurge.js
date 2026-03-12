@@ -26,7 +26,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return ctx.send("No tenés el permiso `ManageMessages`");
+        return ctx.send("No tienes el permiso `ManageMessages`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageMessages))
         return ctx.send("No tengo permiso para eliminar mensajes");

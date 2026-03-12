@@ -1026,7 +1026,7 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
       } catch {
-        await ctx.send({ content: "No se pudo los logs", flags: MessageFlags.Ephemeral });
+        await ctx.send({ content: "No se pudo configurar los logs", flags: MessageFlags.Ephemeral });
       }
     },
   }),

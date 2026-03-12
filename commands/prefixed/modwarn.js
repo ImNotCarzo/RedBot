@@ -24,18 +24,18 @@ const data = {
       if (!member) return ctx.send("Uso: `.warn @usuario <razón>`");
 
       const reason = ctx.args?.slice(1).join(" ").trim();
-      if (!reason) return ctx.send("Proporcioná una razón para la advertencia");
+      if (!reason) return ctx.send("Proporciona una razón para la advertencia");
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send("No tenés el permiso `ModerateMembers`");
+        return ctx.send("No tienes el permiso `ModerateMembers`");
 
       if (member.user.bot)
-        return ctx.send("No podés advertir a un bot");
+        return ctx.send("No puedes advertir a un bot");
 
       if (member.roles.highest.position >= ctx.member.roles.highest.position)
-        return ctx.send("No podés advertir a alguien con igual o mayor rango que el tuyo");
+        return ctx.send("No puedes advertir a alguien con igual o mayor rango que el tuyo");
 
       const warnId = generateId();
 

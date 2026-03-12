@@ -26,7 +26,7 @@ const data = {
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.KickMembers))
-        return ctx.send("No tenés el permiso `KickMembers`");
+        return ctx.send("No tienes el permiso `KickMembers`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.KickMembers))
         return ctx.send("No tengo permiso para expulsar");
@@ -38,7 +38,7 @@ const data = {
         return ctx.send("No puedo expulsar a alguien con igual o mayor rango que el mío");
 
       if (member.roles.highest.position >= ctx.member.roles.highest.position)
-        return ctx.send("No podés expulsar a alguien con igual o mayor rango que el tuyo");
+        return ctx.send("No puedes expulsar a alguien con igual o mayor rango que el tuyo");
 
       await member.user.send({
         embeds: [

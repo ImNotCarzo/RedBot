@@ -21,7 +21,7 @@ const data = {
       if (!member || !role) return ctx.send("Uso: `.roleadd @usuario @rol`");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send("No tenés el permiso `ManageRoles` para usar esto");
+        return ctx.send("No tienes el permiso `ManageRoles` para usar esto");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tengo permiso para asignar roles");

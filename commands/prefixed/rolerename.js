@@ -42,12 +42,12 @@ const data = {
         ? ctx.args?.join(" ").replace(/<@&\d+>/g, "").trim()
         : ctx.args?.slice(1).join(" ").trim();
 
-      if (!newName) return ctx.send("Proporcioná el nuevo nombre del rol");
+      if (!newName) return ctx.send("Proporciona el nuevo nombre del rol");
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send("No tenés el permiso `ManageRoles`");
+        return ctx.send("No tienes el permiso `ManageRoles`");
 
       if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tengo permiso para editar roles");

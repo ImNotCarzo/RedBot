@@ -64,7 +64,7 @@ const data = {
 
       collector.on("collect", async (interaction) => {
         if (interaction.user.id !== authorId) {
-          return interaction.reply({ content: "No podés interactuar con esto", flags: MessageFlags.Ephemeral });
+          return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
         }
         if (interaction.customId === prevId) page--;
         if (interaction.customId === nextId) page++;

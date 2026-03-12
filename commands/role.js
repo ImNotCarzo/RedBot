@@ -10,7 +10,6 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const Log = require("../models/Log");
 const sendLog = require("../utils/sendLog");
 const { RED, GREEN, BLUE, DARK } = require("../utils/colors");
 
