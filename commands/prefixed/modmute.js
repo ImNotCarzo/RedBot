@@ -1,51 +1,8 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
-
-function parseDuration(str) {
-  const match = str.match(/^(\d+)(s|m|h|d)$/);
-  if (!match) return null;
-  const value = parseInt(match[1]);
-  const multipliers = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
-  return value * multipliers[match[2]];
-}
-
-function formatDuration(ms) {
-  const s = Math.floor(ms / 1000);
-  if (s < 60)  return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60)  return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24)  return `${h}h`;
-  return `${Math.floor(h / 24)}d`;
-}
-
-const GREEN = "#23a55a";
-
-async function resolveMember(ctx, input) {
-  if (!input) return null;
-  if (ctx.message?.mentions?.members?.size) return ctx.message.mentions.members.first();
-  if (/^\d{17,20}$/.test(input)) {
-    const byId = await ctx.guild.members.fetch(input).catch(() => null);
-    if (byId) return byId;
-  }
-  return null;
-}
+const sendLog = require("../../utils/sendLog");
+const { GREEN } = require("../../utils/colors");
+const { parseDuration, formatDuration, resolveMember } = require("../../utils/helpers");
 
 const data = {
   data: new CommandBuilder({

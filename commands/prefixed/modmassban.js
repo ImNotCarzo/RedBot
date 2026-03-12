@@ -1,33 +1,8 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
-}
-
-const RED = "#ff383d";
-
-async function resolveMember(ctx, input) {
-  if (!input) return null;
-  if (/^\d{17,20}$/.test(input.replace(/\D/g, ""))) {
-    const id = input.replace(/\D/g, "");
-    const byId = await ctx.guild.members.fetch(id).catch(() => null);
-    if (byId) return byId;
-  }
-  return null;
-}
+const sendLog = require("../../utils/sendLog");
+const { RED } = require("../../utils/colors");
+const { resolveMember } = require("../../utils/helpers");
 
 const data = {
   data: new CommandBuilder({

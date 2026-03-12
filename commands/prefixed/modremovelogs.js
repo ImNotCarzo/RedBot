@@ -1,14 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
-
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
-
-const RED = "#ff383d";
+const Log = require("../../models/Log");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
