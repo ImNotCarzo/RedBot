@@ -11,8 +11,12 @@ const {
   ComponentType,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  EmbedBuilder
+  EmbedBuilder,
 } = require("discord.js");
+
+// ─────────────────────────────────────────────
+//  CATEGORÍAS
+// ─────────────────────────────────────────────
 
 const CATEGORIES = ["utilidad", "usuario", "moderacion", "servidor", "roles", "canal", "diversion"];
 
@@ -23,8 +27,12 @@ const CATEGORY_LABELS = {
   servidor:   "Servidor",
   roles:      "Roles",
   canal:      "Canal",
-  diversion:  "IA"
+  diversion:  "IA",
 };
+
+// ─────────────────────────────────────────────
+//  COMANDOS
+// ─────────────────────────────────────────────
 
 const COMMANDS = {
   utilidad: {
@@ -34,7 +42,7 @@ const COMMANDS = {
       slashId: "1481436920075649286",
       usage: ".ping",
       aliases: [],
-      description: "Muestra la latencia actual del bot."
+      description: "Muestra la latencia actual del bot.",
     },
     botinfo: {
       short: "botinfo",
@@ -42,7 +50,7 @@ const COMMANDS = {
       slashId: "1481436920075649286",
       usage: ".botinfo",
       aliases: ["bot", "info"],
-      description: "Muestra información general del bot."
+      description: "Muestra información general del bot.",
     },
     invite: {
       short: "invite",
@@ -50,7 +58,7 @@ const COMMANDS = {
       slashId: "1481436920075649286",
       usage: ".invite",
       aliases: ["inv"],
-      description: "Envía la invitación del bot y el servidor de soporte."
+      description: "Envía la invitación del bot y el servidor de soporte.",
     },
     setprefix: {
       short: "setprefix",
@@ -58,15 +66,15 @@ const COMMANDS = {
       slashId: "1481436920075649286",
       usage: ".setprefix <nuevo>",
       aliases: ["prefix"],
-      description: "Cambia o muestra el prefijo del bot en este servidor."
+      description: "Cambia o muestra el prefijo del bot en este servidor.",
     },
     askreset: {
       short: "askreset",
       slash: "util askreset",
       slashId: "1481436920075649286",
       usage: ".askreset",
-      aliases: ["aireset"],
-      description: "Limpia tu historial de conversación con la IA."
+      aliases: ["aireset", "reset"],
+      description: "Limpia tu historial de conversación con la IA.",
     },
     ask: {
       short: "ask",
@@ -74,172 +82,172 @@ const COMMANDS = {
       slashId: "1481436920075649278",
       usage: ".ask <pregunta>",
       aliases: ["ia", "ai"],
-      description: "Hazle una pregunta a la IA."
-    }
+      description: "Hazle una pregunta a la IA.",
+    },
   },
   usuario: {
     info: {
       short: "user",
       slash: "user info",
       slashId: "1481436920075649285",
-      usage: ".user <@opcional>",
+      usage: ".user [@usuario]",
       aliases: ["userinfo", "ui", "whois"],
-      description: "Muestra información general de un usuario."
+      description: "Muestra información general de un usuario.",
     },
     avatar: {
       short: "avatar",
       slash: "user avatar",
       slashId: "1481436920075649285",
-      usage: ".avatar <@opcional>",
-      aliases: ["av", "useravatar"],
-      description: "Muestra el avatar de un usuario."
+      usage: ".avatar [@usuario]",
+      aliases: ["av", "pfp"],
+      description: "Muestra el avatar de un usuario.",
     },
     banner: {
       short: "banner",
       slash: "user banner",
       slashId: "1481436920075649285",
-      usage: ".banner <@opcional>",
-      aliases: ["userbanner"],
-      description: "Muestra el banner de un usuario."
+      usage: ".banner [@usuario]",
+      aliases: ["userbanner", "ub"],
+      description: "Muestra el banner de un usuario.",
     },
     roles: {
       short: "uroles",
       slash: "user roles",
       slashId: "1481436920075649285",
-      usage: ".uroles <@opcional>",
-      aliases: ["useroles"],
-      description: "Muestra los roles de un usuario."
+      usage: ".uroles [@usuario]",
+      aliases: ["userroles", "ur"],
+      description: "Muestra los roles de un usuario.",
     },
     permissions: {
       short: "perms",
       slash: "user permissions",
       slashId: "1481436920075649285",
-      usage: ".perms <@opcional>",
-      aliases: ["userperms", "userpermissions"],
-      description: "Muestra los permisos de un usuario en el servidor."
-    }
+      usage: ".perms [@usuario]",
+      aliases: ["userperms", "up"],
+      description: "Muestra los permisos de un usuario en el servidor.",
+    },
   },
   moderacion: {
     ban: {
       short: "ban",
       slash: "mod ban",
       slashId: "1481436920075649282",
-      usage: ".ban (usuario)",
+      usage: ".ban <@usuario> [razón]",
       aliases: [],
-      description: "Banea a un usuario del servidor."
+      description: "Banea a un usuario del servidor.",
     },
     unban: {
       short: "unban",
       slash: "mod unban",
       slashId: "1481436920075649282",
-      usage: ".unban (usuario)",
+      usage: ".unban <id> [razón]",
       aliases: [],
-      description: "Desbanea a un usuario por ID."
+      description: "Desbanea a un usuario por ID.",
     },
     softban: {
       short: "softban",
       slash: "mod softban",
       slashId: "1481436920075649282",
-      usage: ".softban (usuario)",
-      aliases: [],
-      description: "Banea y desbanea al instante para borrar mensajes recientes."
+      usage: ".softban <@usuario> [razón]",
+      aliases: ["sb"],
+      description: "Banea y desbanea al instante para borrar mensajes recientes.",
     },
     tempban: {
       short: "tempban",
       slash: "mod tempban",
       slashId: "1481436920075649282",
-      usage: ".tempban (usuario) (tiempo)",
-      aliases: [],
-      description: "Banea a un usuario por un tiempo determinado."
+      usage: ".tempban <@usuario> <tiempo> [razón]",
+      aliases: ["tb"],
+      description: "Banea a un usuario por un tiempo determinado.",
     },
     massban: {
       short: "massban",
       slash: "mod massban",
       slashId: "1481436920075649282",
-      usage: ".massban (usuario) <@opcional> <@opcional> <@opcional> <@opcional>",
-      aliases: [],
-      description: "Banea hasta 5 usuarios seleccionados."
+      usage: ".massban <@u1> [@u2] ... [razón]",
+      aliases: ["mb"],
+      description: "Banea hasta 5 usuarios seleccionados.",
     },
     kick: {
       short: "kick",
       slash: "mod kick",
       slashId: "1481436920075649282",
-      usage: ".kick (usuario)",
+      usage: ".kick <@usuario> [razón]",
       aliases: [],
-      description: "Expulsa a un usuario del servidor."
+      description: "Expulsa a un usuario del servidor.",
     },
     mute: {
       short: "mute",
       slash: "mod mute",
       slashId: "1481436920075649282",
-      usage: ".mute (usuario) (tiempo) <razón_opcional>",
-      aliases: ["timeout"],
-      description: "Silencia a un usuario."
+      usage: ".mute <@usuario> <tiempo> [razón]",
+      aliases: ["timeout", "silenciar"],
+      description: "Silencia a un usuario con timeout.",
     },
     unmute: {
       short: "unmute",
       slash: "mod unmute",
       slashId: "1481436920075649282",
-      usage: ".unmute (usuario) <razón_opcional>",
-      aliases: ["untimeout"],
-      description: "Quita el timeout a un usuario."
+      usage: ".unmute <@usuario> [razón]",
+      aliases: ["untimeout", "desmutear"],
+      description: "Quita el timeout a un usuario.",
     },
     purge: {
       short: "purge",
       slash: "mod purge",
       slashId: "1481436920075649282",
-      usage: ".purge (cantidad)",
-      aliases: ["clear"],
-      description: "Elimina mensajes del canal."
+      usage: ".purge <cantidad> [@usuario]",
+      aliases: ["clear", "limpiar"],
+      description: "Elimina mensajes del canal.",
     },
     warn: {
       short: "warn",
       slash: "mod warn",
       slashId: "1481436920075649282",
-      usage: ".warn (usuario) (razón)",
-      aliases: [],
-      description: "Advierte a un usuario."
+      usage: ".warn <@usuario> <razón>",
+      aliases: ["advertir"],
+      description: "Advierte a un usuario.",
     },
     removewarn: {
       short: "removewarn",
       slash: "mod removewarn",
       slashId: "1481436920075649282",
-      usage: ".removewarn (warnID)",
-      aliases: ["rwarn"],
-      description: "Elimina una advertencia con su ID."
+      usage: ".removewarn <warnID>",
+      aliases: ["rwarn", "delwarn"],
+      description: "Elimina una advertencia por su ID.",
     },
     clearwarns: {
       short: "clearwarns",
-      slash: "mod clearwarnings",
+      slash: "mod clearwarns",
       slashId: "1481436920075649282",
-      usage: ".clearwarnings (usuario)",
-      aliases: ["clearwarns", "cwarns"],
-      description: "Borra todas las advertencias de un usuario."
+      usage: ".clearwarns <@usuario>",
+      aliases: ["cwarns", "resetwarns"],
+      description: "Borra todas las advertencias de un usuario.",
     },
     warnings: {
-      short: null,
+      short: "warnings",
       slash: "mod warnings",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
-      description: "Ver advertencias de un usuario."
+      usage: ".warnings <@usuario>",
+      aliases: ["warns", "infracciones"],
+      description: "Ver advertencias de un usuario.",
     },
     setlogs: {
-      short: null,
+      short: "setlogs",
       slash: "mod setlogs",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
-      description: "Establece el canal de logs para RedBot en el servidor."
+      usage: ".setlogs <#canal>",
+      aliases: ["logs"],
+      description: "Establece el canal de logs para RedBot.",
     },
     removelogs: {
-      short: null,
+      short: "removelogs",
       slash: "mod removelogs",
       slashId: "1481436920075649282",
-      usage: null,
-      aliases: [],
-      description: "Desactiva los logs de RedBot en el servidor."
-    }
+      usage: ".removelogs",
+      aliases: ["dellogs", "nologs"],
+      description: "Desactiva los logs de RedBot en el servidor.",
+    },
   },
   servidor: {
     info: {
@@ -247,41 +255,41 @@ const COMMANDS = {
       slash: "server info",
       slashId: "1481436920075649284",
       usage: ".server",
-      aliases: ["sv"],
-      description: "Muestra información general del servidor."
+      aliases: ["sv", "serverinfo", "si"],
+      description: "Muestra información general del servidor.",
     },
     logo: {
       short: "logo",
       slash: "server logo",
       slashId: "1481436920075649284",
       usage: ".logo",
-      aliases: ["serverlogo", "servericon", "icon"],
-      description: "Muestra el logo del servidor."
+      aliases: ["icon", "servericon"],
+      description: "Muestra el logo del servidor.",
     },
     banner: {
-      short: null,
+      short: "sbanner",
       slash: "server banner",
       slashId: "1481436920075649284",
-      usage: null,
-      aliases: [],
-      description: "Muestra el banner del servidor."
+      usage: ".sbanner",
+      aliases: ["serverbanner"],
+      description: "Muestra el banner del servidor.",
     },
     emojis: {
       short: "emojis",
       slash: "server emojis",
       slashId: "1481436920075649284",
       usage: ".emojis",
-      aliases: ["serveremojis"],
-      description: "Muestra todos los emojis del servidor."
+      aliases: ["serveremojis", "emoji"],
+      description: "Muestra todos los emojis del servidor.",
     },
     roles: {
-      short: "roles",
+      short: "sroles",
       slash: "server roles",
       slashId: "1481436920075649284",
-      usage: ".roles",
-      aliases: ["serverroles"],
-      description: "Lista los roles del servidor."
-    }
+      usage: ".sroles",
+      aliases: ["serverroles", "listroles"],
+      description: "Lista los roles del servidor.",
+    },
   },
   roles: {
     info: {
@@ -289,243 +297,275 @@ const COMMANDS = {
       slash: "role info",
       slashId: "1481436920075649283",
       usage: ".role <@rol>",
-      aliases: ["roleinfo", "inforole"],
-      description: "Muestra información de un rol."
+      aliases: ["roleinfo", "ri"],
+      description: "Muestra información de un rol.",
     },
     icon: {
-      short: "roleicon",
+      short: "ricon",
       slash: "role icon",
       slashId: "1481436920075649283",
-      usage: ".roleicon <@rol>",
-      aliases: ["iconrole", "ricon"],
-      description: "Muestra el icono de un rol."
+      usage: ".ricon <@rol>",
+      aliases: ["roleicon"],
+      description: "Muestra el icono de un rol.",
     },
     color: {
-      short: "color",
+      short: "rcolor",
       slash: "role color",
       slashId: "1481436920075649283",
-      usage: ".color <@rol>",
-      aliases: ["colorrole", "rolecolor"],
-      description: "Muestra el color de un rol."
+      usage: ".rcolor <@rol>",
+      aliases: ["rolecolor", "rolcolor"],
+      description: "Muestra el color de un rol.",
     },
     users: {
-      short: "roleusers",
+      short: "rusers",
       slash: "role users",
       slashId: "1481436920075649283",
-      usage: ".roleusers <@rol>",
-      aliases: ["rusers", "usersrole"],
-      description: "Lista usuarios con un rol."
+      usage: ".rusers <@rol>",
+      aliases: ["roleusers", "rwho"],
+      description: "Lista usuarios con un rol.",
     },
     add: {
-      short: "roleadd",
+      short: "radd",
       slash: "role add",
       slashId: "1481436920075649283",
-      usage: ".roleadd <@usuario> <@rol>",
-      aliases: ["addrole", "radd"],
-      description: "Añade un rol a un usuario."
+      usage: ".radd <@usuario> <@rol>",
+      aliases: ["roleadd", "addrole"],
+      description: "Añade un rol a un usuario.",
     },
     remove: {
-      short: "roleremove",
+      short: "rremove",
       slash: "role remove",
       slashId: "1481436920075649283",
-      usage: ".roleremove <@usuario> <@rol>",
-      aliases: ["removerole", "rremove"],
-      description: "Quita un rol a un usuario."
+      usage: ".rremove <@usuario> <@rol>",
+      aliases: ["roleremove", "delrole"],
+      description: "Quita un rol a un usuario.",
     },
     rename: {
-      short: null,
+      short: "rrename",
       slash: "role rename",
       slashId: "1481436920075649283",
-      usage: null,
-      aliases: [],
-      description: "Renombra un rol."
+      usage: ".rrename <@rol> <nombre>",
+      aliases: ["renamerole"],
+      description: "Renombra un rol.",
     },
     hoist: {
-      short: null,
+      short: "rhoist",
       slash: "role hoist",
       slashId: "1481436920075649283",
-      usage: null,
-      aliases: [],
-      description: "Activa o desactiva si un rol se muestra separado en la lista."
+      usage: ".rhoist <@rol>",
+      aliases: ["rolehoist"],
+      description: "Activa o desactiva si un rol se muestra separado.",
     },
     mentionable: {
-      short: null,
+      short: "rmention",
       slash: "role mentionable",
       slashId: "1481436920075649283",
-      usage: null,
-      aliases: [],
-      description: "Activa o desactiva si un rol es mencionable por todos."
-    }
+      usage: ".rmention <@rol>",
+      aliases: ["rolemention", "mentionable"],
+      description: "Activa o desactiva si un rol es mencionable.",
+    },
+    random: {
+      short: "rrandom",
+      slash: "role random",
+      slashId: "1481436920075649283",
+      usage: ".rrandom",
+      aliases: ["randomrole"],
+      description: "Muestra un rol aleatorio del servidor.",
+    },
   },
   canal: {
     info: {
-      short: "channelinfo",
+      short: "cinfo",
       slash: "channel info",
       slashId: "1481436920075649280",
-      usage: ".channelinfo [#canal]",
-      aliases: ["chinfo", "cinfo"],
-      description: "Muestra información de un canal."
+      usage: ".cinfo [#canal]",
+      aliases: ["chinfo", "channelinfo"],
+      description: "Muestra información de un canal.",
     },
     rename: {
-      short: "channelrename",
+      short: "crename",
       slash: "channel rename",
       slashId: "1481436920075649280",
-      usage: ".channelrename <#canal> <nombre>",
-      aliases: ["chrename", "crename"],
-      description: "Renombra un canal."
+      usage: ".crename <#canal> <nombre>",
+      aliases: ["chrename", "chanrename"],
+      description: "Renombra un canal.",
     },
     lock: {
-      short: "channellock",
+      short: "lock",
       slash: "channel lock",
       slashId: "1481436920075649280",
-      usage: ".channellock [#canal]",
-      aliases: ["chlock", "lockdown"],
-      description: "Bloquea un canal para usuarios normales."
+      usage: ".lock [#canal]",
+      aliases: ["lockdown", "cerrar"],
+      description: "Bloquea un canal para usuarios normales.",
     },
     unlock: {
-      short: "channelunlock",
+      short: "unlock",
       slash: "channel unlock",
       slashId: "1481436920075649280",
-      usage: ".channelunlock [#canal]",
-      aliases: ["chunlock", "cunlock"],
-      description: "Abre un canal bloqueado."
+      usage: ".unlock [#canal]",
+      aliases: ["abrir", "desbloquear"],
+      description: "Abre un canal bloqueado.",
     },
     slowmode: {
-      short: "channelslowmode",
+      short: "sm",
       slash: "channel slowmode",
       slashId: "1481436920075649280",
-      usage: ".channelslowmode <tiempo> [#canal]",
-      aliases: ["chslowmode", "slowmode", "sm"],
-      description: "Establece el slowmode de un canal (0 para desactivar, máx 6h)."
+      usage: ".sm <tiempo> [#canal]",
+      aliases: ["slowmode", "lento"],
+      description: "Establece el slowmode de un canal (0 para desactivar).",
     },
     nuke: {
-      short: "channelnuke",
+      short: "nuke",
       slash: "channel nuke",
       slashId: "1481436920075649280",
-      usage: ".channelnuke [#canal]",
-      aliases: ["chnuke", "nuke"],
-      description: "Recrea el canal borrando todos sus mensajes."
+      usage: ".nuke [#canal]",
+      aliases: ["vaciar", "limpiar"],
+      description: "Recrea el canal borrando todos sus mensajes.",
     },
     clone: {
-      short: "channelclone",
+      short: "clone",
       slash: "channel clone",
       slashId: "1481436920075649280",
-      usage: ".channelclone [#canal]",
-      aliases: ["chclone", "clonechannel"],
-      description: "Clona un canal con su configuración."
+      usage: ".clone [#canal]",
+      aliases: ["clonar", "duplicar"],
+      description: "Clona un canal con su configuración.",
     },
     permit: {
-      short: "channelpermit",
+      short: "permit",
       slash: "channel permit",
       slashId: "1481436920075649280",
-      usage: ".channelpermit <@usuario> [#canal]",
-      aliases: ["chpermit", "permit"],
-      description: "Da acceso a un usuario en un canal."
+      usage: ".permit <@usuario> [#canal]",
+      aliases: ["allow", "acceso"],
+      description: "Da acceso a un usuario en un canal.",
     },
     deny: {
-      short: "channeldeny",
+      short: "deny",
       slash: "channel deny",
       slashId: "1481436920075649280",
-      usage: ".channeldeny <@usuario> [#canal]",
-      aliases: ["chdeny", "deny"],
-      description: "Quita el acceso a un usuario en un canal."
+      usage: ".deny <@usuario> [#canal]",
+      aliases: ["block", "denegar"],
+      description: "Quita el acceso a un usuario en un canal.",
     },
     hide: {
-      short: "channelhide",
+      short: "hide",
       slash: "channel hide",
       slashId: "1481436920075649280",
-      usage: ".channelhide [#canal]",
-      aliases: ["chhide", "hidechannel"],
-      description: "Oculta un canal a @everyone."
-    }
+      usage: ".hide [#canal]",
+      aliases: ["ocultar", "esconder"],
+      description: "Oculta un canal a @everyone.",
+    },
   },
   diversion: {
+    ask: {
+      short: "ask",
+      slash: "ask",
+      slashId: "1481436920075649278",
+      usage: ".ask <pregunta>",
+      aliases: ["ia", "ai"],
+      description: "Hazle una pregunta a la IA.",
+    },
+    askreset: {
+      short: "askreset",
+      slash: "util askreset",
+      slashId: "1481436920075649286",
+      usage: ".askreset",
+      aliases: ["reset", "aireset"],
+      description: "Limpia tu historial de conversación con la IA.",
+    },
     opinion: {
       short: "opinion",
       slash: "fun opinion",
       slashId: "1481436920075649281",
       usage: ".opinion <tema>",
       aliases: ["op", "opina"],
-      description: "Pide mi opinión sin filtro sobre algo."
+      description: "Pide mi opinión sin filtro sobre algo.",
     },
     critica: {
       short: "critica",
       slash: "fun critica",
       slashId: "1481436920075649281",
       usage: ".critica <tema>",
-      aliases: ["criticar", "critique"],
-      description: "Te doy una crítica despiadada de algo."
+      aliases: ["criticar"],
+      description: "Te doy una crítica despiadada de algo.",
     },
     excusa: {
       short: "excusa",
       slash: "fun excusa",
       slashId: "1481436920075649281",
-      usage: ".excusa <situacion>",
-      aliases: ["coartada", "excuse"],
-      description: "Genera una excusa ridícula pero creativa."
+      usage: ".excusa [situacion]",
+      aliases: ["coartada"],
+      description: "Genera una excusa ridícula pero creativa.",
     },
     teoria: {
       short: "teoria",
       slash: "fun teoria",
       slashId: "1481436920075649281",
       usage: ".teoria <tema>",
-      aliases: ["conspira", "conspiracion"],
-      description: "Una teoría conspirativa sobre cualquier cosa."
+      aliases: ["conspira"],
+      description: "Una teoría conspirativa sobre cualquier cosa.",
     },
     roast: {
       short: "roast",
       slash: "fun roast",
       slashId: "1481436920075649281",
-      usage: ".roast <@usuario>",
-      aliases: ["quemar", "burn"],
-      description: "Critica despiadadamente a un usuario."
-    }
-  }
+      usage: ".roast [@usuario]",
+      aliases: ["burn"],
+      description: "Critica despiadadamente a un usuario.",
+    },
+  },
 };
 
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+
 const COLLECTOR_TIMEOUT = 5 * 60 * 1000;
+
+// Separador seguro para values del select — evita bugs con keys que tienen "_"
+const SEP = "||";
+
+const formatSelectLabel = (cmd) =>
+  cmd.slash
+    .split(" ")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+// ─────────────────────────────────────────────
+//  DATA
+// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
     name: "help",
     description: "Muestra la lista de comandos disponibles",
     as_prefix: true,
-    as_slash: true
+    as_slash: true,
   }),
 
   async code(ctx) {
     try {
-      const isSlash = Boolean(ctx.interaction);
-      const authorId = ctx.user?.id || ctx.author?.id;
+      const isSlash  = Boolean(ctx.interaction);
+      const authorId = ctx.user?.id ?? ctx.author?.id;
 
       const prefixCache = require("../utils/prefixCache");
-      const guildId = ctx.guild?.id;
-      const prefix = (guildId && prefixCache.get(guildId)) || ".";
+      const prefix = (ctx.guild?.id && prefixCache.get(ctx.guild.id)) || ".";
 
       const formatCommand = (cmd) =>
         cmd.short
           ? (isSlash ? `</${cmd.slash}:${cmd.slashId}>` : `${prefix}${cmd.short}`)
           : `</${cmd.slash}:${cmd.slashId}>`;
 
-      const formatSelectLabel = (cmd) =>
-        cmd.slash
-          .split(" ")
-          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" ");
-
       const buildCommandList = (category) =>
         Object.values(COMMANDS[category]).map(formatCommand).join("\n");
 
       const buildCategoryRows = (active) => {
         const rows = [];
-        const chunkSize = 5;
-        for (let i = 0; i < CATEGORIES.length; i += chunkSize) {
-          const chunk = CATEGORIES.slice(i, i + chunkSize);
+        for (let i = 0; i < CATEGORIES.length; i += 5) {
           rows.push(
             new ActionRowBuilder().addComponents(
-              chunk.map(cat =>
+              CATEGORIES.slice(i, i + 5).map(cat =>
                 new ButtonBuilder()
-                  .setCustomId(`help_${cat}`)
+                  .setCustomId(`help_cat_${cat}`)
                   .setLabel(CATEGORY_LABELS[cat])
                   .setStyle(cat === active ? ButtonStyle.Danger : ButtonStyle.Secondary)
                   .setDisabled(cat === active)
@@ -539,13 +579,14 @@ const data = {
       const buildSelectRow = (category) =>
         new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
-            .setCustomId(`select_${category}`)
-            .setPlaceholder("Selecciona un comando")
+            .setCustomId(`help_select_${category}`)
+            .setPlaceholder("Selecciona un comando para ver detalles")
             .addOptions(
               Object.entries(COMMANDS[category]).map(([key, cmd]) =>
                 new StringSelectMenuOptionBuilder()
                   .setLabel(formatSelectLabel(cmd))
-                  .setValue(`${category}_${key}`)
+                  .setValue(`${category}${SEP}${key}`)  // ← separador seguro
+                  .setDescription(cmd.description.slice(0, 100))
               )
             )
         );
@@ -559,7 +600,7 @@ const data = {
           new ButtonBuilder()
             .setLabel("Soporte")
             .setStyle(ButtonStyle.Link)
-            .setURL("https://discord.gg/b8AKKaNWU6")
+            .setURL("https://discord.gg/b8AKKaNWU6"),
         );
 
       const buildDeleteRow = () =>
@@ -595,73 +636,80 @@ const data = {
         return container;
       };
 
+      // Estado mutable para el collector de select
+      let currentCategory = "utilidad";
+
       const message = await ctx.send({
         flags: MessageFlags.IsComponentsV2,
-        components: [buildContainer("utilidad"), buildDeleteRow()],
-        allowedMentions: { repliedUser: false }
+        components: [buildContainer(currentCategory), buildDeleteRow()],
+        allowedMentions: { repliedUser: false },
       });
 
-      const collectorOptions = {
-        time: COLLECTOR_TIMEOUT,
-        filter: (i) => i.user.id === authorId
-      };
+      const collectorFilter = (i) => i.user.id === authorId;
 
       const buttonCollector = message.createMessageComponentCollector({
-        ...collectorOptions,
-        componentType: ComponentType.Button
+        componentType: ComponentType.Button,
+        time: COLLECTOR_TIMEOUT,
+        filter: collectorFilter,
       });
 
       const selectCollector = message.createMessageComponentCollector({
-        ...collectorOptions,
-        componentType: ComponentType.StringSelect
+        componentType: ComponentType.StringSelect,
+        time: COLLECTOR_TIMEOUT,
+        filter: collectorFilter,
       });
 
-      buttonCollector.on("end", async () => {
-        try {
-          await message.edit({
-            flags: MessageFlags.IsComponentsV2,
-            components: [buildContainer("utilidad")]
-          });
-        } catch {}
-      });
-
-      buttonCollector.on("collect", async (interaction) => {
-        if (interaction.customId === "help_delete") {
+      buttonCollector.on("collect", async (i) => {
+        if (i.customId === "help_delete") {
           buttonCollector.stop();
           selectCollector.stop();
-          return interaction.message.delete();
+          return i.message.delete().catch(() => {});
         }
 
-        const category = interaction.customId.split("_")[1];
-        await interaction.update({
+        // customId formato: help_cat_<categoria>
+        const category = i.customId.replace("help_cat_", "");
+        currentCategory = category;
+
+        await i.update({
           flags: MessageFlags.IsComponentsV2,
-          components: [buildContainer(category), buildDeleteRow()]
-        });
+          components: [buildContainer(category), buildDeleteRow()],
+        }).catch(() => {});
       });
 
-      selectCollector.on("collect", async (interaction) => {
-        const [category, key] = interaction.values[0].split("_");
-        const cmd = COMMANDS[category][key];
+      selectCollector.on("collect", async (i) => {
+        // value formato: "<category>||<key>"
+        const sepIdx  = i.values[0].indexOf(SEP);
+        const category = i.values[0].slice(0, sepIdx);
+        const key      = i.values[0].slice(sepIdx + SEP.length);
+        const cmd      = COMMANDS[category]?.[key];
+
+        if (!cmd) return i.reply({ content: "No encontré ese comando", flags: MessageFlags.Ephemeral }).catch(() => {});
 
         const embed = new EmbedBuilder()
-          .setColor("Red")
+          .setColor("#ff383d")
           .setTitle(formatSelectLabel(cmd))
           .addFields(
-            { name: "Uso", value: (isSlash || !cmd.short) ? `</${cmd.slash}:${cmd.slashId}>` : cmd.usage },
+            { name: "Uso",         value: (isSlash || !cmd.short) ? `</${cmd.slash}:${cmd.slashId}>` : `\`${cmd.usage}\`` },
             { name: "Descripción", value: cmd.description },
-            ...(cmd.aliases.length
-              ? [{ name: "Alias", value: cmd.aliases.join(", ") }]
-              : [])
+            ...(cmd.aliases.length ? [{ name: "Alias", value: cmd.aliases.map(a => `\`${prefix}${a}\``).join(", ") }] : []),
           );
 
-        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        // reply ephemeral para no romper el estado del mensaje principal
+        await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral }).catch(() => {});
       });
 
-    } catch (error) {
-      console.error(error);
-      await ctx.send("Error en help");
+      buttonCollector.on("end", () => {
+        message.edit({
+          flags: MessageFlags.IsComponentsV2,
+          components: [buildContainer(currentCategory)],
+        }).catch(() => {});
+      });
+
+    } catch (err) {
+      console.error("[help]", err);
+      await ctx.send("Error al mostrar el help");
     }
-  }
+  },
 };
 
 module.exports = { data };
