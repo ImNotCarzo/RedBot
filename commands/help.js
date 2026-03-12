@@ -36,6 +36,14 @@ const CATEGORY_LABELS = {
 
 const COMMANDS = {
   utilidad: {
+    ask: {
+      short: "ask",
+      slash: "ask",
+      slashId: "1481436920075649286",
+      usage: ".ask (pregunta)",
+      aliases: ["ai", "ia"],
+      description: "Hazle una pregunta a la IA",
+    },
     ping: {
       short: "ping",
       slash: "util ping",
@@ -75,14 +83,6 @@ const COMMANDS = {
       usage: ".askreset",
       aliases: ["aireset", "reset"],
       description: "Limpia tu historial de conversación con la IA.",
-    },
-    ask: {
-      short: "ask",
-      slash: "ask",
-      slashId: "1481436920075649278",
-      usage: ".ask <pregunta>",
-      aliases: ["ia", "ai"],
-      description: "Hazle una pregunta a la IA.",
     },
   },
   usuario: {
@@ -456,22 +456,6 @@ const COMMANDS = {
     },
   },
   diversion: {
-    ask: {
-      short: "ask",
-      slash: "ask",
-      slashId: "1481436920075649278",
-      usage: ".ask <pregunta>",
-      aliases: ["ia", "ai"],
-      description: "Hazle una pregunta a la IA.",
-    },
-    askreset: {
-      short: "askreset",
-      slash: "util askreset",
-      slashId: "1481436920075649286",
-      usage: ".askreset",
-      aliases: ["reset", "aireset"],
-      description: "Limpia tu historial de conversación con la IA.",
-    },
     opinion: {
       short: "opinion",
       slash: "fun opinion",
