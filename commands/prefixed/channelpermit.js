@@ -28,7 +28,7 @@ const data = {
       value: "Da acceso a un usuario en un canal",
     }, {
       name: "Aliases:",
-      value: `\`chpermit\`, \`channelpermit\``",
+      value: `\`chpermit\`, \`channelpermit\``,
     })
     .setDescription(`\`\`\`js\n .permit <@usuario> /canalOpcional/>\n Ejemplo: .permit @loge #uxiono\`\`\``);
 
