@@ -30,7 +30,7 @@ const data = {
       name: "Aliases:",
       value: `\`chdeny\`, \`channeldeny\``",
     })
-    .setDescription(`\`\`\`js\n .deny <@usuario /canalOpcional/>\n Ejemplo: .deny @loge #uxiono\`\`\``);
+    .setDescription(`\`\`\`js\n .deny <@usuario> /canalOpcional/>\n Ejemplo: .deny @loge #uxiono\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
 }
