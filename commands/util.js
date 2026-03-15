@@ -219,8 +219,24 @@ const data = {
       }
     },
   })
+    
+    // ── ASKRESET ──────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "askreset",
+      description: "Limpia tu historial de conversación con la IA",
+      aliases: ["reset"],
+    }),
+    params: new ParamsBuilder(),
 
-  // ── ASKRESET ──────────────────────────────────
+    async code(ctx) {
+      const userId = ctx.user?.id ?? ctx.author?.id;
+      deleteConversacion(userId);
+      await ctx.send({ content: "Historial borrado" });
+    },
+  })
+    
+  // ── TRANSLATE ──────────────────────────────────
   .addCommand({
   data: new CommandBuilder({
     name: "translate",
