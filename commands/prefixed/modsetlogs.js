@@ -23,7 +23,20 @@ const data = {
       const channel = ctx.message?.mentions?.channels?.first() ||
         (ctx.args?.[0] ? guild.channels.cache.get(ctx.args[0]) : null);
 
-      if (!channel) return ctx.send("Uso: `.setlogs #canal`");
+      if (!channel) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Setlogs" })
+    .setFields({
+      name: "Usos:",
+      value: "Establece el canal de logs para RedBot en el servidor",
+    }, {
+      name: "Aliases:",
+      value: `\`modsetlogs\`, \`logchanner\, \`setlog\```",
+    })
+    .setDescription(`\`\`\`js\n .setlogs <#canal>\n Ejemplo: .setlogs #uxiono\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
       if (!channel.isTextBased()) return ctx.send("El canal debe ser de texto");
 
       await Log.findOneAndUpdate(
