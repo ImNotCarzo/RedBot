@@ -1,4 +1,4 @@
-const { CommandBuilder, ParamsBuilder } = require("erine");
+const { CommandBuilder, ParamsBuilder, Errors } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../utils/ai");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../utils/askMemory");
@@ -33,25 +33,18 @@ const data = {
   }),
 
   async code(ctx) {
+    const pregunta = ctx.interaction
+      ? ctx.get("pregunta")
+      : ctx.args?.join(" ").trim();
+
+    if (!pregunta) {
+      const e = new Errors.MissingRequiredParam();
+      e.ctx = ctx;
+      e.param = { name: "pregunta" };
+      throw e;
+    }
+
     try {
-      const pregunta = ctx.interaction
-        ? ctx.get("pregunta")
-        : ctx.args?.join(" ").trim();
-      if (!pregunta) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Ask" })
-    .setFields({
-      name: "Usos:",
-      value: "Hazle una pregunta a la IA",
-    }, {
-      name: "Aliases:",
-      value: `\`ia\`, \`ai\``,
-    })
-    .setDescription(`\`\`\`js\n .ask <pregunta>>\n Ejemplo: .ask ¿cómo abrir una puerta?\`\`\``);
-
-  return ctx.send({ embeds: [paramerror] });
-}
-
       const userId = ctx.user?.id ?? ctx.author?.id;
       const username = ctx.user?.username ?? ctx.author?.username;
       const invoker = ctx.user ?? ctx.author;

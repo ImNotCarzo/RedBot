@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Deny", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.deny <@usuario> /canalOpcional/\nEjemplo: .deny @loge #uxiono\`\`\`` +
-            `\n\n**Usos:**\nQuita el acceso a un usuario en un canal` +
-            `\n\n**Aliases:**\nchdeny, channeldeny`
+            `**Usos:**\nQuita el acceso a un usuario en un canal` +
+            `\n\n**Aliases:**\n\`chdeny\`, \`channeldeny\`` +
+            `\n\n\`\`\`js\n.deny <@usuario> [#canal]\nEjemplo: .deny @loge #uxiono\`\`\``
           )
           .setColor(RED);
 

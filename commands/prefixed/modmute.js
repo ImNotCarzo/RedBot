@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 const { parseDuration, formatDuration, resolveMember } = require("../../utils/helpers");
 
 const data = {
@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Mute", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.mute <@usuario> <tiempo> /razonOpcional/\nEjemplo: .mute @loge 30m shhh\`\`\`` +
-            `\n\n**Usos:**\nSilencia a un usuario del servidor` +
-            `\n\n**Aliases:**\nmodmute, timeout, silenciar`
+            `**Usos:**\nSilencia a un usuario del servidor` +
+            `\n\n**Aliases:**\n\`modmute\`, \`timeout\`, \`silenciar\`` +
+            `\n\n\`\`\`js\n.mute <@usuario> <tiempo> [razón]\nEjemplo: .mute @loge 30m shhh\`\`\``
           )
           .setColor(RED);
 

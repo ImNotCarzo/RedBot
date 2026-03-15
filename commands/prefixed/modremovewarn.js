@@ -2,7 +2,7 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const Warn = require("../../models/Warn");
 const sendLog = require("../../utils/sendLog");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -24,9 +24,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Removewarn", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.removewarn <ID>\nEjemplo: .removewarn 3lp3p3\`\`\`` +
-            `\n\n**Usos:**\nElimina una advertencia por su ID` +
-            `\n\n**Aliases:**\ndelwarn, warnremove`
+            `**Usos:**\nElimina una advertencia por su ID` +
+            `\n\n**Aliases:**\n\`delwarn\`, \`warnremove\`` +
+            `\n\n\`\`\`js\n.removewarn <ID>\nEjemplo: .removewarn 3lp3p3\`\`\``
           )
           .setColor(RED);
 

@@ -2,7 +2,7 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const Warn = require("../../models/Warn");
 const sendLog = require("../../utils/sendLog");
-const { YELLOW, GREEN } = require("../../utils/colors");
+const { YELLOW, GREEN, RED } = require("../../utils/colors");
 const { generateId, resolveMember } = require("../../utils/helpers");
 
 const data = {
@@ -26,9 +26,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Warn", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.warn <@usuario> <razón>\nEjemplo: .warn @loge lol\`\`\`` +
-            `\n\n**Usos:**\nAdvierte a un usuario` +
-            `\n\n**Aliases:**\nmodwarn, advertir`
+            `**Usos:**\nAdvierte a un usuario` +
+            `\n\n**Aliases:**\n\`modwarn\`, \`advertir\`` +
+            `\n\n\`\`\`js\n.warn <@usuario> <razón>\nEjemplo: .warn @loge lol\`\`\``
           )
           .setColor(RED);
 

@@ -1,5 +1,5 @@
 const { CommandBuilder } = require("erine");
-const { PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
@@ -24,9 +24,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Roleremove", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.roleremove <@usuario> <@rol>\nEjemplo: .roleremove @loge @gokiano\`\`\`` +
-            `\n\n**Usos:**\nQuita un rol a un usuario` +
-            `\n\n**Aliases:**\nremoverole, rremove`
+            `**Usos:**\nQuita un rol a un usuario` +
+            `\n\n**Aliases:**\n\`removerole\`, \`rremove\`` +
+            `\n\n\`\`\`js\n.roleremove <@usuario> <@rol>\nEjemplo: .roleremove @loge @gokiano\`\`\``
           )
           .setColor(RED);
 

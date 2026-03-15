@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { DARK } = require("../../utils/colors");
+const { DARK, RED } = require("../../utils/colors");
 
 function roleHierarchyCheck(ctx, role) {
   if (role.managed) return "No puedo editar roles gestionados por integraciones";
@@ -39,9 +39,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rolerename", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.rolerename <@rol> <nuevoNombre>\nEjemplo: .rolerename @gokiano potatiano\`\`\`` +
-            `\n\n**Usos:**\nRenombra un rol` +
-            `\n\n**Aliases:**\nrenamerole, rrename`
+            `**Usos:**\nRenombra un rol` +
+            `\n\n**Aliases:**\n\`renamerole\`, \`rrename\`` +
+            `\n\n\`\`\`js\n.rolerename <@rol> <nuevoNombre>\nEjemplo: .rolerename @gokiano potatiano\`\`\``
           )
           .setColor(RED);
 
