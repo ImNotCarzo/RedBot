@@ -34,7 +34,20 @@ const data = {
       if (!guild) return ctx.send("Solo se puede usar en servidores");
 
       const role = resolveRole(ctx);
-      if (!role) return ctx.send("Uso: `.rolerename @rol NuevoNombre`");
+      if (!role) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Rolerename" })
+    .setFields({
+      name: "Usos:",
+      value: "Renombra un rol",
+    }, {
+      name: "Aliases:",
+      value: `\`renamerole\`, \`rrename\``",
+    })
+    .setDescription(`\`\`\`js\n .rolerename <@rol> <nuevoNombre>>\n Ejemplo: .rolerename @gokiano potatiano\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       // El nuevo nombre es todo lo que sigue después del rol (o ID)
       const mentionUsed = ctx.message?.mentions?.roles?.size > 0;
