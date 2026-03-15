@@ -18,7 +18,20 @@ const data = {
       const member = ctx.message?.mentions?.members?.first();
       const role = ctx.message?.mentions?.roles?.first();
 
-      if (!member || !role) return ctx.send("Uso: `.roleadd @usuario @rol`");
+      if (!member || !role) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Roleadd" })
+    .setFields({
+      name: "Usos:",
+      value: "Añade un rol a un usuario",
+    }, {
+      name: "Aliases:",
+      value: `\`addrole\`, \`radd\``",
+    })
+    .setDescription(`\`\`\`js\n .roleadd <@usuario> <@rol>>\n Ejemplo: .roleadd @loge @gokiano\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tienes el permiso `ManageRoles` para usar esto");
