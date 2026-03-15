@@ -42,7 +42,7 @@ const data = {
       value: "Activa o desactiva si el rol es mencionable por todos",
     }, {
       name: "Aliases:",
-      value: `\`rolemention\`, \`mentionrole\`, \`rmention\``",
+      value: `\`rolemention\`, \`mentionrole\`, \`rmention\``,
     })
     .setDescription(`\`\`\`js\n .rolementionable <@rol>>\n Ejemplo: .rolementionable @gokiano\`\`\``);
 
