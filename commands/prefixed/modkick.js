@@ -21,14 +21,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Kick", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.kick <@usuario> /razonOpcional/\nEjemplo: .kick @loge chau\`\`\`` +
+            `\`\`\`js\n.kick <@usuario> /razonOpcional/\nEjemplo: .kick @loge chau\`\`\`` +
             `\n\n**Usos:**\nExpulsa a un usuario del servidor` +
             `\n\n**Aliases:**\nmodkick, expulsar`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

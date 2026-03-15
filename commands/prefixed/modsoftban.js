@@ -21,14 +21,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Softban", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.softban <@usuario> /razonOpcional/\nEjemplo: .softban @loge chau\`\`\`` +
+            `\`\`\`js\n.softban <@usuario> /razonOpcional/\nEjemplo: .softban @loge chau\`\`\`` +
             `\n\n**Usos:**\nExpulsa a un usuario del servidor borrando sus mensajes` +
             `\n\n**Aliases:**\nmodsoftban, sban`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

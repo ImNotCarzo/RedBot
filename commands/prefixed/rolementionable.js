@@ -35,14 +35,15 @@ const data = {
 
       const role = resolveRole(ctx);
       if (!role) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rolementionable", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.rolementionable <@rol>\nEjemplo: .rolementionable @gokiano\`\`\`` +
+            `\`\`\`js\n.rolementionable <@rol>\nEjemplo: .rolementionable @gokiano\`\`\`` +
             `\n\n**Usos:**\nActiva o desactiva si el rol es mencionable por todos` +
             `\n\n**Aliases:**\nrolemention, mentionrole, rmention`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

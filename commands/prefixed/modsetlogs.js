@@ -24,14 +24,15 @@ const data = {
         (ctx.args?.[0] ? guild.channels.cache.get(ctx.args[0]) : null);
 
       if (!channel) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Setlogs", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.setlogs <#canal>\nEjemplo: .setlogs #uxiono\`\`\`` +
+            `\`\`\`js\n.setlogs <#canal>\nEjemplo: .setlogs #uxiono\`\`\`` +
             `\n\n**Usos:**\nEstablece el canal de logs para RedBot en el servidor` +
-            `\n\n**Aliases:**\nmodsetlogs, logchanner, setlog`
-          );
+            `\n\n**Aliases:**\nmodsetlogs, logchannel, setlog`
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

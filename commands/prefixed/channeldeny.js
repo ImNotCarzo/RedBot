@@ -21,14 +21,15 @@ const data = {
       const channel = ctx.message?.mentions?.channels?.first() ?? ctx.channel;
 
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Deny", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.deny <@usuario> /canalOpcional/\nEjemplo: .deny @loge #uxiono\`\`\`` +
+            `\`\`\`js\n.deny <@usuario> /canalOpcional/\nEjemplo: .deny @loge #uxiono\`\`\`` +
             `\n\n**Usos:**\nQuita el acceso a un usuario en un canal` +
             `\n\n**Aliases:**\nchdeny, channeldeny`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

@@ -20,14 +20,15 @@ const data = {
       const userId = ctx.args?.[0];
       if (!userId || !/^\d{17,20}$/.test(userId))
         {
-          const bot = ctx.client.user;
+          const bot = ctx.bot.user;
           const paramerror = new EmbedBuilder()
             .setAuthor({ name: "Comando Unban", iconURL: bot.displayAvatarURL() })
             .setDescription(
-              `\`\`\`\n.unban <ID> /razonOpcional/\nEjemplo: .unban 1020772849906098186 hola\`\`\`` +
+              `\`\`\`js\n.unban <ID> /razonOpcional/\nEjemplo: .unban 1020772849906098186 hola\`\`\`` +
               `\n\n**Usos:**\nDesbanea a un usuario por su ID` +
               `\n\n**Aliases:**\nmodunban, desbanear`
-            );
+            )
+            .setColor(RED);
 
           return ctx.send({ embeds: [paramerror] });
         }

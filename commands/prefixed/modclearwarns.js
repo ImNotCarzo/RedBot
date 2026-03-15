@@ -22,14 +22,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Clearwarns", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.clearwarns <@usuario>\nEjemplo: .clearwarns @loge\`\`\`` +
+            `\`\`\`js\n.clearwarns <@usuario>\nEjemplo: .clearwarns @loge\`\`\`` +
             `\n\n**Usos:**\nBorra las advertencias de un usuario` +
             `\n\n**Aliases:**\nwarnsclear, clearwarn`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

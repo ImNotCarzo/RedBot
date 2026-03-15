@@ -28,14 +28,15 @@ const data = {
         .slice(0, 100);
 
       if (!newName) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rename", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.rename /canalOpcional/ <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\`` +
+            `\`\`\`js\n.rename /canalOpcional/ <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\`` +
             `\n\n**Usos:**\nRenombra un canal` +
             `\n\n**Aliases:**\nchrename, channelrename`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

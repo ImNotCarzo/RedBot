@@ -21,14 +21,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Mute", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.mute <@usuario> <tiempo> /razonOpcional/\nEjemplo: .mute @loge 30m shhh\`\`\`` +
+            `\`\`\`js\n.mute <@usuario> <tiempo> /razonOpcional/\nEjemplo: .mute @loge 30m shhh\`\`\`` +
             `\n\n**Usos:**\nSilencia a un usuario del servidor` +
             `\n\n**Aliases:**\nmodmute, timeout, silenciar`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

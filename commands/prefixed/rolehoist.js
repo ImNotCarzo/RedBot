@@ -35,14 +35,15 @@ const data = {
 
       const role = resolveRole(ctx);
       if (!role) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rolehoist", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.rolehoist <@rol>\nEjemplo: .rolehoist @gokiano\`\`\`` +
+            `\`\`\`js\n.rolehoist <@rol>\nEjemplo: .rolehoist @gokiano\`\`\`` +
             `\n\n**Usos:**\nActiva o desactiva si un rol se muestra separado en la lista de miembros` +
             `\n\n**Aliases:**\nhoistrole, rhoist`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

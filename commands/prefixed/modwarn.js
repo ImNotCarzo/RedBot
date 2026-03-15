@@ -22,14 +22,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Warn", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.warn <@usuario> <razón>\nEjemplo: .warn @loge lol\`\`\`` +
+            `\`\`\`js\n.warn <@usuario> <razón>\nEjemplo: .warn @loge lol\`\`\`` +
             `\n\n**Usos:**\nAdvierte a un usuario` +
             `\n\n**Aliases:**\nmodwarn, advertir`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

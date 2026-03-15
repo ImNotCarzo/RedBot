@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { PermissionFlagsBits } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -19,14 +20,15 @@ const data = {
       const role = ctx.message?.mentions?.roles?.first();
 
       if (!member || !role) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Roleadd", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.roleadd <@usuario> <@rol>\nEjemplo: .roleadd @loge @gokiano\`\`\`` +
+            `\`\`\`js\n.roleadd <@usuario> <@rol>\nEjemplo: .roleadd @loge @gokiano\`\`\`` +
             `\n\n**Usos:**\nAñade un rol a un usuario` +
             `\n\n**Aliases:**\naddrole, radd`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

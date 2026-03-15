@@ -35,14 +35,15 @@ const data = {
 
       const role = resolveRole(ctx);
       if (!role) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rolerename", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.rolerename <@rol> <nuevoNombre>\nEjemplo: .rolerename @gokiano potatiano\`\`\`` +
+            `\`\`\`js\n.rolerename <@rol> <nuevoNombre>\nEjemplo: .rolerename @gokiano potatiano\`\`\`` +
             `\n\n**Usos:**\nRenombra un rol` +
             `\n\n**Aliases:**\nrenamerole, rrename`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

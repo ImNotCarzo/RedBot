@@ -21,14 +21,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Unmute", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.unmute <@usuario> /razonOpcional/\nEjemplo: .unmute @loge hola\`\`\`` +
+            `\`\`\`js\n.unmute <@usuario> /razonOpcional/\nEjemplo: .unmute @loge hola\`\`\`` +
             `\n\n**Usos:**\nQuita el mute a un usuario` +
             `\n\n**Aliases:**\nmodunmute, untimeout`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

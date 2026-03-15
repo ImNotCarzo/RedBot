@@ -20,14 +20,15 @@ const data = {
 
       const warnId = ctx.args?.[0]?.toUpperCase();
       if (!warnId) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Removewarn", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.removewarn <ID>\nEjemplo: .removewarn 3lp3p3\`\`\`` +
+            `\`\`\`js\n.removewarn <ID>\nEjemplo: .removewarn 3lp3p3\`\`\`` +
             `\n\n**Usos:**\nElimina una advertencia por su ID` +
             `\n\n**Aliases:**\ndelwarn, warnremove`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

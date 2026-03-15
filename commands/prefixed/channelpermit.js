@@ -21,14 +21,15 @@ const data = {
       const channel = ctx.message?.mentions?.channels?.first() ?? ctx.channel;
 
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Permit", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.permit <@usuario> /canalOpcional/\nEjemplo: .permit @loge #uxiono\`\`\`` +
+            `\`\`\`js\n.permit <@usuario> /canalOpcional/\nEjemplo: .permit @loge #uxiono\`\`\`` +
             `\n\n**Usos:**\nDa acceso a un usuario en un canal` +
             `\n\n**Aliases:**\nchpermit, channelpermit`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

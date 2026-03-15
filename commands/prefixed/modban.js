@@ -21,14 +21,15 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Ban", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.ban <@usuario> /razonOpcional/\nEjemplo: .ban @loge chau\`\`\`` +
+            `\`\`\`js\n.ban <@usuario> /razonOpcional/\nEjemplo: .ban @loge chau\`\`\`` +
             `\n\n**Usos:**\nBanea a un usuario del servidor` +
             `\n\n**Aliases:**\nmodban`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

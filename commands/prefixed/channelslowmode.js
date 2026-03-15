@@ -41,14 +41,15 @@ const data = {
       const timeArg = args.find((a) => !/^<#\d+>$/.test(a));
 
       if (!timeArg) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Slowmode", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.slowmode <tiempo> /canalOpcional/\nEjemplo: .slowmode 1h #uxiono\`\`\`` +
+            `\`\`\`js\n.slowmode <tiempo> /canalOpcional/\nEjemplo: .slowmode 1h #uxiono\`\`\`` +
             `\n\n**Usos:**\nEstablece un slowmode para el canal` +
             `\n\n**Aliases:**\nsm, chslowmode, channelslowmode`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

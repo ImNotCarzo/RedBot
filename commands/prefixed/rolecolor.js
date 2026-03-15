@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -19,14 +20,15 @@ const data = {
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
       if (!role) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Color", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.color <@rol>\nEjemplo: .color @gokiano\`\`\`` +
+            `\`\`\`js\n.color <@rol>\nEjemplo: .color @gokiano\`\`\`` +
             `\n\n**Usos:**\nMuestra el color de un rol` +
             `\n\n**Aliases:**\ncolorrole, rolecolor`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

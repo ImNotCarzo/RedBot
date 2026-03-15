@@ -7,6 +7,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const buildRoleEmbed = (role) => {
   const perms = role.permissions.toArray().map(p => `\`${p}\``);
@@ -53,14 +54,15 @@ const data = {
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
       if (!input) {
-        const bot = ctx.client.user;
+        const bot = ctx.bot.user;
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Roleinfo", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`\n.roleinfo <@rol>\nEjemplo: .roleinfo @gokiano\`\`\`` +
+            `\`\`\`js\n.roleinfo <@rol>\nEjemplo: .roleinfo @gokiano\`\`\`` +
             `\n\n**Usos:**\nMuestra información de un rol` +
             `\n\n**Aliases:**\nroleinfo, inforole`
-          );
+          )
+          .setColor(RED);
 
         return ctx.send({ embeds: [paramerror] });
       }

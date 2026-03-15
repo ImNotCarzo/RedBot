@@ -2,7 +2,7 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback } = require("../../utils/ai");
 
-const COLOR = "#ff383d";
+const { RED } = require("../../utils/colors");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -22,14 +22,15 @@ const data = {
     const tema = ctx.args?.join(" ").trim();
 
    if (!tema) {
-      const bot = ctx.client.user;
+      const bot = ctx.bot.user;
       const paramerror = new EmbedBuilder()
         .setAuthor({ name: "Comando Teoria", iconURL: bot.displayAvatarURL() })
         .setDescription(
-          `\`\`\`\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\`` +
+          `\`\`\`js\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\`` +
           `\n\n**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
           `\n\n**Aliases:**\nconspira, conspiracion, theory`
-        );
+        )
+        .setColor(RED);
 
       return ctx.send({ embeds: [paramerror] });
     }
@@ -49,7 +50,7 @@ const data = {
           new EmbedBuilder()
             .setTitle(`Teoría: ${tema}`)
             .setDescription(texto)
-            .setColor(COLOR)
+            .setColor(RED)
             .setFooter({ text: "Esto es ficción... o quizás no." })
             .setTimestamp(),
         ],
