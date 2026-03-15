@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Permit", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.permit <@usuario> /canalOpcional/\nEjemplo: .permit @loge #uxiono\`\`\`` +
-            `\n\n**Usos:**\nDa acceso a un usuario en un canal` +
-            `\n\n**Aliases:**\nchpermit, channelpermit`
+            `**Usos:**\nDa acceso a un usuario en un canal` +
+            `\n\n**Aliases:**\n\`chpermit\`, \`channelpermit\`` +
+            `\n\n\`\`\`js\n.permit <@usuario> [#canal]\nEjemplo: .permit @loge #uxiono\`\`\``
           )
           .setColor(RED);
 

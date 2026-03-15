@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 const { resolveMember } = require("../../utils/helpers");
 
 const data = {
@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Unmute", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.unmute <@usuario> /razonOpcional/\nEjemplo: .unmute @loge hola\`\`\`` +
-            `\n\n**Usos:**\nQuita el mute a un usuario` +
-            `\n\n**Aliases:**\nmodunmute, untimeout`
+            `**Usos:**\nQuita el mute a un usuario` +
+            `\n\n**Aliases:**\n\`modunmute\`, \`untimeout\`` +
+            `\n\n\`\`\`js\n.unmute <@usuario> [razón]\nEjemplo: .unmute @loge hola\`\`\``
           )
           .setColor(RED);
 

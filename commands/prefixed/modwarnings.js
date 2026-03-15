@@ -9,7 +9,7 @@ const {
   MessageFlags,
 } = require("discord.js");
 const Warn = require("../../models/Warn");
-const { YELLOW } = require("../../utils/colors");
+const { YELLOW, RED } = require("../../utils/colors");
 const { resolveMember } = require("../../utils/helpers");
 
 const data = {
@@ -33,9 +33,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Warnings", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.warnings <@usuario>\nEjemplo: .warnings @loge\`\`\`` +
-            `\n\n**Usos:**\nMuestra las advertencias de un usuario` +
-            `\n\n**Aliases:**\nwarns, modwarnings`
+            `**Usos:**\nMuestra las advertencias de un usuario` +
+            `\n\n**Aliases:**\n\`warns\`, \`modwarnings\`` +
+            `\n\n\`\`\`js\n.warnings <@usuario>\nEjemplo: .warnings @loge\`\`\``
           )
           .setColor(RED);
 

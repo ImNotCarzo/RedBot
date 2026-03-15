@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const Log = require("../../models/Log");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -28,9 +28,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Setlogs", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.setlogs <#canal>\nEjemplo: .setlogs #uxiono\`\`\`` +
-            `\n\n**Usos:**\nEstablece el canal de logs para RedBot en el servidor` +
-            `\n\n**Aliases:**\nmodsetlogs, logchannel, setlog`
+            `**Usos:**\nEstablece el canal de logs para RedBot en el servidor` +
+            `\n\n**Aliases:**\n\`modsetlogs\`, \`logchannel\`, \`setlog\`` +
+            `\n\n\`\`\`js\n.setlogs <#canal>\nEjemplo: .setlogs #uxiono\`\`\``
           )
           .setColor(RED);
 

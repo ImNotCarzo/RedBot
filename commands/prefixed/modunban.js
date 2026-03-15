@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -24,9 +24,9 @@ const data = {
           const paramerror = new EmbedBuilder()
             .setAuthor({ name: "Comando Unban", iconURL: bot.displayAvatarURL() })
             .setDescription(
-              `\`\`\`js\n.unban <ID> /razonOpcional/\nEjemplo: .unban 1020772849906098186 hola\`\`\`` +
-              `\n\n**Usos:**\nDesbanea a un usuario por su ID` +
-              `\n\n**Aliases:**\nmodunban, desbanear`
+              `**Usos:**\nDesbanea a un usuario por su ID` +
+              `\n\n**Aliases:**\n\`modunban\`, \`desbanear\`` +
+              `\n\n\`\`\`js\n.unban <ID> [razón]\nEjemplo: .unban 1020772849906098186 hola\`\`\``
             )
             .setColor(RED);
 
