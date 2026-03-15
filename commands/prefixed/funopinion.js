@@ -22,8 +22,19 @@ const data = {
     const tema = ctx.args?.join(" ").trim();
 
     if (!tema) {
-      return ctx.send("Dime sobre qué quieres mi opinión. Uso: `.opinion <tema>`");
-    }
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Opinion" })
+    .setFields({
+      name: "Usos:",
+      value: "Pide mi opinión sin filtro sobre algo",
+    }, {
+      name: "Aliases:",
+      value: `\`op\`, \`opina\``",
+    })
+    .setDescription(`\`\`\`js\n .opinion <tema>>\n Ejemplo: .opinion la chochoinflación\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
     try {
       const response = await generateWithFallback({
