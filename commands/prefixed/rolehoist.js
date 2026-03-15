@@ -34,7 +34,20 @@ const data = {
       if (!guild) return ctx.send("Solo se puede usar en servidores");
 
       const role = resolveRole(ctx);
-      if (!role) return ctx.send("Mencioná o especificá un rol");
+      if (!role) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Rolehoist" })
+    .setFields({
+      name: "Usos:",
+      value: "Activa o desactiva si un rol se muestra separado en la lista de miembros",
+    }, {
+      name: "Aliases:",
+      value: `\`hoistrole\`, \`rhoist\``",
+    })
+    .setDescription(`\`\`\`js\n .rolehoist <@rol>>\n Ejemplo: .rolehoist @gokiano\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
