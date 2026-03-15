@@ -28,7 +28,7 @@ const data = {
       value: "Silencia a un usuario del servidor",
     }, {
       name: "Aliases:",
-      value: `\`modmute\`, \`timeout\`, \`silenciar\``",
+      value: `\`modmute\`, \`timeout\`, \`silenciar\``,
     })
     .setDescription(`\`\`\`js\n .mute <@usuario> <tiempo> /razonOpcional/>\n Ejemplo: .mute @loge 30m shhh\`\`\``);
 
