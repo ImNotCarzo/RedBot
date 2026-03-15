@@ -28,7 +28,7 @@ const data = {
       value: "Expulsa a un usuario del servidor",
     }, {
       name: "Aliases:",
-      value: `\`modkick\`, \`expulsar\``",
+      value: `\`modkick\`, \`expulsar\``,
     })
     .setDescription(`\`\`\`js\n .kick <@usuario> /razonOpcional/>\n Ejemplo: .kick @loge chau\`\`\``);
 
