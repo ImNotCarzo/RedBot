@@ -31,7 +31,7 @@ const data = {
       name: "Aliases:",
       value: `\`conspira\`, \`conspiracion\`, \`theory"\``",
     })
-    .setDescription(`\`\`\`js\n .teoria <pregunta>\n Ejemplo: .teoria ¿las palomas existen?\`\`\``);
+    .setDescription(`\`\`\`js\n .teoria <tema>\n Ejemplo: .teoria ¿las palomas existen?\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
 }
