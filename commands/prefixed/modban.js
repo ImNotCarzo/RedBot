@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Ban", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.ban <@usuario> /razonOpcional/\nEjemplo: .ban @loge chau\`\`\`` +
-            `\n\n**Usos:**\nBanea a un usuario del servidor` +
-            `\n\n**Aliases:**\nmodban`
+            `**Usos:**\nBanea a un usuario del servidor` +
+            `\n\n**Aliases:**\n\`modban\`` +
+            `\n\n\`\`\`js\n.ban <@usuario> /razonOpcional/\nEjemplo: .ban @loge chau\`\`\``
           )
           .setColor(RED);
 

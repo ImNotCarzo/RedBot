@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Kick", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.kick <@usuario> /razonOpcional/\nEjemplo: .kick @loge chau\`\`\`` +
-            `\n\n**Usos:**\nExpulsa a un usuario del servidor` +
-            `\n\n**Aliases:**\nmodkick, expulsar`
+            `**Usos:**\nExpulsa a un usuario del servidor` +
+            `\n\n**Aliases:**\n\`modkick\`, \`expulsar\`` +
+            `\n\n\`\`\`js\n.kick <@usuario> /razonOpcional/\nEjemplo: .kick @loge chau\`\`\``
           )
           .setColor(RED);
 

@@ -31,9 +31,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Roleusers", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.roleusers <@rol>\nEjemplo: .roleusers @gokiano\`\`\`` +
-            `\n\n**Usos:**\nLista de usuarios con un rol` +
-            `\n\n**Aliases:**\nrusers, usersrole`
+            `**Usos:**\nLista de usuarios con un rol` +
+            `\n\n**Aliases:**\n\`rusers\`, \`usersrole\`` +
+            `\n\n\`\`\`js\n.roleusers <@rol>\nEjemplo: .roleusers @gokiano\`\`\``
           )
           .setColor(RED);
 

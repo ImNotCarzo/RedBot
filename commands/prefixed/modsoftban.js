@@ -25,9 +25,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Softban", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.softban <@usuario> /razonOpcional/\nEjemplo: .softban @loge chau\`\`\`` +
-            `\n\n**Usos:**\nExpulsa a un usuario del servidor borrando sus mensajes` +
-            `\n\n**Aliases:**\nmodsoftban, sban`
+            `**Usos:**\nExpulsa a un usuario del servidor borrando sus mensajes` +
+            `\n\n**Aliases:**\n\`modsoftban\`, \`sban\`` +
+            `\n\n\`\`\`js\n.softban <@usuario> /razonOpcional/\nEjemplo: .softban @loge chau\`\`\``
           )
           .setColor(RED);
 

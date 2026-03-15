@@ -58,9 +58,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Roleinfo", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.roleinfo <@rol>\nEjemplo: .roleinfo @gokiano\`\`\`` +
-            `\n\n**Usos:**\nMuestra información de un rol` +
-            `\n\n**Aliases:**\nroleinfo, inforole`
+            `**Usos:**\nMuestra información de un rol` +
+            `\n\n**Aliases:**\n\`roleinfo\`, \`inforole\`` +
+            `\n\n\`\`\`js\n.roleinfo <@rol>\nEjemplo: .roleinfo @gokiano\`\`\``
           )
           .setColor(RED);
 

@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { GREEN } = require("../../utils/colors");
+const { GREEN, RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -32,9 +32,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rename", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.rename /canalOpcional/ <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\`` +
-            `\n\n**Usos:**\nRenombra un canal` +
-            `\n\n**Aliases:**\nchrename, channelrename`
+            `**Usos:**\nRenombra un canal` +
+            `\n\n**Aliases:**\n\`chrename\`, \`channelrename\`` +
+            `\n\n\`\`\`js\n.rename /canalOpcional/ <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\``
           )
           .setColor(RED);
 

@@ -39,9 +39,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rolementionable", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.rolementionable <@rol>\nEjemplo: .rolementionable @gokiano\`\`\`` +
-            `\n\n**Usos:**\nActiva o desactiva si el rol es mencionable por todos` +
-            `\n\n**Aliases:**\nrolemention, mentionrole, rmention`
+            `**Usos:**\nActiva o desactiva si el rol es mencionable por todos` +
+            `\n\n**Aliases:**\n\`rolemention\`, \`mentionrole\`, \`rmention\`` +
+            `\n\n\`\`\`js\n.rolementionable <@rol>\nEjemplo: .rolementionable @gokiano\`\`\``
           )
           .setColor(RED);
 

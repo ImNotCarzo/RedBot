@@ -1,7 +1,8 @@
-const { CommandBuilder, ParamsBuilder, Errors } = require("erine");
+const { CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../utils/ai");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../utils/askMemory");
+const { RED } = require("../utils/colors");
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya, tampoco seas super arrogante.
@@ -38,10 +39,17 @@ const data = {
       : ctx.args?.join(" ").trim();
 
     if (!pregunta) {
-      const e = new Errors.MissingRequiredParam();
-      e.ctx = ctx;
-      e.param = { name: "pregunta" };
-      throw e;
+      const bot = ctx.bot.user;
+      const paramerror = new EmbedBuilder()
+        .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
+        .setDescription(
+          `**Usos:**\nHazle una pregunta a la IA` +
+          `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
+          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cómo está el clima\`\`\``
+        )
+        .setColor(RED);
+
+      return ctx.send({ embeds: [paramerror] });
     }
 
     try {

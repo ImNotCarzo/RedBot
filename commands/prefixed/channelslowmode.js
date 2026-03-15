@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { BLUE } = require("../../utils/colors");
+const { BLUE, RED } = require("../../utils/colors");
 
 function formatSlowmode(seconds) {
   if (seconds === 0)  return "desactivado";
@@ -45,9 +45,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Slowmode", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.slowmode <tiempo> /canalOpcional/\nEjemplo: .slowmode 1h #uxiono\`\`\`` +
-            `\n\n**Usos:**\nEstablece un slowmode para el canal` +
-            `\n\n**Aliases:**\nsm, chslowmode, channelslowmode`
+            `**Usos:**\nEstablece un slowmode para el canal` +
+            `\n\n**Aliases:**\n\`sm\`, \`chslowmode\`, \`channelslowmode\`` +
+            `\n\n\`\`\`js\n.slowmode <tiempo> /canalOpcional/\nEjemplo: .slowmode 1h #uxiono\`\`\``
           )
           .setColor(RED);
 

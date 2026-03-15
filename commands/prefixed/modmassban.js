@@ -40,7 +40,19 @@ const data = {
       const reasonArgs = (ctx.args ?? []).filter(a => !/<@[!&]?\d+>/.test(a) && !/^\d{17,20}$/.test(a));
       const reason = reasonArgs.join(" ").trim() || "Sin razón";
 
-      if (!targets.length) return ctx.send("Uso: `.massban @user1 @user2 ... [razón]`");
+      if (!targets.length) {
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Massban", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `**Usos:**\nBanea a múltiples usuarios a la vez (hasta 5)` +
+            `\n\n**Aliases:**\n\`modmassban\`, \`mban\`` +
+            `\n\n\`\`\`js\n.massban <@usuario1> <@usuario2> ... /razonOpcional/\nEjemplo: .massban @loge @otro chau\`\`\``
+          )
+          .setColor(RED);
+
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const banned = [];
       const failed = [];

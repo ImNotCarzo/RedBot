@@ -24,9 +24,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Roleicon", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.roleicon <@rol>\nEjemplo: .roleicon @gokiano\`\`\`` +
-            `\n\n**Usos:**\nMuestra el icono de un rol` +
-            `\n\n**Aliases:**\niconrole, ricon`
+            `**Usos:**\nMuestra el icono de un rol` +
+            `\n\n**Aliases:**\n\`iconrole\`, \`ricon\`` +
+            `\n\n\`\`\`js\n.roleicon <@rol>\nEjemplo: .roleicon @gokiano\`\`\``
           )
           .setColor(RED);
 
