@@ -35,7 +35,7 @@ const data = {
       value: "Renombra un canal",
     }, {
       name: "Aliases:",
-      value: `\`chrename\`, \`channelrename\``",
+      value: `\`chrename\`, \`channelrename\``,
     })
     .setDescription(`\`\`\`js\n .rename /canalOpcional/ <nuevo>>\n Ejemplo: .rename #uxiono padalustro\`\`\``);
 
