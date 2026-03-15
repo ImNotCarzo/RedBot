@@ -28,7 +28,7 @@ const data = {
       value: "Quita el acceso a un usuario en un canal",
     }, {
       name: "Aliases:",
-      value: `\`chdeny\`, \`channeldeny\``",
+      value: `\`chdeny\`, \`channeldeny\``,
     })
     .setDescription(`\`\`\`js\n .deny <@usuario> /canalOpcional/>\n Ejemplo: .deny @loge #uxiono\`\`\``);
 
