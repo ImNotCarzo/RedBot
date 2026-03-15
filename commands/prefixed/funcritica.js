@@ -29,7 +29,7 @@ const data = {
       value: "Genera una crítica despiadada de algo",
     }, {
       name: "Aliases:",
-      value: `\`criticar\`, \`criticize\``",
+      value: `\`criticar\`, \`criticize\``,
     })
     .setDescription(`\`\`\`js\n .critica <tema>>\n Ejemplo: .critica la chochoinflación\`\`\``);
 
