@@ -31,7 +31,7 @@ const data = {
       name: "Aliases:",
       value: `\`criticar\`, \`criticize\``",
     })
-    .setDescription(`\`\`\`js\n .critica <tema>>\n Ejemplo: .critica la quinta sinfonía de Beethoven\`\`\``);
+    .setDescription(`\`\`\`js\n .critica <tema>>\n Ejemplo: .critica la chochoinflación\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
 }
