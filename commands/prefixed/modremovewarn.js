@@ -19,7 +19,20 @@ const data = {
       if (!guild) return ctx.send("Solo se puede usar en servidores");
 
       const warnId = ctx.args?.[0]?.toUpperCase();
-      if (!warnId) return ctx.send("Uso: `.removewarn <ID>`");
+      if (!warnId) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Removewarn" })
+    .setFields({
+      name: "Usos:",
+      value: "Elimina una advertencia por su ID",
+    }, {
+      name: "Aliases:",
+      value: `\`delwarn\`, \`warnremove\``",
+    })
+    .setDescription(`\`\`\`js\n .removewarn <ID>>\n Ejemplo: .removewarn 3lp3p3\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tienes el permiso `ModerateMembers`");
