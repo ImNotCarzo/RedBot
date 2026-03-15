@@ -23,9 +23,9 @@ function parseSlowmode(str) {
 
 const data = {
   data: new CommandBuilder({
-    name: "channelslowmode",
+    name: "slowmode",
     description: "Establece el slowmode de un canal (0 para desactivar, máx 6h)",
-    aliases: ["chslowmode", "slowmode", "sm"],
+    aliases: ["sm", "chslowmode", "channelslowmode"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -40,7 +40,20 @@ const data = {
       // The time argument is the first non-channel-mention arg
       const timeArg = args.find((a) => !/^<#\d+>$/.test(a));
 
-      if (!timeArg) return ctx.send("Uso: `.channelslowmode <tiempo> [#canal]` — Ej: `5s`, `10m`, `1h`, `0` para desactivar. Máx 6h.");
+      if (!timeArg) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Slowmode" })
+    .setFields({
+      name: "Usos:",
+      value: "Establece un slowmode para el canal",
+    }, {
+      name: "Aliases:",
+      value: `\`sm\`, \`chslowmode\`, \`channelslowmode\``",
+    })
+    .setDescription(`\`\`\`js\n .slowmode <tiempo> /canalOpcional/>\n Ejemplo: .slowmode 1h #uxiono\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const seconds = parseSlowmode(timeArg);
       if (seconds === null) return ctx.send("Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para desactivar. Máximo 6h.");
