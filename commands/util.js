@@ -272,28 +272,21 @@ const data = {
     }
 
     try {
-      const response = await fetch("https://libretranslate.com/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q:      texto,
-          source: "auto",
-          target: idioma,
-        }),
-      });
+      const response = await fetch(
+  `https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto)}&langpair=auto|${idioma}`
+);
 
-      const data = await response.json();
+const data = await response.json();
 
-      // LibreTranslate devuelve error en este campo si algo falla
-      if (data.error) {
-        return ctx.send({
-          content: `No se pudo traducir: \`${data.error}\``,
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+if (data.responseStatus !== 200) {
+  return ctx.send({
+    content: `No se pudo traducir: \`${data.responseDetails}\``,
+    flags: MessageFlags.Ephemeral,
+  });
+}
 
-      const traduccion    = data.translatedText;
-      const idiomaOrigen  = data.detectedLanguage?.language ?? "auto";
+const traduccion   = data.responseData.translatedText;
+const idiomaOrigen = data.matches?.[0]?.source ?? "auto";
 
       const embed = new EmbedBuilder()
         .setTitle("Traducción")
