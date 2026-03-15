@@ -29,7 +29,7 @@ const data = {
       value: "Genera una teoría conspirativa sobre cualquier cosa",
     }, {
       name: "Aliases:",
-      value: `\`conspira\`, \`conspiracion\`, \`theory"\``",
+      value: `\`conspira\`, \`conspiracion\`, \`theory"\``,
     })
     .setDescription(`\`\`\`js\n .teoria <tema>\n Ejemplo: .teoria ¿las palomas existen?\`\`\``);
 
