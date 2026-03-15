@@ -19,7 +19,20 @@ const data = {
 
       const userId = ctx.args?.[0];
       if (!userId || !/^\d{17,20}$/.test(userId))
-        return ctx.send("Uso: `.unban <ID> [razón]`");
+        {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Unban" })
+    .setFields({
+      name: "Usos:",
+      value: "Desbanea a un usuario por su ID",
+    }, {
+      name: "Aliases:",
+      value: `\`modunban\`, \`desbanear\``",
+    })
+    .setDescription(`\`\`\`js\n .unban <@usuario> /razonOpcional/>\n Ejemplo: .unban 1020772849906098186 hola\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;
