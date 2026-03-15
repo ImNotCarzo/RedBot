@@ -25,14 +25,14 @@ const data = {
 
       if (!channel) {
   const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Setlogs" }),
+    .setAuthor({ name: "Comando Setlogs" })
     .setFields({
       name: "Usos:",
       value: "Establece el canal de logs para RedBot en el servidor",
     }, {
       name: "Aliases:",
       value: `\`modsetlogs\`, \`logchanner\, \`setlog\``
-    }),
+    })
     .setDescription(`\`\`\`js\n .setlogs <#canal>\n Ejemplo: .setlogs #uxiono\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
