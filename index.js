@@ -107,7 +107,7 @@ console.log(`[Events] ${eventFiles.length} cargados`);
 //  READY — sync, context patch, tempbans
 // ─────────────────────────────────────────────
 
-const COMMANDS_TO_UPDATE = ["ask", "user", "askreset", "ping", "botinfo", "invite", "fun"];
+const COMMANDS_TO_UPDATE = ["help", "user", "ask", "ping", "botinfo", "util", "fun"];
 
 bot.on("clientReady", async (bot) => {
   await bot.sync();
