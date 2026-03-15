@@ -28,7 +28,7 @@ const data = {
       value: "Elimina mensajes de un canal",
     }, {
       name: "Aliases:",
-      value: `\`modpurge\`, \`clear\`, \`prune\``",
+      value: `\`modpurge\`, \`clear\`, \`prune\``,
     })
     .setDescription(`\`\`\`js\n .purge <cantidad> /usuarioOpcional/>\n Ejemplo: .purge 10 @loge\`\`\``);
 
