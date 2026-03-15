@@ -13,7 +13,7 @@ const data = {
   data: new CommandBuilder({
     name: "critica",
     description: "Te doy una crítica despiadada de algo",
-    aliases: ["criticar", "critique"],
+    aliases: ["criticar", "criticize"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -22,8 +22,19 @@ const data = {
     const tema = ctx.args?.join(" ").trim();
 
     if (!tema) {
-      return ctx.send("Dime qué quieres que critique. Uso: `.critica <tema>`");
-    }
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Critica" })
+    .setFields({
+      name: "Usos:",
+      value: "Genera una crítica despiadada de algo",
+    }, {
+      name: "Aliases:",
+      value: `\`criticar\`, \`criticize\``",
+    })
+    .setDescription(`\`\`\`js\n .critica <tema>>\n Ejemplo: .critica la quinta sinfonía de Beethoven\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
     try {
       const response = await generateWithFallback({
