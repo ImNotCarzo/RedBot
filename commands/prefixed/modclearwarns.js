@@ -29,7 +29,7 @@ const data = {
       value: "Borra las advertencias de un usuario",
     }, {
       name: "Aliases:",
-      value: `\`warnsclear\`, \`clearwarn\``",
+      value: `\`warnsclear\`, \`clearwarn\``,
     })
     .setDescription(`\`\`\`js\n .clearwarns <@usuario>>\n Ejemplo: .clearwarns @loge\`\`\``);
 
