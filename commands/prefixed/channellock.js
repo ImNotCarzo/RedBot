@@ -5,9 +5,9 @@ const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channellock",
+    name: "lock",
     description: "Bloquea un canal para usuarios normales",
-    aliases: ["chlock", "lockdown"],
+    aliases: ["chlock", "lockdown", "channellock"],
     as_prefix: true,
     as_slash: false,
   }),
