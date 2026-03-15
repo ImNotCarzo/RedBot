@@ -20,7 +20,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.kick @usuario [razón]`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Kick" })
+    .setFields({
+      name: "Usos:",
+      value: "Expulsa a un usuario del servidor",
+    }, {
+      name: "Aliases:",
+      value: `\`modkick\`, \`expulsar\``",
+    })
+    .setDescription(`\`\`\`js\n .kick <@usuario> /razonOpcional/>\n Ejemplo: .kick @loge chau\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;
