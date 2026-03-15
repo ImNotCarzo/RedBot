@@ -52,8 +52,20 @@ const data = {
       const input = ctx.message?.mentions?.roles?.first() ||
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
-      if (!input) return ctx.send("Mencioná o especificá un rol");
+      if (!input) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Roleinfo" })
+    .setFields({
+      name: "Usos:",
+      value: "Muestra información de un rol",
+    }, {
+      name: "Aliases:",
+      value: `\`roleinfo\`, \`inforole\``",
+    })
+    .setDescription(`\`\`\`js\n .roleinfo <@rol>>\n Ejemplo: .roleinfo @gokiano\`\`\``);
 
+  return ctx.send({ embeds: [paramerror] });
+}
       const selectRoles = guild.roles.cache
         .filter(r => r.id !== guild.id)
         .sort((a, b) => b.position - a.position)
