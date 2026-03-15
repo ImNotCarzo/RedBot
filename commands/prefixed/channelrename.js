@@ -5,9 +5,9 @@ const { GREEN } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channelrename",
+    name: "rename",
     description: "Renombra un canal",
-    aliases: ["chrename", "crename"],
+    aliases: ["chrename", "channelrename"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -27,7 +27,20 @@ const data = {
         .replace(/\s+/g, "-")
         .slice(0, 100);
 
-      if (!newName) return ctx.send("Uso: `.channelrename [#canal] <nombre>`");
+      if (!newName) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Rename" })
+    .setFields({
+      name: "Usos:",
+      value: "Renombra un canal",
+    }, {
+      name: "Aliases:",
+      value: `\`chrename\`, \`channelrename\``",
+    })
+    .setDescription(`\`\`\`js\n .rename /canalOpcional/ <nuevo>>\n Ejemplo: .rename #uxiono padalustro\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
         return ctx.send("No tienes el permiso `ManageChannels`");
