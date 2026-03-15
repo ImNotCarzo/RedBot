@@ -28,8 +28,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.warnings @usuario`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Warnings" })
+    .setFields({
+      name: "Usos:",
+      value: "Muestra las advertncias de un usuario",
+    }, {
+      name: "Aliases:",
+      value: `\`warns\`, \`modwarnings\``",
+    })
+    .setDescription(`\`\`\`js\n .warnings <@usuario>>\n Ejemplo: .warnings @loge\`\`\``);
 
+  return ctx.send({ embeds: [paramerror] });
+}
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tienes el permiso `ModerateMembers`");
 
