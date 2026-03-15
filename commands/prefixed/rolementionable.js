@@ -34,7 +34,20 @@ const data = {
       if (!guild) return ctx.send("Solo se puede usar en servidores");
 
       const role = resolveRole(ctx);
-      if (!role) return ctx.send("Mencioná o especificá un rol");
+      if (!role) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Rolementionable" })
+    .setFields({
+      name: "Usos:",
+      value: "Activa o desactiva si el rol es mencionable por todos",
+    }, {
+      name: "Aliases:",
+      value: `\`rolemention\`, \`mentionrole\`, \`rmention\``",
+    })
+    .setDescription(`\`\`\`js\n .rolementionable <@rol>>\n Ejemplo: .rolementionable @gokiano\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
