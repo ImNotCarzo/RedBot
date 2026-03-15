@@ -20,7 +20,20 @@ const data = {
       const amountRaw = ctx.args?.[0];
       const amount = Math.min(100, Math.max(1, parseInt(amountRaw) || 0));
 
-      if (!amount) return ctx.send("Uso: `.purge <cantidad> [@usuario]`");
+      if (!amount) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando purge" })
+    .setFields({
+      name: "Usos:",
+      value: "Elimina mensajes de un canal",
+    }, {
+      name: "Aliases:",
+      value: `\`modpurge\`, \`clear\`, \`prune\``",
+    })
+    .setDescription(`\`\`\`js\n .purge <cantidad> /usuarioOpcional/>\n Ejemplo: .purge 10 @loge\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const target = ctx.message?.mentions?.members?.first() ?? null;
       const modTag = ctx.author?.tag ?? ctx.author?.username;
