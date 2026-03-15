@@ -13,7 +13,7 @@ const data = {
   data: new CommandBuilder({
     name: "teoria",
     description: "Una teoría conspirativa sobre cualquier cosa",
-    aliases: ["conspira", "conspiracion"],
+    aliases: ["conspira", "conspiracion", "theory"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -27,6 +27,9 @@ const data = {
     .setFields({
       name: "Usos:",
       value: "Genera una teoría conspirativa sobre cualquier cosa",
+    }, {
+      name: "Aliases:",
+      value: `\`conspira\`, \`conspiracion\`, \`theory"\``",
     })
     .setDescription(`\`\`\`js\n .teoria <pregunta>\n Ejemplo: .teoria ¿las palomas existen?\`\`\``);
 
