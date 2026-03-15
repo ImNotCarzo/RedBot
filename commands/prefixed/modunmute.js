@@ -28,7 +28,7 @@ const data = {
       value: "Quita el mute a un usuario",
     }, {
       name: "Aliases:",
-      value: `\`modunmute\`, \`untimeout\``",
+      value: `\`modunmute\`, \`untimeout\``,
     })
     .setDescription(`\`\`\`js\n .unmute <@usuario> /razonOpcional/>\n Ejemplo: .unmute @loge hola\`\`\``);
 
