@@ -20,7 +20,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.unmute @usuario [razón]`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Unmute" })
+    .setFields({
+      name: "Usos:",
+      value: "Quita el mute a un usuario",
+    }, {
+      name: "Aliases:",
+      value: `\`modunmute\`, \`untimeout\``",
+    })
+    .setDescription(`\`\`\`js\n .unmute <@usuario> /razonOpcional/>\n Ejemplo: .unmute @loge hola\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;
