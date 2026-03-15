@@ -12,18 +12,16 @@ const event = {
   name: "error",
   async code(client, err) {
 
-    // Slash en DMs — erine lo bloquea antes del code, ignorar silenciosamente
     if (is(err, Errors.GuildOnly)) {
-      // Si tiene ctx y es DM, intentar responder igual
       if (err.ctx) {
         const isDM = !err.ctx.data?.guildId;
-        if (isDM) return; // no hay nada que hacer, erine ya bloqueó
+        if (isDM) return;
         return err.ctx.send("Este comando solo se puede usar en servidores");
       }
       return;
     }
 
-    if (is(err, Errors.CommandNotFound)) return; // silencioso
+    if (is(err, Errors.CommandNotFound)) return;
 
     if (is(err, Errors.NotOwner)) {
       return err.ctx?.send("Only owner lol");
