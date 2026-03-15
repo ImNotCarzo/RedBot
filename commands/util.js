@@ -234,7 +234,28 @@ const data = {
       deleteConversacion(userId);
       await ctx.send({ content: "Historial borrado" });
     },
+  })
+  
+  // ── TRANSLATE ──────────────────────────────────,
+.addCommand({
+  data: new CommandBuilder({
+    name: "translate",
+    description: "Traduce texto",
+    aliases: ["traducir", "trans"],
   }),
+  params: new ParamsBuilder()
+  .addString({
+    name: "Texto",
+    description: "El texto a traducir",
+    required: true,
+  }),
+    .addString({
+    name: "To",
+    description: "Selecciona una opción",
+    required: false,
+  }),
+            async code(ctx){
+            if(!texto) 
 };
 
 module.exports = { data };
