@@ -42,7 +42,7 @@ const data = {
       value: "Activa o desactiva si un rol se muestra separado en la lista de miembros",
     }, {
       name: "Aliases:",
-      value: `\`hoistrole\`, \`rhoist\``",
+      value: `\`hoistrole\`, \`rhoist\``,
     })
     .setDescription(`\`\`\`js\n .rolehoist <@rol>>\n Ejemplo: .rolehoist @gokiano\`\`\``);
 
