@@ -26,7 +26,7 @@ const data = {
       value: "Añade un rol a un usuario",
     }, {
       name: "Aliases:",
-      value: `\`addrole\`, \`radd\``",
+      value: `\`addrole\`, \`radd\``,
     })
     .setDescription(`\`\`\`js\n .roleadd <@usuario> <@rol>>\n Ejemplo: .roleadd @loge @gokiano\`\`\``);
 
