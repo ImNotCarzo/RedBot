@@ -33,7 +33,7 @@ const data = {
       value: "Lista de usuarios con un rol",
     }, {
       name: "Aliases:",
-      value: `\`rusers\`, \`usersrole\``",
+      value: `\`rusers\`, \`usersrole\``,
     })
     .setDescription(`\`\`\`js\n .roleusers <@rol>>\n Ejemplo: .roleusers @gokiano\`\`\``);
 
