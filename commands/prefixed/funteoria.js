@@ -21,10 +21,17 @@ const data = {
   async code(ctx) {
     const tema = ctx.args?.join(" ").trim();
 
-    if (!tema) {
-      return ctx.send("Dime sobre qué quieres la teoría. Uso: `.teoria <tema>`");
-    }
+   if (!tema) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Teoria" })
+    .setFields({
+      name: "Usos:",
+      value: "Genera una teoría conspirativa sobre cualquier cosa",
+    })
+    .setDescription(`\`\`\`js\n .teoria <pregunta>\n Ejemplo: .teoria ¿las palomas existen?\`\`\``);
 
+  return ctx.send({ embeds: [paramerror] });
+}
     try {
       const response = await generateWithFallback({
         model: "gemini-3.1-flash-lite-preview",
