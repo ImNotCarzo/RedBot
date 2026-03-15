@@ -26,7 +26,7 @@ const data = {
       value: "Muestra el icono de un rol",
     }, {
       name: "Aliases:",
-      value: `\`iconrole\`, \`ricon\``",
+      value: `\`iconrole\`, \`ricon\``,
     })
     .setDescription(`\`\`\`js\n .roleicon <@rol>>\n Ejemplo: .roleicon @gokiano\`\`\``);
 
