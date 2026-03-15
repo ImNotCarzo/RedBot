@@ -21,19 +21,17 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Mute" })
-    .setFields({
-      name: "Usos:",
-      value: "Silencia a un usuario del servidor",
-    }, {
-      name: "Aliases:",
-      value: `\`modmute\`, \`timeout\`, \`silenciar\``,
-    })
-    .setDescription(`\`\`\`js\n .mute <@usuario> <tiempo> /razonOpcional/>\n Ejemplo: .mute @loge 30m shhh\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Mute", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.mute <@usuario> <tiempo> /razonOpcional/\nEjemplo: .mute @loge 30m shhh\`\`\`` +
+            `\n\n**Usos:**\nSilencia a un usuario del servidor` +
+            `\n\n**Aliases:**\nmodmute, timeout, silenciar`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const durationStr = ctx.args?.[1] || null;
       if (!durationStr) return ctx.send("Proporciona una duración (ej: 10m, 1h, 2d)");

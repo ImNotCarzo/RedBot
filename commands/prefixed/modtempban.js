@@ -22,19 +22,17 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Tempban" })
-    .setFields({
-      name: "Usos:",
-      value: "Banea a un usuario temporalmente",
-    }, {
-      name: "Aliases:",
-      value: `\`modtempban\`, \`tban\``,
-    })
-    .setDescription(`\`\`\`js\n .tempban <@usuario> <tiempo> /razonOpcional/>\n Ejemplo: .tempban 10d @loge chau\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Tempban", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.tempban <@usuario> <tiempo> /razonOpcional/\nEjemplo: .tempban 10d @loge chau\`\`\`` +
+            `\n\n**Usos:**\nBanea a un usuario temporalmente` +
+            `\n\n**Aliases:**\nmodtempban, tban`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const durationStr = ctx.args?.[1] || null;
       if (!durationStr) return ctx.send("Proporciona una duración (ej: 1h, 30m, 2d)");

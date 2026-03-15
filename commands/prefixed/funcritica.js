@@ -22,19 +22,17 @@ const data = {
     const tema = ctx.args?.join(" ").trim();
 
     if (!tema) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Critica" })
-    .setFields({
-      name: "Usos:",
-      value: "Genera una crítica despiadada de algo",
-    }, {
-      name: "Aliases:",
-      value: `\`criticar\`, \`criticize\``,
-    })
-    .setDescription(`\`\`\`js\n .critica <tema>>\n Ejemplo: .critica la chochoinflación\`\`\``);
+      const bot = ctx.client.user;
+      const paramerror = new EmbedBuilder()
+        .setAuthor({ name: "Comando Critica", iconURL: bot.displayAvatarURL() })
+        .setDescription(
+          `\`\`\`\n.critica <tema>\nEjemplo: .critica la chochoinflación\`\`\`` +
+          `\n\n**Usos:**\nGenera una crítica despiadada de algo` +
+          `\n\n**Aliases:**\ncriticar, criticize`
+        );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+      return ctx.send({ embeds: [paramerror] });
+    }
 
     try {
       const response = await generateWithFallback({

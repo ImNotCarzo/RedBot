@@ -21,19 +21,17 @@ const data = {
       const channel = ctx.message?.mentions?.channels?.first() ?? ctx.channel;
 
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Permit" })
-    .setFields({
-      name: "Usos:",
-      value: "Da acceso a un usuario en un canal",
-    }, {
-      name: "Aliases:",
-      value: `\`chpermit\`, \`channelpermit\``,
-    })
-    .setDescription(`\`\`\`js\n .permit <@usuario> /canalOpcional/>\n Ejemplo: .permit @loge #uxiono\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Permit", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.permit <@usuario> /canalOpcional/\nEjemplo: .permit @loge #uxiono\`\`\`` +
+            `\n\n**Usos:**\nDa acceso a un usuario en un canal` +
+            `\n\n**Aliases:**\nchpermit, channelpermit`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 

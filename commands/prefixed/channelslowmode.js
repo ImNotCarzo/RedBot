@@ -41,19 +41,17 @@ const data = {
       const timeArg = args.find((a) => !/^<#\d+>$/.test(a));
 
       if (!timeArg) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Slowmode" })
-    .setFields({
-      name: "Usos:",
-      value: "Establece un slowmode para el canal",
-    }, {
-      name: "Aliases:",
-      value: `\`sm\`, \`chslowmode\`, \`channelslowmode\``,
-    })
-    .setDescription(`\`\`\`js\n .slowmode <tiempo> /canalOpcional/>\n Ejemplo: .slowmode 1h #uxiono\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Slowmode", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.slowmode <tiempo> /canalOpcional/\nEjemplo: .slowmode 1h #uxiono\`\`\`` +
+            `\n\n**Usos:**\nEstablece un slowmode para el canal` +
+            `\n\n**Aliases:**\nsm, chslowmode, channelslowmode`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const seconds = parseSlowmode(timeArg);
       if (seconds === null) return ctx.send("Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para desactivar. Máximo 6h.");

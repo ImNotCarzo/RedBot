@@ -21,19 +21,17 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Ban" })
-    .setFields({
-      name: "Usos:",
-      value: "Banea a un usuario del servidor",
-    }, {
-      name: "Aliases:",
-      value: `\`modban\``,
-    })
-    .setDescription(`\`\`\`js\n .ban <@usuario> /razonOpcional/>\n Ejemplo: .ban @loge chau\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Ban", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.ban <@usuario> /razonOpcional/\nEjemplo: .ban @loge chau\`\`\`` +
+            `\n\n**Usos:**\nBanea a un usuario del servidor` +
+            `\n\n**Aliases:**\nmodban`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
 

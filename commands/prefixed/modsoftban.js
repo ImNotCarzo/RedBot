@@ -21,19 +21,17 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Softban" })
-    .setFields({
-      name: "Usos:",
-      value: "Expulsa a un usuario del servidor borrando sus mensajes",
-    }, {
-      name: "Aliases:",
-      value: `\`modsoftban\`, \`sban\``,
-    })
-    .setDescription(`\`\`\`js\n .softban <@usuario> /razonOpcional/>\n Ejemplo: .softban @loge chau\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Softban", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.softban <@usuario> /razonOpcional/\nEjemplo: .softban @loge chau\`\`\`` +
+            `\n\n**Usos:**\nExpulsa a un usuario del servidor borrando sus mensajes` +
+            `\n\n**Aliases:**\nmodsoftban, sban`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;

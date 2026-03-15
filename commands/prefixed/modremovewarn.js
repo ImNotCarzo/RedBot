@@ -20,19 +20,17 @@ const data = {
 
       const warnId = ctx.args?.[0]?.toUpperCase();
       if (!warnId) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Removewarn" })
-    .setFields({
-      name: "Usos:",
-      value: "Elimina una advertencia por su ID",
-    }, {
-      name: "Aliases:",
-      value: `\`delwarn\`, \`warnremove\``,
-    })
-    .setDescription(`\`\`\`js\n .removewarn <ID>>\n Ejemplo: .removewarn 3lp3p3\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Removewarn", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.removewarn <ID>\nEjemplo: .removewarn 3lp3p3\`\`\`` +
+            `\n\n**Usos:**\nElimina una advertencia por su ID` +
+            `\n\n**Aliases:**\ndelwarn, warnremove`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tienes el permiso `ModerateMembers`");

@@ -28,19 +28,17 @@ const data = {
         .slice(0, 100);
 
       if (!newName) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Rename" })
-    .setFields({
-      name: "Usos:",
-      value: "Renombra un canal",
-    }, {
-      name: "Aliases:",
-      value: `\`chrename\`, \`channelrename\``,
-    })
-    .setDescription(`\`\`\`js\n .rename /canalOpcional/ <nuevo>>\n Ejemplo: .rename #uxiono padalustro\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Rename", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.rename /canalOpcional/ <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\`` +
+            `\n\n**Usos:**\nRenombra un canal` +
+            `\n\n**Aliases:**\nchrename, channelrename`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
         return ctx.send("No tienes el permiso `ManageChannels`");

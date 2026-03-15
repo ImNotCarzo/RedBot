@@ -22,19 +22,17 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Warn" })
-    .setFields({
-      name: "Usos:",
-      value: "Advierte a un usuario",
-    }, {
-      name: "Aliases:",
-      value: `\`modwarn\`, \`advertir\``,
-    })
-    .setDescription(`\`\`\`js\n .warn <@usuario> <razón>>\n Ejemplo: .warn @loge lol\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Warn", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.warn <@usuario> <razón>\nEjemplo: .warn @loge lol\`\`\`` +
+            `\n\n**Usos:**\nAdvierte a un usuario` +
+            `\n\n**Aliases:**\nmodwarn, advertir`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const reason = ctx.args?.slice(1).join(" ").trim();
       if (!reason) return ctx.send("Proporciona una razón para la advertencia");

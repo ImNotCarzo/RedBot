@@ -19,19 +19,17 @@ const data = {
       const role = ctx.message?.mentions?.roles?.first();
 
       if (!member || !role) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Roleadd" })
-    .setFields({
-      name: "Usos:",
-      value: "Añade un rol a un usuario",
-    }, {
-      name: "Aliases:",
-      value: `\`addrole\`, \`radd\``,
-    })
-    .setDescription(`\`\`\`js\n .roleadd <@usuario> <@rol>>\n Ejemplo: .roleadd @loge @gokiano\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Roleadd", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.roleadd <@usuario> <@rol>\nEjemplo: .roleadd @loge @gokiano\`\`\`` +
+            `\n\n**Usos:**\nAñade un rol a un usuario` +
+            `\n\n**Aliases:**\naddrole, radd`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tienes el permiso `ManageRoles` para usar esto");

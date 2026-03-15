@@ -21,19 +21,17 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Kick" })
-    .setFields({
-      name: "Usos:",
-      value: "Expulsa a un usuario del servidor",
-    }, {
-      name: "Aliases:",
-      value: `\`modkick\`, \`expulsar\``,
-    })
-    .setDescription(`\`\`\`js\n .kick <@usuario> /razonOpcional/>\n Ejemplo: .kick @loge chau\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Kick", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.kick <@usuario> /razonOpcional/\nEjemplo: .kick @loge chau\`\`\`` +
+            `\n\n**Usos:**\nExpulsa a un usuario del servidor` +
+            `\n\n**Aliases:**\nmodkick, expulsar`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;

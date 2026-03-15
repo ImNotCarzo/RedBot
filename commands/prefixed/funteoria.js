@@ -22,19 +22,17 @@ const data = {
     const tema = ctx.args?.join(" ").trim();
 
    if (!tema) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Teoria" })
-    .setFields({
-      name: "Usos:",
-      value: "Genera una teoría conspirativa sobre cualquier cosa",
-    }, {
-      name: "Aliases:",
-      value: `\`conspira\`, \`conspiracion\`, \`theory"\``,
-    })
-    .setDescription(`\`\`\`js\n .teoria <tema>\n Ejemplo: .teoria ¿las palomas existen?\`\`\``);
+      const bot = ctx.client.user;
+      const paramerror = new EmbedBuilder()
+        .setAuthor({ name: "Comando Teoria", iconURL: bot.displayAvatarURL() })
+        .setDescription(
+          `\`\`\`\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\`` +
+          `\n\n**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
+          `\n\n**Aliases:**\nconspira, conspiracion, theory`
+        );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+      return ctx.send({ embeds: [paramerror] });
+    }
     try {
       const response = await generateWithFallback({
         model: "gemini-3.1-flash-lite-preview",

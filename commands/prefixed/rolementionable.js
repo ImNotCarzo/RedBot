@@ -35,19 +35,17 @@ const data = {
 
       const role = resolveRole(ctx);
       if (!role) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Rolementionable" })
-    .setFields({
-      name: "Usos:",
-      value: "Activa o desactiva si el rol es mencionable por todos",
-    }, {
-      name: "Aliases:",
-      value: `\`rolemention\`, \`mentionrole\`, \`rmention\``,
-    })
-    .setDescription(`\`\`\`js\n .rolementionable <@rol>>\n Ejemplo: .rolementionable @gokiano\`\`\``);
+        const bot = ctx.client.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Rolementionable", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`\n.rolementionable <@rol>\nEjemplo: .rolementionable @gokiano\`\`\`` +
+            `\n\n**Usos:**\nActiva o desactiva si el rol es mencionable por todos` +
+            `\n\n**Aliases:**\nrolemention, mentionrole, rmention`
+          );
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
