@@ -71,10 +71,6 @@ const event = {
       return err.ctx?.send("No encontré ese rol");
     }
 
-    if (is(err, Errors.MissingRequiredParam)) {
-      return err.ctx?.send(`Falta un parámetro requerido: \`${err.param?.name ?? "desconocido"}\``);
-    }
-
     if (
       is(err, Errors.NotParamBoolean) ||
       is(err, Errors.NotParamNumber) ||
