@@ -22,9 +22,9 @@ function formatSlowmode(seconds) {
 
 const data = {
   data: new CommandBuilder({
-    name: "channelinfo",
+    name: "channel",
     description: "Muestra información de un canal",
-    aliases: ["chinfo", "cinfo"],
+    aliases: ["chinfo", "cinfo", "channelinfo"],
     as_prefix: true,
     as_slash: false,
   }),
