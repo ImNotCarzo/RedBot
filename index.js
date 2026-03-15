@@ -44,7 +44,6 @@ const bot = new Erine({
     const content = message.content;
     const botId   = message.client?.user?.id;
 
-    // Mención como prefijo
     if (botId) {
       if (content.startsWith(`<@${botId}>`))  return `<@${botId}>`;
       if (content.startsWith(`<@!${botId}>`)) return `<@!${botId}>`;
@@ -52,12 +51,10 @@ const bot = new Erine({
 
     const guildId = message.guildId;
 
-    // En DMs siempre usar "."
     if (!guildId) {
       return content.startsWith(".") ? "." : null;
     }
 
-    // Prefix desde caché o DB
     let prefix = ".";
     if (prefixCache.has(guildId)) {
       prefix = prefixCache.get(guildId);
@@ -81,7 +78,7 @@ mongoose
   .catch((err) => console.error("[DB] Error:", err));
 
 // ─────────────────────────────────────────────
-//  COMMANDS & LOGIN
+//  LOADERS
 // ─────────────────────────────────────────────
 
 bot.load("commands");
@@ -89,7 +86,7 @@ bot.login(process.env.TOKEN);
 bot.setMaxListeners(20);
 
 // ─────────────────────────────────────────────
-//  EVENTS (archivos en /events)
+//  EVENTS
 // ─────────────────────────────────────────────
 
 const eventsPath  = path.join(__dirname, "events");
@@ -104,7 +101,7 @@ for (const file of eventFiles) {
 console.log(`[Events] ${eventFiles.length} cargados`);
 
 // ─────────────────────────────────────────────
-//  READY — sync, context patch, tempbans
+//  READY
 // ─────────────────────────────────────────────
 
 const COMMANDS_TO_UPDATE = ["help", "user", "ask", "ping", "botinfo", "util", "fun"];
@@ -113,7 +110,6 @@ bot.on("clientReady", async (bot) => {
   await bot.sync();
   console.log("[Commands] Sincronizados");
 
-  // Parchear integration_types y contexts
   try {
     const rest     = new REST().setToken(process.env.TOKEN);
     const commands = await rest.get(Routes.applicationCommands(process.env.CLIENT_ID));
@@ -136,7 +132,7 @@ bot.on("clientReady", async (bot) => {
 });
 
 // ─────────────────────────────────────────────
-//  MESSAGE CREATE — reply-based IA conversation
+//  MESSAGE CREATE - ASK
 // ─────────────────────────────────────────────
 
 bot.on("messageCreate", async (message) => {
