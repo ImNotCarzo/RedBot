@@ -27,7 +27,7 @@ const data = {
       value: "Elimina una advertencia por su ID",
     }, {
       name: "Aliases:",
-      value: `\`delwarn\`, \`warnremove\``",
+      value: `\`delwarn\`, \`warnremove\``,
     })
     .setDescription(`\`\`\`js\n .removewarn <ID>>\n Ejemplo: .removewarn 3lp3p3\`\`\``);
 
