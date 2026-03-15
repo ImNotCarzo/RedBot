@@ -26,7 +26,7 @@ const data = {
       value: "Quita un rol a un usuario",
     }, {
       name: "Aliases:",
-      value: `\`removerole\`, \`rremove\``",
+      value: `\`removerole\`, \`rremove\``,
     })
     .setDescription(`\`\`\`js\n .roleremove <@usuario> <@rol>>\n Ejemplo: .roleremove @loge @gokiano\`\`\``);
 
