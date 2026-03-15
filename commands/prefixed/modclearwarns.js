@@ -21,7 +21,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.clearwarns @usuario`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Clearwarns" })
+    .setFields({
+      name: "Usos:",
+      value: "Borra las advertencias de un usuario",
+    }, {
+      name: "Aliases:",
+      value: `\`warnsclear\`, \`clearwarn\``",
+    })
+    .setDescription(`\`\`\`js\n .clearwarns <@usuario>>\n Ejemplo: .clearwarns @loge\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tienes el permiso `ModerateMembers`");
