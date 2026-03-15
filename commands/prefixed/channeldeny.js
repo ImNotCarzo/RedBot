@@ -5,9 +5,9 @@ const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channeldeny",
+    name: "deny",
     description: "Quita el acceso a un usuario en un canal",
-    aliases: ["chdeny", "deny"],
+    aliases: ["chdeny", "channeldeny"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -20,7 +20,20 @@ const data = {
       const member  = ctx.message?.mentions?.members?.first();
       const channel = ctx.message?.mentions?.channels?.first() ?? ctx.channel;
 
-      if (!member) return ctx.send("Uso: `.channeldeny @usuario [#canal]`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Deny" })
+    .setFields({
+      name: "Usos:",
+      value: "Quita el acceso a un usuario en un canal",
+    }, {
+      name: "Aliases:",
+      value: `\`chdeny\`, \`channeldeny\``",
+    })
+    .setDescription(`\`\`\`js\n .deny <@usuario /canalOpcional/>\n Ejemplo: .deny @loge #uxiono\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
