@@ -36,7 +36,7 @@ const data = {
       value: "Muestra las advertncias de un usuario",
     }, {
       name: "Aliases:",
-      value: `\`warns\`, \`modwarnings\``",
+      value: `\`warns\`, \`modwarnings\``,
     })
     .setDescription(`\`\`\`js\n .warnings <@usuario>>\n Ejemplo: .warnings @loge\`\`\``);
 
