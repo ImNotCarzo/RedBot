@@ -45,7 +45,7 @@ const data = {
       value: "Hazle una pregunta a la IA",
     }, {
       name: "Aliases:",
-      value: `\`ia\`, \`ai\``",
+      value: `\`ia\`, \`ai\``,
     })
     .setDescription(`\`\`\`js\n .ask <pregunta>>\n Ejemplo: .ask ¿cómo abrir una puerta?\`\`\``);
 
