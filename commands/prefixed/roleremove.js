@@ -18,7 +18,20 @@ const data = {
       const member = ctx.message?.mentions?.members?.first();
       const role = ctx.message?.mentions?.roles?.first();
 
-      if (!member || !role) return ctx.send("Uso: `.roleremove @usuario @rol`");
+      if (!member || !role) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Roleremove" })
+    .setFields({
+      name: "Usos:",
+      value: "Quita un rol a un usuario",
+    }, {
+      name: "Aliases:",
+      value: `\`removerole\`, \`rremove\``",
+    })
+    .setDescription(`\`\`\`js\n .roleremove <@usuario> <@rol>>\n Ejemplo: .roleremove @loge @gokiano\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
         return ctx.send("No tienes el permiso `ManageRoles` para usar esto");
