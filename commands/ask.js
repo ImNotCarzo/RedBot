@@ -37,7 +37,20 @@ const data = {
       const pregunta = ctx.interaction
         ? ctx.get("pregunta")
         : ctx.args?.join(" ").trim();
-      if (!pregunta) return ctx.send("Necesito una pregunta");
+      if (!pregunta) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Ask" })
+    .setFields({
+      name: "Usos:",
+      value: "Hazle una pregunta a la IA",
+    }, {
+      name: "Aliases:",
+      value: `\`ia\`, \`ai\``",
+    })
+    .setDescription(`\`\`\`js\n .ask <pregunta>>\n Ejemplo: .ask ¿cómo abrir una puerta?\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const userId = ctx.user?.id ?? ctx.author?.id;
       const username = ctx.user?.username ?? ctx.author?.username;
