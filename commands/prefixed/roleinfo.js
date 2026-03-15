@@ -60,7 +60,7 @@ const data = {
       value: "Muestra información de un rol",
     }, {
       name: "Aliases:",
-      value: `\`roleinfo\`, \`inforole\``",
+      value: `\`roleinfo\`, \`inforole\``,
     })
     .setDescription(`\`\`\`js\n .roleinfo <@rol>>\n Ejemplo: .roleinfo @gokiano\`\`\``);
 
