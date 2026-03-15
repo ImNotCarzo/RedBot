@@ -42,7 +42,7 @@ const data = {
       value: "Renombra un rol",
     }, {
       name: "Aliases:",
-      value: `\`renamerole\`, \`rrename\``",
+      value: `\`renamerole\`, \`rrename\``,
     })
     .setDescription(`\`\`\`js\n .rolerename <@rol> <nuevoNombre>>\n Ejemplo: .rolerename @gokiano potatiano\`\`\``);
 
