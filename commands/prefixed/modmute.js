@@ -7,7 +7,7 @@ const { parseDuration, formatDuration, resolveMember } = require("../../utils/he
 const data = {
   data: new CommandBuilder({
     name: "mute",
-    description: "Silencia a un usuario (timeout)",
+    description: "Silencia a un usuario",
     aliases: ["modmute", "timeout", "silenciar"],
     as_prefix: true,
     as_slash: false,
@@ -20,7 +20,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.mute @usuario <duración> [razón]` (ej: 10m, 1h, 2d)");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Mute" })
+    .setFields({
+      name: "Usos:",
+      value: "Silencia a un usuario del servidor",
+    }, {
+      name: "Aliases:",
+      value: `\`modmute\`, \`timeout\`, \`silenciar\``",
+    })
+    .setDescription(`\`\`\`js\n .mute <@usuario> <tiempo> /razonOpcional/>\n Ejemplo: .mute @loge 30m shhh\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const durationStr = ctx.args?.[1] || null;
       if (!durationStr) return ctx.send("Proporciona una duración (ej: 10m, 1h, 2d)");
