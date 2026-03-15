@@ -26,9 +26,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Tempban", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.tempban <@usuario> <tiempo> /razonOpcional/\nEjemplo: .tempban 10d @loge chau\`\`\`` +
-            `\n\n**Usos:**\nBanea a un usuario temporalmente` +
-            `\n\n**Aliases:**\nmodtempban, tban`
+            `**Usos:**\nBanea a un usuario temporalmente` +
+            `\n\n**Aliases:**\n\`modtempban\`, \`tban\`` +
+            `\n\n\`\`\`js\n.tempban <@usuario> <tiempo> /razonOpcional/\nEjemplo: .tempban @loge 10d chau\`\`\``
           )
           .setColor(RED);
 

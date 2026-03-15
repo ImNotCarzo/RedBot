@@ -24,9 +24,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Color", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.color <@rol>\nEjemplo: .color @gokiano\`\`\`` +
-            `\n\n**Usos:**\nMuestra el color de un rol` +
-            `\n\n**Aliases:**\ncolorrole, rolecolor`
+            `**Usos:**\nMuestra el color de un rol` +
+            `\n\n**Aliases:**\n\`colorrole\`, \`rolecolor\`` +
+            `\n\n\`\`\`js\n.color <@rol>\nEjemplo: .color @gokiano\`\`\``
           )
           .setColor(RED);
 

@@ -26,9 +26,9 @@ const data = {
       const paramerror = new EmbedBuilder()
         .setAuthor({ name: "Comando Critica", iconURL: bot.displayAvatarURL() })
         .setDescription(
-          `\`\`\`js\n.critica <tema>\nEjemplo: .critica la chochoinflación\`\`\`` +
-          `\n\n**Usos:**\nGenera una crítica despiadada de algo` +
-          `\n\n**Aliases:**\ncriticar, criticize`
+          `**Usos:**\nGenera una crítica despiadada de algo` +
+          `\n\n**Aliases:**\n\`criticar\`, \`criticize\`` +
+          `\n\n\`\`\`js\n.critica <tema>\nEjemplo: .critica la chochoinflación\`\`\``
         )
         .setColor(RED);
 

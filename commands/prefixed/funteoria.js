@@ -26,9 +26,9 @@ const data = {
       const paramerror = new EmbedBuilder()
         .setAuthor({ name: "Comando Teoria", iconURL: bot.displayAvatarURL() })
         .setDescription(
-          `\`\`\`js\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\`` +
-          `\n\n**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
-          `\n\n**Aliases:**\nconspira, conspiracion, theory`
+          `**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
+          `\n\n**Aliases:**\n\`conspira\`, \`conspiracion\`, \`theory\`` +
+          `\n\n\`\`\`js\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\``
         )
         .setColor(RED);
 

@@ -26,9 +26,9 @@ const data = {
       const paramerror = new EmbedBuilder()
         .setAuthor({ name: "Comando Opinion", iconURL: bot.displayAvatarURL() })
         .setDescription(
-          `\`\`\`js\n.opinion <tema>\nEjemplo: .opinion la chochoinflación\`\`\`` +
-          `\n\n**Usos:**\nPide mi opinión sin filtro sobre algo` +
-          `\n\n**Aliases:**\nop, opina`
+          `**Usos:**\nPide mi opinión sin filtro sobre algo` +
+          `\n\n**Aliases:**\n\`op\`, \`opina\`` +
+          `\n\n\`\`\`js\n.opinion <tema>\nEjemplo: .opinion la chochoinflación\`\`\``
         )
         .setColor(RED);
 

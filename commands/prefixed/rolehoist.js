@@ -39,9 +39,9 @@ const data = {
         const paramerror = new EmbedBuilder()
           .setAuthor({ name: "Comando Rolehoist", iconURL: bot.displayAvatarURL() })
           .setDescription(
-            `\`\`\`js\n.rolehoist <@rol>\nEjemplo: .rolehoist @gokiano\`\`\`` +
-            `\n\n**Usos:**\nActiva o desactiva si un rol se muestra separado en la lista de miembros` +
-            `\n\n**Aliases:**\nhoistrole, rhoist`
+            `**Usos:**\nActiva o desactiva si un rol se muestra separado en la lista de miembros` +
+            `\n\n**Aliases:**\n\`hoistrole\`, \`rhoist\`` +
+            `\n\n\`\`\`js\n.rolehoist <@rol>\nEjemplo: .rolehoist @gokiano\`\`\``
           )
           .setColor(RED);
 
