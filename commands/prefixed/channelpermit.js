@@ -30,7 +30,7 @@ const data = {
       name: "Aliases:",
       value: `\`chpermit\`, \`channelpermit\``",
     })
-    .setDescription(`\`\`\`js\n .permit <@usuario /canalOpcional/>\n Ejemplo: .permit @loge #uxiono\`\`\``);
+    .setDescription(`\`\`\`js\n .permit <@usuario> /canalOpcional/>\n Ejemplo: .permit @loge #uxiono\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
 }
