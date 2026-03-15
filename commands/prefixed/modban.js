@@ -20,7 +20,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.ban @usuario [razón]`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Ban" })
+    .setFields({
+      name: "Usos:",
+      value: "Banea a un usuario del servidor",
+    }, {
+      name: "Aliases:",
+      value: `\`modban\``",
+    })
+    .setDescription(`\`\`\`js\n .ban <@usuario> /razonOpcional/>\n Ejemplo: .ban @loge chau\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
 
