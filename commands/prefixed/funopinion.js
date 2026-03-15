@@ -29,7 +29,7 @@ const data = {
       value: "Pide mi opinión sin filtro sobre algo",
     }, {
       name: "Aliases:",
-      value: `\`op\`, \`opina\``",
+      value: `\`op\`, \`opina\``,
     })
     .setDescription(`\`\`\`js\n .opinion <tema>>\n Ejemplo: .opinion la chochoinflación\`\`\``);
 
