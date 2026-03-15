@@ -22,14 +22,14 @@ const data = {
       const member = await resolveMember(ctx, input);
       if (!member) {
   const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Softban" }),
+    .setAuthor({ name: "Comando Softban" })
     .setFields({
       name: "Usos:",
       value: "Expulsa a un usuario del servidor borrando sus mensajes",
     }, {
       name: "Aliases:",
       value: `\`modsoftban\`, \`sban\``,
-    }),
+    })
     .setDescription(`\`\`\`js\n .softban <@usuario> /razonOpcional/>\n Ejemplo: .softban @loge chau\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
