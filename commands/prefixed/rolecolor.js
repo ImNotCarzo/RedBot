@@ -26,7 +26,7 @@ const data = {
       value: "Muestra el color de un rol",
     }, {
       name: "Aliases:",
-      value: `\`colorrole\`, \`rolecolor\``",
+      value: `\`colorrole\`, \`rolecolor\``,
     })
     .setDescription(`\`\`\`js\n .color <@rol>>\n Ejemplo: .color @gokiano\`\`\``);
 
