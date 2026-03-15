@@ -5,9 +5,9 @@ const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channelhide",
+    name: "hide",
     description: "Oculta un canal a @everyone",
-    aliases: ["chhide", "hidechannel"],
+    aliases: ["chhide", "hidechannel", "channelhide"],
     as_prefix: true,
     as_slash: false,
   }),
