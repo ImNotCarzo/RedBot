@@ -28,7 +28,7 @@ const data = {
       value: "Banea a un usuario del servidor",
     }, {
       name: "Aliases:",
-      value: `\`modban\``",
+      value: `\`modban\``,
     })
     .setDescription(`\`\`\`js\n .ban <@usuario> /razonOpcional/>\n Ejemplo: .ban @loge chau\`\`\``);
 
