@@ -7,6 +7,7 @@ const data = {
   data: new CommandBuilder({
     name: "setprefix",
     description: "Cambia o muestra el prefix del bot en este servidor",
+    aliases: ["prefix"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -23,7 +24,7 @@ const data = {
         return ctx.send("Este comando solo funciona en servidores");
 
       if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-        return ctx.send("Necesitás el permiso `Administrator`");
+        return ctx.send("Necesitas el permiso `Administrator`");
 
       const nuevo = ctx.get("nuevo");
 
