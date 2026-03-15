@@ -5,9 +5,9 @@ const { GREEN } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channelpermit",
+    name: "permit",
     description: "Da acceso a un usuario en un canal",
-    aliases: ["chpermit", "permit"],
+    aliases: ["chpermit", "channelpermit"],
     as_prefix: true,
     as_slash: false,
   }),
