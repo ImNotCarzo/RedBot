@@ -272,11 +272,16 @@ const data = {
     }
 
     try {
-      const response = await fetch(
-  `https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto)}&langpair=auto|${idioma}`
+const detectRes = await fetch(
+  `https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto.slice(0, 50))}&langpair=en|es`
 );
+const detectData = await detectRes.json();
+const idiomaOrigen = detectData.matches?.[0]?.source ?? "en";
 
-const data = await response.json();
+const translateRes = await fetch(
+  `https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto)}&langpair=${idiomaOrigen}|${idioma}`
+);
+const data = await translateRes.json();
 
 if (data.responseStatus !== 200) {
   return ctx.send({
@@ -285,8 +290,7 @@ if (data.responseStatus !== 200) {
   });
 }
 
-const traduccion   = data.responseData.translatedText;
-const idiomaOrigen = data.matches?.[0]?.source ?? "auto";
+const traduccion = data.responseData.translatedText;
 
       const embed = new EmbedBuilder()
         .setTitle("Traducción")
