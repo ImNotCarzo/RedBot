@@ -21,7 +21,20 @@ const data = {
 
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
-      if (!member) return ctx.send("Uso: `.warn @usuario <razón>`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Warn" })
+    .setFields({
+      name: "Usos:",
+      value: "Advierte a un usuario",
+    }, {
+      name: "Aliases:",
+      value: `\`modwarn\`, \`advertir\``",
+    })
+    .setDescription(`\`\`\`js\n .warn <@usuario> <razón>>\n Ejemplo: .warn @loge lol\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const reason = ctx.args?.slice(1).join(" ").trim();
       if (!reason) return ctx.send("Proporciona una razón para la advertencia");
