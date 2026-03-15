@@ -294,7 +294,7 @@ const traduccion = data.responseData.translatedText;
 
       const embed = new EmbedBuilder()
         .setTitle("Traducción")
-        .setColor(BLUE)
+        .setColor(RED)
         .addFields(
           { name: "Original",    value: texto.slice(0, 1024),      inline: false },
           { name: "Traducción",  value: traduccion.slice(0, 1024), inline: false },
