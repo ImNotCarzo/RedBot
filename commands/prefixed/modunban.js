@@ -21,14 +21,14 @@ const data = {
       if (!userId || !/^\d{17,20}$/.test(userId))
         {
   const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Unban" })
+    .setAuthor({ name: "Comando Unban" }),
     .setFields({
       name: "Usos:",
       value: "Desbanea a un usuario por su ID",
     }, {
       name: "Aliases:",
-      value: `\`modunban\`, \`desbanear\``",
-    })
+      value: `\`modunban\`, \`desbanear\``,
+    }),
     .setDescription(`\`\`\`js\n .unban <@usuario> /razonOpcional/>\n Ejemplo: .unban 1020772849906098186 hola\`\`\``);
 
   return ctx.send({ embeds: [paramerror] });
