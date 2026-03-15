@@ -222,40 +222,81 @@ const data = {
 
   // ── ASKRESET ──────────────────────────────────
   .addCommand({
-    data: new CommandBuilder({
-      name: "askreset",
-      description: "Limpia tu historial de conversación con la IA",
-      aliases: ["reset"],
-    }),
-    params: new ParamsBuilder(),
-
-    async code(ctx) {
-      const userId = ctx.user?.id ?? ctx.author?.id;
-      deleteConversacion(userId);
-      await ctx.send({ content: "Historial borrado" });
-    },
-  })
-  
-  // ── TRANSLATE ──────────────────────────────────,
-.addCommand({
   data: new CommandBuilder({
     name: "translate",
-    description: "Traduce texto",
+    description: "Traduce texto a otro idioma",
     aliases: ["traducir", "trans"],
   }),
   params: new ParamsBuilder()
-  .addString({
-    name: "Texto",
-    description: "El texto a traducir",
-    required: true,
-  }),
     .addString({
-    name: "To",
-    description: "Selecciona una opción",
-    required: false,
-  }),
-            async code(ctx){
-            if(!texto) 
+      name: "texto",
+      description: "Texto a traducir",
+      required: true,
+    })
+    .addString({
+      name: "idioma",
+      description: "Idioma destino (ej: es, en, fr, de) — por defecto español",
+      required: false,
+    }),
+
+  async code(ctx) {
+    const texto  = ctx.get("texto");
+    const idioma = ctx.get("idioma") ?? "es";
+
+    if (!texto) {
+      const paramerror = new EmbedBuilder()
+        .setAuthor({ name: "Comando Translate", iconURL: ctx.bot.user.displayAvatarURL() })
+        .setDescription(
+          `**Usos:**\nTraduce un texto a cualquier idioma` +
+          `\n\n**Aliases:**\n\`traducir\`, \`trans\`` +
+          `\n\`\`\`js\n.translate <texto> [idioma]\nEjemplo: .translate כלב es\`\`\``
+        )
+        .setColor(RED);
+      return ctx.send({ embeds: [paramerror] });
+    }
+
+    try {
+      const response = await fetch("https://libretranslate.com/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          q:      texto,
+          source: "auto",
+          target: idioma,
+        }),
+      });
+
+      const data = await response.json();
+
+      // LibreTranslate devuelve error en este campo si algo falla
+      if (data.error) {
+        return ctx.send({
+          content: `No se pudo traducir: \`${data.error}\``,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      const traduccion    = data.translatedText;
+      const idiomaOrigen  = data.detectedLanguage?.language ?? "auto";
+
+      const embed = new EmbedBuilder()
+        .setTitle("Traducción")
+        .setColor(BLUE)
+        .addFields(
+          { name: "Original",    value: texto.slice(0, 1024),      inline: false },
+          { name: "Traducción",  value: traduccion.slice(0, 1024), inline: false },
+        )
+        .setFooter({ text: `${idiomaOrigen} → ${idioma}` })
+        .setTimestamp();
+
+      await ctx.send({ embeds: [embed] });
+
+    } catch (err) {
+      console.error("[util translate]", err);
+      await ctx.send({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
+    }
+  },
+})
 };
 
 module.exports = { data };
