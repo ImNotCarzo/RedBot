@@ -29,7 +29,7 @@ const data = {
       value: "Advierte a un usuario",
     }, {
       name: "Aliases:",
-      value: `\`modwarn\`, \`advertir\``",
+      value: `\`modwarn\`, \`advertir\``,
     })
     .setDescription(`\`\`\`js\n .warn <@usuario> <razón>>\n Ejemplo: .warn @loge lol\`\`\``);
 
