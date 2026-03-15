@@ -25,7 +25,20 @@ const data = {
       const role = ctx.message?.mentions?.roles?.first() ||
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
-      if (!role) return ctx.send("Mencioná o especificá un rol");
+      if (!role) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Roleusers" })
+    .setFields({
+      name: "Usos:",
+      value: "Lista de usuarios con un rol",
+    }, {
+      name: "Aliases:",
+      value: `\`rusers\`, \`usersrole\``",
+    })
+    .setDescription(`\`\`\`js\n .roleusers <@rol>>\n Ejemplo: .roleusers @gokiano\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const members = role.members.map(m => m.toString());
       if (!members.length) return ctx.send("Nadie tiene este rol");
