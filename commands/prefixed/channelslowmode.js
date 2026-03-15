@@ -48,7 +48,7 @@ const data = {
       value: "Establece un slowmode para el canal",
     }, {
       name: "Aliases:",
-      value: `\`sm\`, \`chslowmode\`, \`channelslowmode\``",
+      value: `\`sm\`, \`chslowmode\`, \`channelslowmode\``,
     })
     .setDescription(`\`\`\`js\n .slowmode <tiempo> /canalOpcional/>\n Ejemplo: .slowmode 1h #uxiono\`\`\``);
 
