@@ -35,19 +35,18 @@ const data = {
 
       const role = resolveRole(ctx);
       if (!role) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Rolerename" })
-    .setFields({
-      name: "Usos:",
-      value: "Renombra un rol",
-    }, {
-      name: "Aliases:",
-      value: `\`renamerole\`, \`rrename\``,
-    })
-    .setDescription(`\`\`\`js\n .rolerename <@rol> <nuevoNombre>>\n Ejemplo: .rolerename @gokiano potatiano\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Rolerename", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.rolerename <@rol> <nuevoNombre>\nEjemplo: .rolerename @gokiano potatiano\`\`\`` +
+            `\n\n**Usos:**\nRenombra un rol` +
+            `\n\n**Aliases:**\nrenamerole, rrename`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       // El nuevo nombre es todo lo que sigue después del rol (o ID)
       const mentionUsed = ctx.message?.mentions?.roles?.size > 0;

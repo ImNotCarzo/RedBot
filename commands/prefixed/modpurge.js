@@ -21,19 +21,18 @@ const data = {
       const amount = Math.min(100, Math.max(1, parseInt(amountRaw) || 0));
 
       if (!amount) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando purge" })
-    .setFields({
-      name: "Usos:",
-      value: "Elimina mensajes de un canal",
-    }, {
-      name: "Aliases:",
-      value: `\`modpurge\`, \`clear\`, \`prune\``,
-    })
-    .setDescription(`\`\`\`js\n .purge <cantidad> /usuarioOpcional/>\n Ejemplo: .purge 10 @loge\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Purge", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.purge <cantidad> /usuarioOpcional/\nEjemplo: .purge 10 @loge\`\`\`` +
+            `\n\n**Usos:**\nElimina mensajes de un canal` +
+            `\n\n**Aliases:**\nmodpurge, clear, prune`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const target = ctx.message?.mentions?.members?.first() ?? null;
       const modTag = ctx.author?.tag ?? ctx.author?.username;

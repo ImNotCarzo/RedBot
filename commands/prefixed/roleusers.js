@@ -7,6 +7,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -26,19 +27,18 @@ const data = {
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
       if (!role) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Roleusers" })
-    .setFields({
-      name: "Usos:",
-      value: "Lista de usuarios con un rol",
-    }, {
-      name: "Aliases:",
-      value: `\`rusers\`, \`usersrole\``,
-    })
-    .setDescription(`\`\`\`js\n .roleusers <@rol>>\n Ejemplo: .roleusers @gokiano\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Roleusers", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.roleusers <@rol>\nEjemplo: .roleusers @gokiano\`\`\`` +
+            `\n\n**Usos:**\nLista de usuarios con un rol` +
+            `\n\n**Aliases:**\nrusers, usersrole`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const members = role.members.map(m => m.toString());
       if (!members.length) return ctx.send("Nadie tiene este rol");

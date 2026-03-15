@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -19,19 +20,18 @@ const data = {
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
       if (!role) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Color" })
-    .setFields({
-      name: "Usos:",
-      value: "Muestra el color de un rol",
-    }, {
-      name: "Aliases:",
-      value: `\`colorrole\`, \`rolecolor\``,
-    })
-    .setDescription(`\`\`\`js\n .color <@rol>>\n Ejemplo: .color @gokiano\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Color", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.color <@rol>\nEjemplo: .color @gokiano\`\`\`` +
+            `\n\n**Usos:**\nMuestra el color de un rol` +
+            `\n\n**Aliases:**\ncolorrole, rolecolor`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
       if (!role.color) return ctx.send("Este rol no tiene color asignado");
 
       const hex = `#${role.color.toString(16).padStart(6, "0")}`;

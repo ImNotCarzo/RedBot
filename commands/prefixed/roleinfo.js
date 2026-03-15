@@ -7,6 +7,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const buildRoleEmbed = (role) => {
   const perms = role.permissions.toArray().map(p => `\`${p}\``);
@@ -53,19 +54,18 @@ const data = {
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
       if (!input) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Roleinfo" })
-    .setFields({
-      name: "Usos:",
-      value: "Muestra información de un rol",
-    }, {
-      name: "Aliases:",
-      value: `\`roleinfo\`, \`inforole\``,
-    })
-    .setDescription(`\`\`\`js\n .roleinfo <@rol>>\n Ejemplo: .roleinfo @gokiano\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Roleinfo", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.roleinfo <@rol>\nEjemplo: .roleinfo @gokiano\`\`\`` +
+            `\n\n**Usos:**\nMuestra información de un rol` +
+            `\n\n**Aliases:**\nroleinfo, inforole`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
       const selectRoles = guild.roles.cache
         .filter(r => r.id !== guild.id)
         .sort((a, b) => b.position - a.position)

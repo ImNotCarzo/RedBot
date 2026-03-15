@@ -21,19 +21,18 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Unmute" })
-    .setFields({
-      name: "Usos:",
-      value: "Quita el mute a un usuario",
-    }, {
-      name: "Aliases:",
-      value: `\`modunmute\`, \`untimeout\``,
-    })
-    .setDescription(`\`\`\`js\n .unmute <@usuario> /razonOpcional/>\n Ejemplo: .unmute @loge hola\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Unmute", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.unmute <@usuario> /razonOpcional/\nEjemplo: .unmute @loge hola\`\`\`` +
+            `\n\n**Usos:**\nQuita el mute a un usuario` +
+            `\n\n**Aliases:**\nmodunmute, untimeout`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
 
       const reason = ctx.args?.slice(1).join(" ").trim() || "Sin razón";
       const modTag = ctx.author?.tag ?? ctx.author?.username;

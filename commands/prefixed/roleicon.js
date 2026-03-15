@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -19,19 +20,18 @@ const data = {
         (ctx.args?.[0] ? guild.roles.cache.get(ctx.args[0]) || guild.roles.cache.find(r => r.name.toLowerCase().includes(ctx.args.join(" ").toLowerCase())) : null);
 
       if (!role) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Roleicon" })
-    .setFields({
-      name: "Usos:",
-      value: "Muestra el icono de un rol",
-    }, {
-      name: "Aliases:",
-      value: `\`iconrole\`, \`ricon\``,
-    })
-    .setDescription(`\`\`\`js\n .roleicon <@rol>>\n Ejemplo: .roleicon @gokiano\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Roleicon", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.roleicon <@rol>\nEjemplo: .roleicon @gokiano\`\`\`` +
+            `\n\n**Usos:**\nMuestra el icono de un rol` +
+            `\n\n**Aliases:**\niconrole, ricon`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
       if (!role.icon) return ctx.send("Este rol no tiene icono");
 
       const url = role.iconURL({ size: 4096, extension: "png" });

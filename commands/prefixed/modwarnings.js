@@ -29,19 +29,18 @@ const data = {
       const input = ctx.args?.[0] || null;
       const member = await resolveMember(ctx, input);
       if (!member) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Warnings" })
-    .setFields({
-      name: "Usos:",
-      value: "Muestra las advertncias de un usuario",
-    }, {
-      name: "Aliases:",
-      value: `\`warns\`, \`modwarnings\``,
-    })
-    .setDescription(`\`\`\`js\n .warnings <@usuario>>\n Ejemplo: .warnings @loge\`\`\``);
+        const bot = ctx.bot.user;
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Warnings", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `\`\`\`js\n.warnings <@usuario>\nEjemplo: .warnings @loge\`\`\`` +
+            `\n\n**Usos:**\nMuestra las advertencias de un usuario` +
+            `\n\n**Aliases:**\nwarns, modwarnings`
+          )
+          .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+        return ctx.send({ embeds: [paramerror] });
+      }
       if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
         return ctx.send("No tienes el permiso `ModerateMembers`");
 

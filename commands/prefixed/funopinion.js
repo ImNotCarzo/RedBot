@@ -2,7 +2,7 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback } = require("../../utils/ai");
 
-const COLOR = "#ff383d";
+const { RED } = require("../../utils/colors");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -22,19 +22,18 @@ const data = {
     const tema = ctx.args?.join(" ").trim();
 
     if (!tema) {
-  const paramerror = new EmbedBuilder()
-    .setAuthor({ name: "Comando Opinion" })
-    .setFields({
-      name: "Usos:",
-      value: "Pide mi opinión sin filtro sobre algo",
-    }, {
-      name: "Aliases:",
-      value: `\`op\`, \`opina\``,
-    })
-    .setDescription(`\`\`\`js\n .opinion <tema>>\n Ejemplo: .opinion la chochoinflación\`\`\``);
+      const bot = ctx.bot.user;
+      const paramerror = new EmbedBuilder()
+        .setAuthor({ name: "Comando Opinion", iconURL: bot.displayAvatarURL() })
+        .setDescription(
+          `\`\`\`js\n.opinion <tema>\nEjemplo: .opinion la chochoinflación\`\`\`` +
+          `\n\n**Usos:**\nPide mi opinión sin filtro sobre algo` +
+          `\n\n**Aliases:**\nop, opina`
+        )
+        .setColor(RED);
 
-  return ctx.send({ embeds: [paramerror] });
-}
+      return ctx.send({ embeds: [paramerror] });
+    }
 
     try {
       const response = await generateWithFallback({
@@ -52,7 +51,7 @@ const data = {
           new EmbedBuilder()
             .setTitle(`Mi opinión sobre: ${tema}`)
             .setDescription(texto)
-            .setColor(COLOR)
+            .setColor(RED)
             .setTimestamp(),
         ],
       });
