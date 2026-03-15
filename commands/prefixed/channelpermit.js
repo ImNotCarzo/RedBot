@@ -20,7 +20,20 @@ const data = {
       const member  = ctx.message?.mentions?.members?.first();
       const channel = ctx.message?.mentions?.channels?.first() ?? ctx.channel;
 
-      if (!member) return ctx.send("Uso: `.channelpermit @usuario [#canal]`");
+      if (!member) {
+  const paramerror = new EmbedBuilder()
+    .setAuthor({ name: "Comando Permit" })
+    .setFields({
+      name: "Usos:",
+      value: "Da acceso a un usuario en un canal",
+    }, {
+      name: "Aliases:",
+      value: `\`chpermit\`, \`channelpermit\``",
+    })
+    .setDescription(`\`\`\`js\n .permit <@usuario /canalOpcional/>\n Ejemplo: .permit @loge #uxiono\`\`\``);
+
+  return ctx.send({ embeds: [paramerror] });
+}
 
       const modTag = ctx.author?.tag ?? ctx.author?.username;
 
