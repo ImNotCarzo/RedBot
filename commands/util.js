@@ -386,85 +386,77 @@ const data = {
     },
   })
 
-  // ── TRANSCRIBE ────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "transcribe",
-      description: "Transcribe un audio o video a texto",
+// ── TRANSCRIBE ────────────────────────────────
+.addCommand({
+  data: new CommandBuilder({
+    name: "transcribe",
+    description: "Transcribe un audio o video a texto",
+  }),
+  params: new ParamsBuilder()
+    .addAttachment({
+      name: "archivo",
+      description: "Audio a transcribir (mp3, wav, ogg, webm, mp4 — máx 25MB)",
+      required: true,
     }),
-    params: new ParamsBuilder()
-      .addAttachment({
-        name: "archivo",
-        description: "Audio o video a transcribir (mp3, mp4, wav, ogg, webm — máx 8MB)",
-        required: true,
-      }),
 
-    async code(ctx) {
-      const reply      = await prepare(ctx);
-      const attachment = ctx.get("archivo");
+  async code(ctx) {
+    const reply      = await prepare(ctx);
+    const attachment = ctx.get("archivo");
 
-      const validTypes = [
-        "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg",
-        "audio/webm", "video/mp4", "video/webm", "audio/ogg; codecs=opus",
-      ];
+    const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac)$/i;
 
-      const isValid = validTypes.some(t => attachment.contentType?.startsWith(t.split(";")[0]));
-      if (!isValid) {
-        return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4", flags: MessageFlags.Ephemeral });
-      }
+    if (!VALID_EXT.test(attachment.name ?? "")) {
+      return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac", flags: MessageFlags.Ephemeral });
+    }
 
-      if (attachment.size > 8 * 1024 * 1024) {
-        return reply({ content: "El archivo no puede superar los 8MB", flags: MessageFlags.Ephemeral });
-      }
+    if (attachment.size > 25 * 1024 * 1024) {
+      return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
+    }
 
-      try {
-        const base64 = await attachmentToBase64(attachment.url);
-        const format = attachment.contentType?.split("/")[1]?.split(";")[0] ?? "mp3";
+    try {
+      const { default: Groq } = require("groq-sdk");
+      const groq = new Groq({ apiKey: process.env.GROQ });
 
-        const texto = await generateHealer([{
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Transcribe exactamente lo que se dice en este audio. Si hay múltiples hablantes, indícalo. Responde solo con la transcripción, sin comentarios adicionales.",
-            },
-            {
-              type: "input_audio",
-              input_audio: { data: base64, format },
-            },
-          ],
-        }]);
+      // Descargar el archivo y pasarlo como stream a Groq
+      const fileRes  = await fetch(attachment.url);
+      const blob     = await fileRes.blob();
+      const file     = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
 
-        if (!texto) {
-          return reply({ content: "No se pudo transcribir el audio", flags: MessageFlags.Ephemeral });
-        }
+      const result = await groq.audio.transcriptions.create({
+        file,
+        model: "whisper-large-v3",
+        response_format: "text",
+      });
 
-        if (texto.length > 3900) {
-          const buffer = Buffer.from(texto, "utf-8");
-          return reply({
-            content: "La transcripción es muy larga, se envió como archivo:",
-            files: [{ attachment: buffer, name: "transcripcion.txt" }],
-          });
-        }
+      const texto = result?.trim();
+      if (!texto) return reply({ content: "No se detectó voz en el archivo", flags: MessageFlags.Ephemeral });
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Transcripción")
-              .setDescription(texto)
-              .setColor(RED)
-              .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
-              .setTimestamp(),
-          ],
+      // Si es muy largo, enviar como archivo
+      if (texto.length > 3900) {
+        return reply({
+          content: "La transcripción es muy larga, se envió como archivo:",
+          files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
         });
-      } catch (err) {
-        console.error("[util transcribe]", err);
-        await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
       }
-    },
-  })
 
-  // ── RESUMIR ───────────────────────────────────
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("Transcripción")
+            .setDescription(texto)
+            .setColor("#5865f2")
+            .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      console.error("[util transcribe]", err);
+      await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
+    }
+  },
+})
+
+  // ── RESUME ───────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
       name: "resume",
