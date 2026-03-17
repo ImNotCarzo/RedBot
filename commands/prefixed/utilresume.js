@@ -37,10 +37,10 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
-            .setAuthor({ name: "Comando Resumir", iconURL: ctx.bot.user.displayAvatarURL() })
+            .setAuthor({ name: "Comando Resume", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
               `**Usos:**\nResume un texto de 100 caracteres o más` +
-              `\n\n**Aliases:**\n\`resume\`, \`summarize\`` +
+              `\n\n**Aliases:**\n\`resumir\`, \`summarize\`` +
               `\n\n\`\`\`js\n.resumir <texto>\nEjemplo: .resumir en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\``
             )
             .setColor(RED),
