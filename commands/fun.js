@@ -283,11 +283,10 @@ const data = {
 Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
 Reglas estrictas:
 - RESPONDE ÚNICAMENTE EN ESPAÑOL. Ninguna palabra en otro idioma.
-- Mínimo 4 párrafos, máximo 5. No seas corto.
+- Mínimo 3 párrafos, máximo 4. No seas corto.
 - Sarcasmo, humor negro e ingenio. Sin amenazas reales.
-- Analiza la foto de perfil en detalle — describe qué ves y úsalo para burlarte.
+- Analiza la foto de perfil en detalle, describe qué ves y úsalo para burlarte.
 - Usa los datos del perfil para ataques específicos, no genéricos.
-- Conecta la foto con los datos del perfil para que el roast tenga coherencia.
 - Nada de frases genéricas como "eres el típico usuario que...".
 - El roast debe sentirse personalizado, no una plantilla.
 
