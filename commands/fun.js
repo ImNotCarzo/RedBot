@@ -217,111 +217,115 @@ const data = {
   })
 
   // ── ROAST ─────────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "roast",
-      description: "Critica despiadadamente a un usuario",
+.addCommand({
+  data: new CommandBuilder({
+    name: "roast",
+    description: "Critica despiadadamente a un usuario",
+  }),
+  params: new ParamsBuilder()
+    .addMember({
+      name: "usuario",
+      description: "Menciona a alguien",
+      required: false,
     }),
-    params: new ParamsBuilder()
-      .addMember({
-        name: "usuario",
-        description: "Menciona a alguien",
-        required: false,
-      }),
 
-    async code(ctx) {
-      if (!ctx.guild) {
-        return ctx.send({
-          content: "Este comando solo funciona en servidores",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+  async code(ctx) {
+    if (!ctx.guild) {
+      return ctx.send({
+        content: "Este comando solo funciona en servidores",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
 
-      const reply = await prepare(ctx);
+    const reply = await prepare(ctx);
 
-      try {
-        const target = ctx.get("usuario") ?? ctx.member;
+    try {
+      const target   = ctx.get("usuario") ?? ctx.member;
+      if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
 
-        if (!target) {
-          return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
-        }
+      const user     = target.user;
+      const username = user.globalName ?? user.username;
+      const usertag  = user.username;
+      const created  = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
+      const joined   = target.joinedTimestamp
+        ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>`
+        : "desconocido";
 
-        const user     = target.user;
-        const username = user.globalName ?? user.username;
-        const usertag  = user.username;
-        const id       = user.id;
-        const created  = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
-        const joined   = target.joinedTimestamp
-          ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>`
-          : "desconocido";
+      const activity = target.presence?.activities?.[0]?.name ?? null;
+      const status   = target.presence?.status ?? "offline";
 
-        // Presence — requiere GuildPresences intent en index.js
-        const activity = target.presence?.activities?.[0]?.name ?? null;
-        const status   = target.presence?.status ?? "offline";
+      const roles = target.roles?.cache
+        ?.filter(r => r.id !== ctx.guild.id)
+        ?.map(r => r.name)
+        ?.slice(0, 8)
+        ?.join(", ") || "ninguno";
 
-        // Roles (sin @everyone, máx 8)
-        const roles = target.roles?.cache
-          ?.filter(r => r.id !== ctx.guild.id)
-          ?.map(r => r.name)
-          ?.slice(0, 8)
-          ?.join(", ") || "ninguno";
+      const PERMS_RELEVANTES = [
+        "Administrator", "ManageGuild", "ManageMessages",
+        "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
+      ];
+      const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
+      const badges = user.flags?.toArray()?.join(", ") || "ninguna";
 
-        // Solo permisos relevantes para el roast
-        const PERMS_RELEVANTES = [
-          "Administrator", "ManageGuild", "ManageMessages",
-          "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
-        ];
-        const perms = target.permissions?.toArray()
-          ?.filter(p => PERMS_RELEVANTES.includes(p))
-          ?.join(", ") || "ninguno";
+      const datosUsuario = [
+        `Nombre: ${username} (@${usertag})`,
+        `Cuenta creada: ${created}`,
+        `Entró al servidor: ${joined}`,
+        `Estado: ${status}`,
+        activity ? `Actividad: ${activity}` : null,
+        `Roles: ${roles}`,
+        `Permisos notables: ${perms}`,
+        `Insignias: ${badges}`,
+      ].filter(Boolean).join("\n");
 
-        const badges = user.flags?.toArray()?.join(", ") || "ninguna";
-
-        const datosUsuario = [
-          `Nombre: ${username} (@${usertag})`,
-          `Cuenta creada: ${created}`,
-          `Entró al servidor: ${joined}`,
-          `Estado: ${status}`,
-          activity ? `Actividad: ${activity}` : null,
-          `Roles: ${roles}`,
-          `Permisos notables: ${perms}`,
-          `Insignias: ${badges}`,
-        ].filter(Boolean).join("\n");
-
-        const prompt = `${PERSONA}
-
+      const prompt = `${PERSONA}
 Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
 Sarcasmo, humor negro e ingenio. Sin amenazas reales. Sin ser genérico.
-Usa los datos para burlarte de cosas específicas. Máximo 3 párrafos.
-
+Usa los datos Y la foto de perfil para burlarte de cosas específicas. Máximo 3 párrafos.
 ${datosUsuario}`;
 
-        const response = await generateWithFallback({
-          model: "gemini-3.1-flash-lite-preview",
-          contents: [{
+      // Avatar en PNG para que Healer pueda verlo
+      const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openrouter/healer-alpha",
+          messages: [{
             role: "user",
-            parts: [{ text: prompt }],
+            content: [
+              { type: "text",      text: prompt },
+              { type: "image_url", image_url: { url: avatarUrl } },
+            ],
           }],
-        });
+        }),
+      });
 
-        const texto = response.text?.trim().slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
+      const data  = await res.json();
+      const texto = data.choices?.[0]?.message?.content?.trim().slice(0, 4000)
+        ?? "Ocurrió un error con la IA, intenta de nuevo";
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(`Roast de ${username}`)
-              .setThumbnail(user.displayAvatarURL({ size: 256 }))
-              .setDescription(texto)
-              .setColor(COLOR)
-              .setTimestamp(),
-          ],
-        });
-      } catch (err) {
-        console.error("[fun roast]", err);
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
-      }
-    },
-  }),
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(`Roast de ${username}`)
+            .setThumbnail(avatarUrl)
+            .setDescription(texto)
+            .setColor(COLOR)
+            .setTimestamp(),
+        ],
+      });
+
+    } catch (err) {
+      console.error("[fun roast]", err);
+      await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+    }
+  },
+}),
 };
 
 module.exports = { data };
