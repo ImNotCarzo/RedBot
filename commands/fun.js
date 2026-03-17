@@ -1,9 +1,8 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { generateWithFallback } = require("../utils/ai");
 
 // ─────────────────────────────────────────────
-//  HELPERS
+//  CONSTANTS
 // ─────────────────────────────────────────────
 
 const COLOR = "#ff383d";
@@ -11,12 +10,46 @@ const COLOR = "#ff383d";
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
 Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!".
-Respuestas concisas, con personalidad, directas al grano.`;
+Respuestas concisas, con personalidad, directas al grano.
+RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-/**
- * Maneja el defer/reply de forma consistente para slash y prefix.
- * Retorna una función reply que edita o envía según el contexto.
- */
+// ─────────────────────────────────────────────
+//  HEALER
+// ─────────────────────────────────────────────
+
+async function generateHealer(prompt, imageUrl = null) {
+  const content = imageUrl
+    ? [
+        { type: "text",      text: prompt },
+        { type: "image_url", image_url: { url: imageUrl } },
+      ]
+    : prompt;
+
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "openrouter/healer-alpha",
+      messages: [{ role: "user", content }],
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || data.error) {
+    throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+  }
+
+  return data.choices?.[0]?.message?.content?.trim() ?? null;
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+
 async function prepare(ctx) {
   const isSlash = !!ctx.interaction;
   if (isSlash) {
@@ -54,18 +87,11 @@ const data = {
 
     async code(ctx) {
       const reply = await prepare(ctx);
-      const tema = ctx.get("tema");
+      const tema  = ctx.get("tema");
 
       try {
-        const response = await generateWithFallback({
-          model: "gemini-3.1-flash-lite-preview",
-          contents: [{
-            role: "user",
-            parts: [{ text: `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.` }],
-          }],
-        });
-
-        const texto = response.text?.trim().slice(0, 4000) ?? "No pude generar una opinión";
+        const prompt = `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`;
+        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una opinión";
 
         await reply({
           embeds: [
@@ -98,18 +124,11 @@ const data = {
 
     async code(ctx) {
       const reply = await prepare(ctx);
-      const tema = ctx.get("tema");
+      const tema  = ctx.get("tema");
 
       try {
-        const response = await generateWithFallback({
-          model: "gemini-3.1-flash-lite-preview",
-          contents: [{
-            role: "user",
-            parts: [{ text: `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.` }],
-          }],
-        });
-
-        const texto = response.text?.trim().slice(0, 4000) ?? "No pude generar una crítica";
+        const prompt = `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`;
+        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una crítica";
 
         await reply({
           embeds: [
@@ -141,19 +160,12 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepare(ctx);
+      const reply     = await prepare(ctx);
       const situacion = ctx.get("situacion") ?? "cualquier situación";
 
       try {
-        const response = await generateWithFallback({
-          model: "gemini-3.1-flash-lite-preview",
-          contents: [{
-            role: "user",
-            parts: [{ text: `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.` }],
-          }],
-        });
-
-        const texto = response.text?.trim().slice(0, 4000) ?? "No pude generar una excusa";
+        const prompt = `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.`;
+        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una excusa";
 
         await reply({
           embeds: [
@@ -186,18 +198,11 @@ const data = {
 
     async code(ctx) {
       const reply = await prepare(ctx);
-      const tema = ctx.get("tema");
+      const tema  = ctx.get("tema");
 
       try {
-        const response = await generateWithFallback({
-          model: "gemini-3.1-flash-lite-preview",
-          contents: [{
-            role: "user",
-            parts: [{ text: `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.` }],
-          }],
-        });
-
-        const texto = response.text?.trim().slice(0, 4000) ?? "No pude generar una teoría";
+        const prompt = `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`;
+        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una teoría";
 
         await reply({
           embeds: [
@@ -217,68 +222,68 @@ const data = {
   })
 
   // ── ROAST ─────────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
-    name: "roast",
-    description: "Critica despiadadamente a un usuario",
-  }),
-  params: new ParamsBuilder()
-    .addMember({
-      name: "usuario",
-      description: "Menciona a alguien",
-      required: false,
+  .addCommand({
+    data: new CommandBuilder({
+      name: "roast",
+      description: "Critica despiadadamente a un usuario",
     }),
+    params: new ParamsBuilder()
+      .addMember({
+        name: "usuario",
+        description: "Menciona a alguien",
+        required: false,
+      }),
 
-  async code(ctx) {
-    if (!ctx.guild) {
-      return ctx.send({
-        content: "Este comando solo funciona en servidores",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    async code(ctx) {
+      if (!ctx.guild) {
+        return ctx.send({
+          content: "Este comando solo funciona en servidores",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
 
-    const reply = await prepare(ctx);
+      const reply = await prepare(ctx);
 
-    try {
-      const target   = ctx.get("usuario") ?? ctx.member;
-      if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
+      try {
+        const target = ctx.get("usuario") ?? ctx.member;
+        if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
 
-      const user     = target.user;
-      const username = user.globalName ?? user.username;
-      const usertag  = user.username;
-      const created  = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
-      const joined   = target.joinedTimestamp
-        ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>`
-        : "desconocido";
+        const user     = target.user;
+        const username = user.globalName ?? user.username;
+        const usertag  = user.username;
+        const created  = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
+        const joined   = target.joinedTimestamp
+          ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>`
+          : "desconocido";
 
-      const activity = target.presence?.activities?.[0]?.name ?? null;
-      const status   = target.presence?.status ?? "offline";
+        const activity = target.presence?.activities?.[0]?.name ?? null;
+        const status   = target.presence?.status ?? "offline";
 
-      const roles = target.roles?.cache
-        ?.filter(r => r.id !== ctx.guild.id)
-        ?.map(r => r.name)
-        ?.slice(0, 8)
-        ?.join(", ") || "ninguno";
+        const roles = target.roles?.cache
+          ?.filter(r => r.id !== ctx.guild.id)
+          ?.map(r => r.name)
+          ?.slice(0, 8)
+          ?.join(", ") || "ninguno";
 
-      const PERMS_RELEVANTES = [
-        "Administrator", "ManageGuild", "ManageMessages",
-        "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
-      ];
-      const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
-      const badges = user.flags?.toArray()?.join(", ") || "ninguna";
+        const PERMS_RELEVANTES = [
+          "Administrator", "ManageGuild", "ManageMessages",
+          "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
+        ];
+        const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
+        const badges = user.flags?.toArray()?.join(", ") || "ninguna";
 
-      const datosUsuario = [
-        `Nombre: ${username} (@${usertag})`,
-        `Cuenta creada: ${created}`,
-        `Entró al servidor: ${joined}`,
-        `Estado: ${status}`,
-        activity ? `Actividad: ${activity}` : null,
-        `Roles: ${roles}`,
-        `Permisos notables: ${perms}`,
-        `Insignias: ${badges}`,
-      ].filter(Boolean).join("\n");
+        const datosUsuario = [
+          `Nombre: ${username} (@${usertag})`,
+          `Cuenta creada: ${created}`,
+          `Entró al servidor: ${joined}`,
+          `Estado: ${status}`,
+          activity ? `Actividad: ${activity}` : null,
+          `Roles: ${roles}`,
+          `Permisos notables: ${perms}`,
+          `Insignias: ${badges}`,
+        ].filter(Boolean).join("\n");
 
-      const prompt = `${PERSONA}
+        const prompt = `${PERSONA}
 
 Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
 Reglas estrictas:
@@ -293,48 +298,27 @@ Reglas estrictas:
 Datos del usuario:
 ${datosUsuario}`;
 
-      // Avatar en PNG para que Healer pueda verlo
-      const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+        const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+        const texto     = (await generateHealer(prompt, avatarUrl))?.slice(0, 4000)
+          ?? "Ocurrió un error con la IA, intenta de nuevo";
 
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "openrouter/healer-alpha",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text",      text: prompt },
-              { type: "image_url", image_url: { url: avatarUrl } },
-            ],
-          }],
-        }),
-      });
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(`Roast de ${username}`)
+              .setThumbnail(avatarUrl)
+              .setDescription(texto)
+              .setColor(COLOR)
+              .setTimestamp(),
+          ],
+        });
 
-      const data  = await res.json();
-      const texto = data.choices?.[0]?.message?.content?.trim().slice(0, 4000)
-        ?? "Ocurrió un error con la IA, intenta de nuevo";
-
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`Roast de ${username}`)
-            .setThumbnail(avatarUrl)
-            .setDescription(texto)
-            .setColor(COLOR)
-            .setTimestamp(),
-        ],
-      });
-
-    } catch (err) {
-      console.error("[fun roast]", err);
-      await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
-    }
-  },
-}),
+      } catch (err) {
+        console.error("[fun roast]", err);
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+      }
+    },
+  }),
 };
 
 module.exports = { data };
