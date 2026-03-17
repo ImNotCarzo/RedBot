@@ -417,7 +417,6 @@ const data = {
       const { default: Groq } = require("groq-sdk");
       const groq = new Groq({ apiKey: process.env.GROQ });
 
-      // Descargar el archivo y pasarlo como stream a Groq
       const fileRes  = await fetch(attachment.url);
       const blob     = await fileRes.blob();
       const file     = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
@@ -431,7 +430,6 @@ const data = {
       const texto = result?.trim();
       if (!texto) return reply({ content: "No se detectó voz en el archivo", flags: MessageFlags.Ephemeral });
 
-      // Si es muy largo, enviar como archivo
       if (texto.length > 3900) {
         return reply({
           content: "La transcripción es muy larga, se envió como archivo:",
@@ -444,7 +442,7 @@ const data = {
           new EmbedBuilder()
             .setTitle("Transcripción")
             .setDescription(texto)
-            .setColor("#5865f2")
+            .setColor(RED)
             .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
             .setTimestamp(),
         ],
