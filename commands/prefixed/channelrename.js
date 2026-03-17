@@ -34,7 +34,7 @@ const data = {
           .setDescription(
             `**Usos:**\nRenombra un canal` +
             `\n\n**Aliases:**\n\`chrename\`, \`channelrename\`` +
-            `\n\n\`\`\`js\n.rename /canalOpcional/ <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\``
+            `\n\n\`\`\`js\n.rename [#canal] <nuevo>\nEjemplo: .rename #uxiono padalustro\`\`\``
           )
           .setColor(RED);
 
