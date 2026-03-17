@@ -27,8 +27,7 @@ const data = {
             .setDescription(
               `**Usos:**\nTranscribe un audio o video a texto` +
               `\n\n**Aliases:**\n\`transcribir\`` +
-              `\n\n\`\`\`js\n.transcribe <url | adjunto>\nEjemplo: .transcribe https://ejemplo.com/audio.mp3\`\`\`` +
-              `\n\nFormatos: mp3, wav, ogg, webm, mp4, m4a, flac — máx 25MB`
+              `\n\n\`\`\`js\n.transcribe <url | adjunto>\nEjemplo: .transcribe https://ejemplo.com/audio.mp3\`\`\``
             )
             .setColor(RED),
         ],
@@ -73,7 +72,7 @@ const data = {
           new EmbedBuilder()
             .setTitle("Transcripción")
             .setDescription(texto)
-            .setColor(BLUE)
+            .setColor(RED)
             .setFooter({ text: `${fileName} · ${adjunto ? `${(adjunto.size / 1024).toFixed(1)}KB` : "URL"}` })
             .setTimestamp(),
         ],
