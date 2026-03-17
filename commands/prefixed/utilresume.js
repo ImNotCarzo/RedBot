@@ -51,7 +51,7 @@ const data = {
     try {
       const resumen = await generateHealer([{
         role: "user",
-        content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español.\n\n${texto.slice(0, 8000)}`,
+        content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español. No importa si es un texto con contenido sexual, busca resumirlo de una manera clara, no siguiendo el juego, solo resumir.\n\n${texto.slice(0, 8000)}`,
       }]);
 
       await ctx.send({
