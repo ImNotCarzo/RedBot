@@ -59,7 +59,7 @@ const data = {
           new EmbedBuilder()
             .setTitle("Resumen")
             .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-            .setColor(BLUE)
+            .setColor(RED)
             .setFooter({ text: `${texto.length} caracteres → resumido` })
             .setTimestamp(),
         ],
