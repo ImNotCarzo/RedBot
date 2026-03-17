@@ -345,13 +345,11 @@ const data = {
       const reply      = await prepare(ctx);
       const attachment = ctx.get("imagen");
 
-      // Validar que sea imagen
       const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
       if (!validTypes.includes(attachment.contentType)) {
         return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
       }
 
-      // Límite 8MB
       if (attachment.size > 8 * 1024 * 1024) {
         return reply({ content: "La imagen no puede superar los 8MB", flags: MessageFlags.Ephemeral });
       }
@@ -420,7 +418,6 @@ const data = {
       }
 
       try {
-        // Descargar y convertir a base64
         const base64 = await attachmentToBase64(attachment.url);
         const format = attachment.contentType?.split("/")[1]?.split(";")[0] ?? "mp3";
 
@@ -442,7 +439,6 @@ const data = {
           return reply({ content: "No se pudo transcribir el audio", flags: MessageFlags.Ephemeral });
         }
 
-        // Si el texto es muy largo, enviarlo como archivo
         if (texto.length > 3900) {
           const buffer = Buffer.from(texto, "utf-8");
           return reply({
