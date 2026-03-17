@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, ChannelType } = require("discord.js");
-const { BLUE } = require("../../utils/colors");
+const { BLUE, RED } = require("../../utils/colors");
 
 const CHANNEL_TYPES = {
   [ChannelType.GuildText]:         "Texto",
@@ -40,7 +40,7 @@ const data = {
 
       const embed = new EmbedBuilder()
         .setTitle(`#${channel.name}`)
-        .setColor(BLUE)
+        .setColor(RED)
         .addFields(
           { name: "ID",                value: `\`${channel.id}\``,               inline: true },
           { name: "Tipo",              value: type,                                inline: true },
