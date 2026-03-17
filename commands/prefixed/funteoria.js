@@ -1,13 +1,29 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback } = require("../../utils/ai");
-
 const { RED } = require("../../utils/colors");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
 Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!".
-Respuestas concisas, con personalidad, directas al grano.`;
+Respuestas concisas, con personalidad, directas al grano.
+RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
+
+async function generateHealer(prompt) {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "openrouter/healer-alpha",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+  return data.choices?.[0]?.message?.content?.trim() ?? null;
+}
 
 const data = {
   data: new CommandBuilder({
@@ -21,29 +37,24 @@ const data = {
   async code(ctx) {
     const tema = ctx.args?.join(" ").trim();
 
-   if (!tema) {
-      const bot = ctx.bot.user;
-      const paramerror = new EmbedBuilder()
-        .setAuthor({ name: "Comando Teoria", iconURL: bot.displayAvatarURL() })
-        .setDescription(
-          `**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
-          `\n\n**Aliases:**\n\`conspira\`, \`conspiracion\`, \`theory\`` +
-          `\n\n\`\`\`js\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\``
-        )
-        .setColor(RED);
-
-      return ctx.send({ embeds: [paramerror] });
-    }
-    try {
-      const response = await generateWithFallback({
-        model: "gemini-3.1-flash-lite-preview",
-        contents: [{
-          role: "user",
-          parts: [{ text: `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.` }],
-        }],
+    if (!tema) {
+      return ctx.send({
+        embeds: [
+          new EmbedBuilder()
+            .setAuthor({ name: "Comando Teoria", iconURL: ctx.bot.user.displayAvatarURL() })
+            .setDescription(
+              `**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
+              `\n\n**Aliases:**\n\`conspira\`, \`conspiracion\`, \`theory\`` +
+              `\n\n\`\`\`js\n.teoria <tema>\nEjemplo: .teoria ¿las palomas existen?\`\`\``
+            )
+            .setColor(RED),
+        ],
       });
+    }
 
-      const texto = response.text?.trim().slice(0, 4000) ?? "No pude generar una teoría";
+    try {
+      const prompt = `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`;
+      const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una teoría";
 
       await ctx.send({
         embeds: [
@@ -56,7 +67,7 @@ const data = {
         ],
       });
     } catch (err) {
-      console.error("[funteoría]", err);
+      console.error("[fun teoria]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
     }
   },
