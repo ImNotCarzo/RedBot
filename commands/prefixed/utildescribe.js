@@ -71,7 +71,7 @@ const data = {
             .setTitle("Descripción de imagen")
             .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
             .setThumbnail(imageUrl)
-            .setColor(BLUE)
+            .setColor(RED)
             .setTimestamp(),
         ],
       });
