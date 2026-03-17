@@ -467,9 +467,9 @@ const data = {
   // ── RESUMIR ───────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
-      name: "resumir",
+      name: "resume",
       description: "Resume un texto largo",
-      aliases: ["resume", "summarize"],
+      aliases: ["resumir", "summarize"],
     }),
     params: new ParamsBuilder()
       .addString({
