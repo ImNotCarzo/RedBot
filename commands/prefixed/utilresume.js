@@ -1,0 +1,75 @@
+const { CommandBuilder } = require("erine");
+const { EmbedBuilder } = require("discord.js");
+
+const BLUE = "#5865f2";
+const RED  = "#ff383d";
+
+async function generateHealer(messages) {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "openrouter/healer-alpha",
+      messages,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+  return data.choices?.[0]?.message?.content?.trim() ?? null;
+}
+
+const data = {
+  data: new CommandBuilder({
+    name: "resume",
+    description: "Resume un texto largo",
+    aliases: ["resumir", "summarize"],
+    as_prefix: true,
+    as_slash: false,
+  }),
+
+  async code(ctx) {
+    const texto = ctx.args?.join(" ").trim();
+
+    if (!texto || texto.length < 100) {
+      return ctx.send({
+        embeds: [
+          new EmbedBuilder()
+            .setAuthor({ name: "Comando Resumir", iconURL: ctx.bot.user.displayAvatarURL() })
+            .setDescription(
+              `**Usos:**\nResume un texto largo` +
+              `\n\n**Aliases:**\n\`resume\`, \`summarize\`` +
+              `\n\n\`\`\`js\n.resumir <texto>\nEjemplo: .resumir en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\`` +
+              `\n\nEl texto debe tener al menos 100 caracteres`
+            )
+            .setColor(RED),
+        ],
+      });
+    }
+
+    try {
+      const resumen = await generateHealer([{
+        role: "user",
+        content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español.\n\n${texto.slice(0, 8000)}`,
+      }]);
+
+      await ctx.send({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("Resumen")
+            .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
+            .setColor(BLUE)
+            .setFooter({ text: `${texto.length} caracteres → resumido` })
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      console.error("[resumir]", err);
+      await ctx.send("No se pudo resumir el texto");
+    }
+  },
+};
+
+module.exports = { data };
