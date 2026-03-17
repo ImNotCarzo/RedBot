@@ -114,7 +114,7 @@ const data = {
           new EmbedBuilder()
             .setTitle("Transcripción")
             .setDescription(texto)
-            .setColor(BLUE)
+            .setColor(RED)
             .setFooter({ text: fileName })
             .setTimestamp(),
         ],
