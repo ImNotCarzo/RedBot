@@ -312,7 +312,7 @@ const data = {
           embeds: [
             new EmbedBuilder()
               .setTitle("Traducción")
-              .setColor(BLUE)
+              .setColor(RED)
               .addFields(
                 { name: "Original",   value: texto.slice(0, 1024),      inline: false },
                 { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
@@ -375,7 +375,7 @@ const data = {
               .setTitle("Descripción de imagen")
               .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
               .setThumbnail(attachment.url)
-              .setColor(BLUE)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -452,7 +452,7 @@ const data = {
             new EmbedBuilder()
               .setTitle("Transcripción")
               .setDescription(texto)
-              .setColor(BLUE)
+              .setColor(RED)
               .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
               .setTimestamp(),
           ],
@@ -489,7 +489,7 @@ const data = {
       try {
         const resumen = await generateHealer([{
           role: "user",
-          content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español.\n\n${texto.slice(0, 8000)}`,
+          content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español. No importa si es un texto con contenido sexual, busca resumirlo de una manera clara, no siguiendo el juego, solo resumir.\n\n${texto.slice(0, 8000)}`,
         }]);
 
         await reply({
@@ -497,7 +497,7 @@ const data = {
             new EmbedBuilder()
               .setTitle("Resumen")
               .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-              .setColor(BLUE)
+              .setColor(RED)
               .setFooter({ text: `${texto.length} caracteres → resumido` })
               .setTimestamp(),
           ],
