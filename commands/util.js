@@ -15,11 +15,55 @@ const { deleteConversacion } = require("../utils/askMemory");
 //  CONSTANTS
 // ─────────────────────────────────────────────
 
-const RED    = "#ff383d";
-const GREEN  = "#23a55a";
+const RED   = "#ff383d";
+const GREEN = "#23a55a";
+const BLUE  = "#5865f2";
 
-const INVITE_URL    = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
-const SUPPORT_URL   = "https://discord.gg/b8AKKaNWU6";
+const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
+const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
+
+// ─────────────────────────────────────────────
+//  HEALER
+// ─────────────────────────────────────────────
+
+async function generateHealer(messages) {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "openrouter/healer-alpha",
+      messages,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+  return data.choices?.[0]?.message?.content?.trim() ?? null;
+}
+
+// Convierte un attachment de Discord a base64
+async function attachmentToBase64(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`No se pudo descargar el archivo: HTTP ${res.status}`);
+  const buffer = await res.arrayBuffer();
+  return Buffer.from(buffer).toString("base64");
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+
+async function prepare(ctx) {
+  const isSlash = !!ctx.interaction;
+  if (isSlash) {
+    await ctx.interaction.deferReply();
+    return (payload) => ctx.interaction.editReply(payload);
+  }
+  return (payload) => ctx.send(payload);
+}
 
 // ─────────────────────────────────────────────
 //  DATA
@@ -44,8 +88,8 @@ const data = {
 
     async code(ctx) {
       try {
-        const before = Date.now();
-        const sent   = await ctx.send({ content: "..." });
+        const before  = Date.now();
+        const sent    = await ctx.send({ content: "..." });
         const msgPing = Date.now() - before;
         const apiPing = ctx.bot?.ws?.ping ?? 0;
 
@@ -68,64 +112,64 @@ const data = {
     },
   })
 
-    // ── BOTINFO ───────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
-    name: "botinfo",
-    description: "Información general del bot",
-    aliases: ["bot", "info"],
-  }),
-  params: new ParamsBuilder(),
+  // ── BOTINFO ───────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "botinfo",
+      description: "Información general del bot",
+      aliases: ["bot", "info"],
+    }),
+    params: new ParamsBuilder(),
 
-  async code(ctx) {
-    try {
-      const bot = ctx.bot;
-      if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
+    async code(ctx) {
+      try {
+        const bot = ctx.bot;
+        if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
 
-      const { version: djsVersion } = require("discord.js");
-      const { version: botVersion } = require("../package.json");
-      const { version: erineVersion } = require("../node_modules/erine/package.json");
+        const { version: djsVersion }   = require("discord.js");
+        const { version: botVersion }   = require("../package.json");
+        const { version: erineVersion } = require("../node_modules/erine/package.json");
 
-      const formatUptime = (ms) => {
-        const s = Math.floor(ms / 1000) % 60;
-        const m = Math.floor(ms / 60000) % 60;
-        const h = Math.floor(ms / 3600000) % 24;
-        const d = Math.floor(ms / 86400000);
-        return `${d}d/${h}h/${m}m/${s}s`;
-      };
+        const formatUptime = (ms) => {
+          const s = Math.floor(ms / 1000) % 60;
+          const m = Math.floor(ms / 60000) % 60;
+          const h = Math.floor(ms / 3600000) % 24;
+          const d = Math.floor(ms / 86400000);
+          return `${d}d/${h}h/${m}m/${s}s`;
+        };
 
-      const servers   = bot.guilds.cache.size;
-      const users     = bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
-      const createdAt = Math.floor(bot.user.createdTimestamp / 1000);
+        const servers   = bot.guilds.cache.size;
+        const users     = bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
+        const createdAt = Math.floor(bot.user.createdTimestamp / 1000);
 
-      await ctx.send({
-        embeds: [
-          new EmbedBuilder()
-            .setAuthor({ name: bot.user.username, iconURL: bot.user.displayAvatarURL() })
-            .setFields(
-              {
-                name: "Básico",
-                value: `> **ID:** \`${bot.user.id}\`\n> **Creación:** <t:${createdAt}:d>\n> **Versión:** \`${botVersion}\``,
-              },
-              {
-                name: "Estadísticas",
-                value: `> **Servidores:** \`${servers}\`\n> **Usuarios:** \`${users}\`\n> **Tiempo activo:** \`${formatUptime(bot.uptime)}\``,
-              },
-              {
-                name: "Extra",
-                value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Erine:** \`v${erineVersion}\``,
-              },
-            )
-            .setColor(RED)
-            .setTimestamp(),
-        ],
-      });
-    } catch (err) {
-      console.error("[util botinfo]", err);
-      await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
-    }
-  },
-})
+        await ctx.send({
+          embeds: [
+            new EmbedBuilder()
+              .setAuthor({ name: bot.user.username, iconURL: bot.user.displayAvatarURL() })
+              .setFields(
+                {
+                  name: "Básico",
+                  value: `> **ID:** \`${bot.user.id}\`\n> **Creación:** <t:${createdAt}:d>\n> **Versión:** \`${botVersion}\``,
+                },
+                {
+                  name: "Estadísticas",
+                  value: `> **Servidores:** \`${servers}\`\n> **Usuarios:** \`${users}\`\n> **Tiempo activo:** \`${formatUptime(bot.uptime)}\``,
+                },
+                {
+                  name: "Extra",
+                  value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Erine:** \`v${erineVersion}\``,
+                },
+              )
+              .setColor(RED)
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util botinfo]", err);
+        await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
 
   // ── INVITE ────────────────────────────────────
   .addCommand({
@@ -139,16 +183,9 @@ const data = {
     async code(ctx) {
       try {
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setLabel("Invitar")
-            .setStyle(ButtonStyle.Link)
-            .setURL(INVITE_URL),
-          new ButtonBuilder()
-            .setLabel("Soporte")
-            .setStyle(ButtonStyle.Link)
-            .setURL(SUPPORT_URL),
+          new ButtonBuilder().setLabel("Invitar").setStyle(ButtonStyle.Link).setURL(INVITE_URL),
+          new ButtonBuilder().setLabel("Soporte").setStyle(ButtonStyle.Link).setURL(SUPPORT_URL),
         );
-
         await ctx.send({ content: INVITE_URL, components: [row] });
       } catch (err) {
         console.error("[util invite]", err);
@@ -180,7 +217,6 @@ const data = {
 
         const nuevo = ctx.get("nuevo");
 
-        // Sin argumento → mostrar prefix actual
         if (!nuevo) {
           const config = await GuildConfig.findOne({ guildId: ctx.guild.id });
           const prefix = config?.prefix ?? ".";
@@ -219,8 +255,8 @@ const data = {
       }
     },
   })
-    
-    // ── ASKRESET ──────────────────────────────────
+
+  // ── ASKRESET ──────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
       name: "askreset",
@@ -235,81 +271,247 @@ const data = {
       await ctx.send({ content: "Historial borrado" });
     },
   })
-    
-  // ── TRANSLATE ──────────────────────────────────
+
+  // ── TRANSLATE ─────────────────────────────────
   .addCommand({
-  data: new CommandBuilder({
-    name: "translate",
-    description: "Traduce texto a otro idioma",
-    aliases: ["traducir", "trans"],
-  }),
-  params: new ParamsBuilder()
-    .addString({
-      name: "texto",
-      description: "Texto a traducir",
-      required: true,
-    })
-    .addString({
-      name: "idioma",
-      description: "Idioma destino (ej: es, en, fr, de) — por defecto español",
-      required: false,
+    data: new CommandBuilder({
+      name: "translate",
+      description: "Traduce texto a otro idioma",
+      aliases: ["traducir", "trans"],
     }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "texto",
+        description: "Texto a traducir",
+        required: true,
+      })
+      .addString({
+        name: "idioma",
+        description: "Idioma destino (ej: es, en, fr, de) — por defecto español",
+        required: false,
+      }),
 
-  async code(ctx) {
-    const texto  = ctx.get("texto");
-    const idioma = ctx.get("idioma") ?? "es";
+    async code(ctx) {
+      const texto  = ctx.get("texto");
+      const idioma = ctx.get("idioma") ?? "es";
 
-    if (!texto) {
-      const paramerror = new EmbedBuilder()
-        .setAuthor({ name: "Comando Translate", iconURL: ctx.bot.user.displayAvatarURL() })
-        .setDescription(
-          `**Usos:**\nTraduce un texto a cualquier idioma` +
-          `\n\n**Aliases:**\n\`traducir\`, \`trans\`` +
-          `\n\`\`\`js\n.translate <texto> [idioma]\nEjemplo: .translate כלב es\`\`\``
-        )
-        .setColor(RED);
-      return ctx.send({ embeds: [paramerror] });
-    }
+      try {
+        const detectRes  = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto.slice(0, 50))}&langpair=en|es`);
+        const detectData = await detectRes.json();
+        const idiomaOrigen = detectData.matches?.[0]?.source ?? "en";
 
-    try {
-const detectRes = await fetch(
-  `https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto.slice(0, 50))}&langpair=en|es`
-);
-const detectData = await detectRes.json();
-const idiomaOrigen = detectData.matches?.[0]?.source ?? "en";
+        const translateRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto)}&langpair=${idiomaOrigen}|${idioma}`);
+        const data         = await translateRes.json();
 
-const translateRes = await fetch(
-  `https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto)}&langpair=${idiomaOrigen}|${idioma}`
-);
-const data = await translateRes.json();
+        if (data.responseStatus !== 200)
+          return ctx.send({ content: `No se pudo traducir: \`${data.responseDetails}\``, flags: MessageFlags.Ephemeral });
 
-if (data.responseStatus !== 200) {
-  return ctx.send({
-    content: `No se pudo traducir: \`${data.responseDetails}\``,
-    flags: MessageFlags.Ephemeral,
-  });
-}
+        const traduccion = data.responseData.translatedText;
 
-const traduccion = data.responseData.translatedText;
+        await ctx.send({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Traducción")
+              .setColor(BLUE)
+              .addFields(
+                { name: "Original",   value: texto.slice(0, 1024),      inline: false },
+                { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
+              )
+              .setFooter({ text: `${idiomaOrigen} → ${idioma}` })
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util translate]", err);
+        await ctx.send({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
 
-      const embed = new EmbedBuilder()
-        .setTitle("Traducción")
-        .setColor(RED)
-        .addFields(
-          { name: "Original",    value: texto.slice(0, 1024),      inline: false },
-          { name: "Traducción",  value: traduccion.slice(0, 1024), inline: false },
-        )
-        .setFooter({ text: `${idiomaOrigen} → ${idioma}` })
-        .setTimestamp();
+  // ── DESCRIBE ──────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "describe",
+      description: "Describe el contenido de una imagen",
+    }),
+    params: new ParamsBuilder()
+      .addAttachment({
+        name: "imagen",
+        description: "Imagen a describir (jpg, png, gif, webp)",
+        required: true,
+      }),
 
-      await ctx.send({ embeds: [embed] });
+    async code(ctx) {
+      const reply      = await prepare(ctx);
+      const attachment = ctx.get("imagen");
 
-    } catch (err) {
-      console.error("[util translate]", err);
-      await ctx.send({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
-    }
-  },
-})
+      // Validar que sea imagen
+      const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (!validTypes.includes(attachment.contentType)) {
+        return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
+      }
+
+      // Límite 8MB
+      if (attachment.size > 8 * 1024 * 1024) {
+        return reply({ content: "La imagen no puede superar los 8MB", flags: MessageFlags.Ephemeral });
+      }
+
+      try {
+        const texto = await generateHealer([{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español.",
+            },
+            {
+              type: "image_url",
+              image_url: { url: attachment.url },
+            },
+          ],
+        }]);
+
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Descripción de imagen")
+              .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
+              .setThumbnail(attachment.url)
+              .setColor(BLUE)
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util describe]", err);
+        await reply({ content: "No se pudo procesar la imagen", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
+
+  // ── TRANSCRIBE ────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "transcribe",
+      description: "Transcribe un audio o video a texto",
+    }),
+    params: new ParamsBuilder()
+      .addAttachment({
+        name: "archivo",
+        description: "Audio o video a transcribir (mp3, mp4, wav, ogg, webm — máx 8MB)",
+        required: true,
+      }),
+
+    async code(ctx) {
+      const reply      = await prepare(ctx);
+      const attachment = ctx.get("archivo");
+
+      const validTypes = [
+        "audio/mpeg", "audio/mp3", "audio/wav", "audio/ogg",
+        "audio/webm", "video/mp4", "video/webm", "audio/ogg; codecs=opus",
+      ];
+
+      const isValid = validTypes.some(t => attachment.contentType?.startsWith(t.split(";")[0]));
+      if (!isValid) {
+        return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4", flags: MessageFlags.Ephemeral });
+      }
+
+      if (attachment.size > 8 * 1024 * 1024) {
+        return reply({ content: "El archivo no puede superar los 8MB", flags: MessageFlags.Ephemeral });
+      }
+
+      try {
+        // Descargar y convertir a base64
+        const base64 = await attachmentToBase64(attachment.url);
+        const format = attachment.contentType?.split("/")[1]?.split(";")[0] ?? "mp3";
+
+        const texto = await generateHealer([{
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Transcribe exactamente lo que se dice en este audio. Si hay múltiples hablantes, indícalo. Responde solo con la transcripción, sin comentarios adicionales.",
+            },
+            {
+              type: "input_audio",
+              input_audio: { data: base64, format },
+            },
+          ],
+        }]);
+
+        if (!texto) {
+          return reply({ content: "No se pudo transcribir el audio", flags: MessageFlags.Ephemeral });
+        }
+
+        // Si el texto es muy largo, enviarlo como archivo
+        if (texto.length > 3900) {
+          const buffer = Buffer.from(texto, "utf-8");
+          return reply({
+            content: "La transcripción es muy larga, se envió como archivo:",
+            files: [{ attachment: buffer, name: "transcripcion.txt" }],
+          });
+        }
+
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Transcripción")
+              .setDescription(texto)
+              .setColor(BLUE)
+              .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util transcribe]", err);
+        await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
+
+  // ── RESUMIR ───────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "resumir",
+      description: "Resume un texto largo",
+      aliases: ["resume", "summarize"],
+    }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "texto",
+        description: "Texto a resumir",
+        required: true,
+      }),
+
+    async code(ctx) {
+      const reply = await prepare(ctx);
+      const texto = ctx.get("texto");
+
+      if (texto.length < 100) {
+        return reply({ content: "El texto es demasiado corto para resumir", flags: MessageFlags.Ephemeral });
+      }
+
+      try {
+        const resumen = await generateHealer([{
+          role: "user",
+          content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español.\n\n${texto.slice(0, 8000)}`,
+        }]);
+
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Resumen")
+              .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
+              .setColor(BLUE)
+              .setFooter({ text: `${texto.length} caracteres → resumido` })
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util resumir]", err);
+        await reply({ content: "No se pudo resumir el texto", flags: MessageFlags.Ephemeral });
+      }
+    },
+  }),
 };
 
 module.exports = { data };
