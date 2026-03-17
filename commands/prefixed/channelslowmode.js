@@ -47,7 +47,7 @@ const data = {
           .setDescription(
             `**Usos:**\nEstablece un slowmode para el canal` +
             `\n\n**Aliases:**\n\`sm\`, \`chslowmode\`, \`channelslowmode\`` +
-            `\n\n\`\`\`js\n.slowmode <tiempo> /canalOpcional/\nEjemplo: .slowmode 1h #uxiono\`\`\``
+            `\n\n\`\`\`js\n.slowmode <tiempo> [#canal]\nEjemplo: .slowmode 1h #uxiono\`\`\``
           )
           .setColor(RED);
 
