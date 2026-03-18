@@ -4,7 +4,6 @@ const { Partials, REST, Routes, EmbedBuilder } = require("discord.js");
 const mongoose = require("mongoose");
 const path = require("path");
 const fs = require("fs");
-
 const GuildConfig  = require("./models/GuildConfig");
 const prefixCache  = require("./utils/prefixCache");
 const { setId }    = require("./utils/commandIds");
@@ -116,7 +115,6 @@ bot.on("clientReady", async (bot) => {
     const commands = await rest.get(Routes.applicationCommands(process.env.CLIENT_ID));
 
     for (const cmd of commands) {
-      // Guardar ID dinámico para help.js
       setId(cmd.name, cmd.id);
 
       if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
