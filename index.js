@@ -7,6 +7,7 @@ const fs = require("fs");
 
 const GuildConfig  = require("./models/GuildConfig");
 const prefixCache  = require("./utils/prefixCache");
+const { setId }    = require("./utils/commandIds");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("./utils/askMemory");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("./utils/ai");
 
@@ -89,8 +90,8 @@ bot.setMaxListeners(20);
 //  EVENTS
 // ─────────────────────────────────────────────
 
-const eventsPath  = path.join(__dirname, "events");
-const eventFiles  = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
+const eventsPath = path.join(__dirname, "events");
+const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
 
 for (const file of eventFiles) {
   const event = require(path.join(eventsPath, file));
@@ -104,7 +105,7 @@ console.log(`[Events] ${eventFiles.length} cargados`);
 //  READY
 // ─────────────────────────────────────────────
 
-const COMMANDS_TO_UPDATE = ["help", "user", "ask", "ping", "botinfo", "util", "fun"];
+const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user", "mod", "server", "role", "channel"];
 
 bot.on("clientReady", async (bot) => {
   await bot.sync();
@@ -115,6 +116,9 @@ bot.on("clientReady", async (bot) => {
     const commands = await rest.get(Routes.applicationCommands(process.env.CLIENT_ID));
 
     for (const cmd of commands) {
+      // Guardar ID dinámico para help.js
+      setId(cmd.name, cmd.id);
+
       if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
       await rest.patch(Routes.applicationCommand(process.env.CLIENT_ID, cmd.id), {
         body: {
@@ -132,13 +136,13 @@ bot.on("clientReady", async (bot) => {
 });
 
 // ─────────────────────────────────────────────
-//  MESSAGE CREATE - ASK
+//  MESSAGE CREATE — ASK
 // ─────────────────────────────────────────────
 
 bot.on("messageCreate", async (message) => {
   try {
-    if (message.author.bot)              return;
-    if (!message.reference?.messageId)   return;
+    if (message.author.bot)            return;
+    if (!message.reference?.messageId) return;
 
     const userData = getConversacion(message.author.id);
     if (!userData) return;
@@ -196,6 +200,7 @@ bot.on("messageCreate", async (message) => {
 // ─────────────────────────────────────────────
 //  UNHANDLED ERRORS
 // ─────────────────────────────────────────────
+
 process.on("SIGTERM", () => console.log("[Process] SIGTERM recibido — el host está apagando el servidor"));
 process.on("SIGINT",  () => console.log("[Process] SIGINT recibido"));
 process.on("unhandledRejection", (err) => console.error("[UnhandledRejection]", err));
