@@ -104,7 +104,7 @@ console.log(`[Events] ${eventFiles.length} cargados`);
 //  READY
 // ─────────────────────────────────────────────
 
-const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user", "mod", "server", "role", "channel"];
+const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user", "server"];
 
 bot.on("clientReady", async (bot) => {
   await bot.sync();
