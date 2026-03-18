@@ -557,7 +557,7 @@ const data = {
     })
     .addString({
       name: "incluir_bots",
-      description: "¿Incluir bots? (por defecto no)",
+      description: "¿Incluir bots?",
       required: false,
       choices: [
         { name: "Sí", value: "true" },
@@ -571,7 +571,7 @@ const data = {
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
     if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
       return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
@@ -579,7 +579,6 @@ const data = {
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
 
-    // Filtrar miembros que no tienen el rol ya
     await ctx.guild.members.fetch();
     const targets = ctx.guild.members.cache.filter(m =>
       !m.roles.cache.has(role.id) &&
@@ -679,7 +678,7 @@ const data = {
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
     if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
       return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
@@ -786,7 +785,7 @@ const data = {
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
     if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
       return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
@@ -897,7 +896,7 @@ const data = {
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
     if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
       return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
@@ -989,7 +988,7 @@ const data = {
   params: new ParamsBuilder()
     .addRole({
       name: "rol",
-      description: "Rol a asignar al entrar (omitir para desactivar)",
+      description: "Rol a asignar al entrar (no usar para desactivar)",
       required: false,
     }),
 
@@ -998,7 +997,7 @@ const data = {
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-      return ctx.send({ content: "Necesitás el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
+      return ctx.send({ content: "Necesitas el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
 
     const { JoinRole } = require("../events/guildMemberAdd");
 
