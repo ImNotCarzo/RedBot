@@ -541,7 +541,509 @@ const data = {
         await ctx.send({ content: "No se pudo cambiar la mencionabilidad", flags: MessageFlags.Ephemeral });
       }
     },
+  })
+  
+  // ── ROLE ALL ──────────────────────────────────
+.addCommand({
+  data: new CommandBuilder({
+    name: "all",
+    description: "Añade un rol a todos los miembros del servidor",
+    guildOnly: true,
   }),
+  params: new ParamsBuilder()
+    .addRole({
+      name: "rol",
+      description: "Rol a añadir",
+      required: true,
+    })
+    .addString({
+      name: "incluir_bots",
+      description: "¿Incluir bots? (por defecto no)",
+      required: false,
+      choices: [
+        { name: "Sí", value: "true" },
+        { name: "No", value: "false" },
+      ],
+    }),
+
+  async code(ctx) {
+    const role       = ctx.get("rol");
+    const incluirBot = ctx.get("incluir_bots") === "true";
+    const modTag     = ctx.user?.tag ?? ctx.author?.tag;
+
+    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
+      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+
+    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
+      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
+
+    const hierr = roleHierarchyCheck(ctx, role);
+    if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+
+    // Filtrar miembros que no tienen el rol ya
+    await ctx.guild.members.fetch();
+    const targets = ctx.guild.members.cache.filter(m =>
+      !m.roles.cache.has(role.id) &&
+      (incluirBot ? true : !m.user.bot)
+    );
+
+    if (!targets.size)
+      return ctx.send({ content: `Todos ${incluirBot ? "" : "los usuarios "}ya tienen el rol ${role}`, flags: MessageFlags.Ephemeral });
+
+    const msg = await ctx.send({
+      embeds: [
+        new EmbedBuilder()
+          .setDescription(`Añadiendo ${role} a **0/${targets.size}** miembros...`)
+          .setColor(BLUE),
+      ],
+    });
+
+    let done = 0;
+    let failed = 0;
+    const total = targets.size;
+
+    for (const [, member] of targets) {
+      try {
+        await member.roles.add(role, `${modTag}: role all`);
+        done++;
+      } catch {
+        failed++;
+      }
+
+      if ((done + failed) % 10 === 0 || done + failed === total) {
+        await msg.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setDescription(`Añadiendo ${role} a **${done + failed}/${total}** miembros...`)
+              .setColor(BLUE),
+          ],
+        }).catch(() => {});
+      }
+    }
+
+    await msg.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Role all completado")
+          .setColor(GREEN)
+          .addFields(
+            { name: "Rol",      value: `${role}`,     inline: true },
+            { name: "Añadidos", value: `${done}`,     inline: true },
+            { name: "Fallidos", value: `${failed}`,   inline: true },
+          )
+          .setTimestamp(),
+      ],
+    });
+
+    const logEmbed = new EmbedBuilder()
+      .setTitle("Role all ejecutado")
+      .setColor(GREEN)
+      .addFields(
+        { name: "Rol",        value: `${role.name} (\`${role.id}\`)`, inline: true },
+        { name: "Moderador",  value: modTag,                           inline: true },
+        { name: "Añadidos",   value: `${done}`,                       inline: true },
+        { name: "Fallidos",   value: `${failed}`,                     inline: true },
+        { name: "Bots",       value: incluirBot ? "Sí" : "No",        inline: true },
+      )
+      .setTimestamp();
+
+    await sendLog(ctx.guild, logEmbed);
+  },
+})
+
+// ── ROLE REMOVEALL ────────────────────────────
+.addCommand({
+  data: new CommandBuilder({
+    name: "removeall",
+    description: "Quita un rol a todos los miembros que lo tengan",
+    guildOnly: true,
+  }),
+  params: new ParamsBuilder()
+    .addRole({
+      name: "rol",
+      description: "Rol a quitar",
+      required: true,
+    })
+    .addString({
+      name: "incluir_bots",
+      description: "¿Incluir bots? (por defecto no)",
+      required: false,
+      choices: [
+        { name: "Sí", value: "true" },
+        { name: "No", value: "false" },
+      ],
+    }),
+
+  async code(ctx) {
+    const role       = ctx.get("rol");
+    const incluirBot = ctx.get("incluir_bots") === "true";
+    const modTag     = ctx.user?.tag ?? ctx.author?.tag;
+
+    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
+      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+
+    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
+      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
+
+    const hierr = roleHierarchyCheck(ctx, role);
+    if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+
+    await ctx.guild.members.fetch();
+    const targets = ctx.guild.members.cache.filter(m =>
+      m.roles.cache.has(role.id) &&
+      (incluirBot ? true : !m.user.bot)
+    );
+
+    if (!targets.size)
+      return ctx.send({ content: `Nadie ${incluirBot ? "" : "de los usuarios "}tiene el rol ${role}`, flags: MessageFlags.Ephemeral });
+
+    const msg = await ctx.send({
+      embeds: [
+        new EmbedBuilder()
+          .setDescription(`Quitando ${role} a **0/${targets.size}** miembros...`)
+          .setColor(RED),
+      ],
+    });
+
+    let done = 0;
+    let failed = 0;
+    const total = targets.size;
+
+    for (const [, member] of targets) {
+      try {
+        await member.roles.remove(role, `${modTag}: role removeall`);
+        done++;
+      } catch {
+        failed++;
+      }
+
+      if ((done + failed) % 10 === 0 || done + failed === total) {
+        await msg.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setDescription(`Quitando ${role} a **${done + failed}/${total}** miembros...`)
+              .setColor(RED),
+          ],
+        }).catch(() => {});
+      }
+    }
+
+    await msg.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Role removeall completado")
+          .setColor(RED)
+          .addFields(
+            { name: "Rol",      value: `${role}`,   inline: true },
+            { name: "Quitados", value: `${done}`,   inline: true },
+            { name: "Fallidos", value: `${failed}`, inline: true },
+          )
+          .setTimestamp(),
+      ],
+    });
+
+    const logEmbed = new EmbedBuilder()
+      .setTitle("Role removeall ejecutado")
+      .setColor(RED)
+      .addFields(
+        { name: "Rol",       value: `${role.name} (\`${role.id}\`)`, inline: true },
+        { name: "Moderador", value: modTag,                           inline: true },
+        { name: "Quitados",  value: `${done}`,                       inline: true },
+        { name: "Fallidos",  value: `${failed}`,                     inline: true },
+        { name: "Bots",      value: incluirBot ? "Sí" : "No",        inline: true },
+      )
+      .setTimestamp();
+
+    await sendLog(ctx.guild, logEmbed);
+  },
+})
+
+// ── ROLE BOTS ─────────────────────────────────
+.addCommand({
+  data: new CommandBuilder({
+    name: "bots",
+    description: "Añade o quita un rol a todos los bots del servidor",
+    guildOnly: true,
+  }),
+  params: new ParamsBuilder()
+    .addRole({
+      name: "rol",
+      description: "Rol a gestionar",
+      required: true,
+    })
+    .addString({
+      name: "accion",
+      description: "¿Añadir o quitar?",
+      required: true,
+      choices: [
+        { name: "Añadir", value: "add" },
+        { name: "Quitar", value: "remove" },
+      ],
+    }),
+
+  async code(ctx) {
+    const role   = ctx.get("rol");
+    const accion = ctx.get("accion");
+    const modTag = ctx.user?.tag ?? ctx.author?.tag;
+
+    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
+      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+
+    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
+      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
+
+    const hierr = roleHierarchyCheck(ctx, role);
+    if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+
+    await ctx.guild.members.fetch();
+    const targets = ctx.guild.members.cache.filter(m =>
+      m.user.bot &&
+      (accion === "add" ? !m.roles.cache.has(role.id) : m.roles.cache.has(role.id))
+    );
+
+    if (!targets.size)
+      return ctx.send({ content: `No hay bots a los que ${accion === "add" ? "añadir" : "quitar"} el rol ${role}`, flags: MessageFlags.Ephemeral });
+
+    const color = accion === "add" ? GREEN : RED;
+    const verbo = accion === "add" ? "Añadiendo" : "Quitando";
+
+    const msg = await ctx.send({
+      embeds: [
+        new EmbedBuilder()
+          .setDescription(`${verbo} ${role} a **0/${targets.size}** bots...`)
+          .setColor(color),
+      ],
+    });
+
+    let done = 0;
+    let failed = 0;
+    const total = targets.size;
+
+    for (const [, member] of targets) {
+      try {
+        accion === "add"
+          ? await member.roles.add(role, `${modTag}: role bots`)
+          : await member.roles.remove(role, `${modTag}: role bots`);
+        done++;
+      } catch {
+        failed++;
+      }
+
+      if ((done + failed) % 5 === 0 || done + failed === total) {
+        await msg.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setDescription(`${verbo} ${role} a **${done + failed}/${total}** bots...`)
+              .setColor(color),
+          ],
+        }).catch(() => {});
+      }
+    }
+
+    await msg.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(`Role bots completado`)
+          .setColor(color)
+          .addFields(
+            { name: "Rol",                                            value: `${role}`,   inline: true },
+            { name: accion === "add" ? "Añadidos" : "Quitados",      value: `${done}`,   inline: true },
+            { name: "Fallidos",                                       value: `${failed}`, inline: true },
+          )
+          .setTimestamp(),
+      ],
+    });
+
+    await sendLog(ctx.guild, new EmbedBuilder()
+      .setTitle("Role bots ejecutado")
+      .setColor(color)
+      .addFields(
+        { name: "Rol",       value: `${role.name} (\`${role.id}\`)`,        inline: true },
+        { name: "Moderador", value: modTag,                                   inline: true },
+        { name: "Acción",    value: accion === "add" ? "Añadir" : "Quitar",  inline: true },
+        { name: accion === "add" ? "Añadidos" : "Quitados", value: `${done}`, inline: true },
+        { name: "Fallidos",  value: `${failed}`,                             inline: true },
+      )
+      .setTimestamp()
+    );
+  },
+})
+
+// ── ROLE HUMANS ───────────────────────────────
+.addCommand({
+  data: new CommandBuilder({
+    name: "humans",
+    description: "Añade o quita un rol a todos los usuarios (sin bots)",
+    guildOnly: true,
+  }),
+  params: new ParamsBuilder()
+    .addRole({
+      name: "rol",
+      description: "Rol a gestionar",
+      required: true,
+    })
+    .addString({
+      name: "accion",
+      description: "¿Añadir o quitar?",
+      required: true,
+      choices: [
+        { name: "Añadir", value: "add" },
+        { name: "Quitar", value: "remove" },
+      ],
+    }),
+
+  async code(ctx) {
+    const role   = ctx.get("rol");
+    const accion = ctx.get("accion");
+    const modTag = ctx.user?.tag ?? ctx.author?.tag;
+
+    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
+      return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+
+    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
+      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
+
+    const hierr = roleHierarchyCheck(ctx, role);
+    if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+
+    await ctx.guild.members.fetch();
+    const targets = ctx.guild.members.cache.filter(m =>
+      !m.user.bot &&
+      (accion === "add" ? !m.roles.cache.has(role.id) : m.roles.cache.has(role.id))
+    );
+
+    if (!targets.size)
+      return ctx.send({ content: `No hay usuarios a los que ${accion === "add" ? "añadir" : "quitar"} el rol ${role}`, flags: MessageFlags.Ephemeral });
+
+    const color = accion === "add" ? GREEN : RED;
+    const verbo = accion === "add" ? "Añadiendo" : "Quitando";
+
+    const msg = await ctx.send({
+      embeds: [
+        new EmbedBuilder()
+          .setDescription(`${verbo} ${role} a **0/${targets.size}** usuarios...`)
+          .setColor(color),
+      ],
+    });
+
+    let done = 0;
+    let failed = 0;
+    const total = targets.size;
+
+    for (const [, member] of targets) {
+      try {
+        accion === "add"
+          ? await member.roles.add(role, `${modTag}: role humans`)
+          : await member.roles.remove(role, `${modTag}: role humans`);
+        done++;
+      } catch {
+        failed++;
+      }
+
+      if ((done + failed) % 10 === 0 || done + failed === total) {
+        await msg.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setDescription(`${verbo} ${role} a **${done + failed}/${total}** usuarios...`)
+              .setColor(color),
+          ],
+        }).catch(() => {});
+      }
+    }
+
+    await msg.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Role humans completado")
+          .setColor(color)
+          .addFields(
+            { name: "Rol",                                           value: `${role}`,   inline: true },
+            { name: accion === "add" ? "Añadidos" : "Quitados",     value: `${done}`,   inline: true },
+            { name: "Fallidos",                                      value: `${failed}`, inline: true },
+          )
+          .setTimestamp(),
+      ],
+    });
+
+    await sendLog(ctx.guild, new EmbedBuilder()
+      .setTitle("Role humans ejecutado")
+      .setColor(color)
+      .addFields(
+        { name: "Rol",       value: `${role.name} (\`${role.id}\`)`,        inline: true },
+        { name: "Moderador", value: modTag,                                   inline: true },
+        { name: "Acción",    value: accion === "add" ? "Añadir" : "Quitar",  inline: true },
+        { name: accion === "add" ? "Añadidos" : "Quitados", value: `${done}`, inline: true },
+        { name: "Fallidos",  value: `${failed}`,                             inline: true },
+      )
+      .setTimestamp()
+    );
+  },
+})
+
+// ── ROLE JOIN ─────────────────────────────────
+.addCommand({
+  data: new CommandBuilder({
+    name: "join",
+    description: "Configura o desactiva el rol automático al entrar al servidor",
+    guildOnly: true,
+  }),
+  params: new ParamsBuilder()
+    .addRole({
+      name: "rol",
+      description: "Rol a asignar al entrar (omitir para desactivar)",
+      required: false,
+    }),
+
+  async code(ctx) {
+    const role   = ctx.get("rol");
+    const modTag = ctx.user?.tag ?? ctx.author?.tag;
+
+    if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
+      return ctx.send({ content: "Necesitás el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
+
+    const { JoinRole } = require("../events/guildMemberAdd");
+
+    if (!role) {
+      const deleted = await JoinRole.findOneAndDelete({ guildId: ctx.guild.id });
+      if (!deleted)
+        return ctx.send({ content: "No hay un rol automático configurado", flags: MessageFlags.Ephemeral });
+
+      const embed = new EmbedBuilder()
+        .setDescription("Rol automático al entrar desactivado")
+        .setColor(RED)
+        .setTimestamp();
+
+      await ctx.send({ embeds: [embed] });
+      return sendLog(ctx.guild, embed);
+    }
+
+    const hierr = roleHierarchyCheck(ctx, role);
+    if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+
+    await JoinRole.findOneAndUpdate(
+      { guildId: ctx.guild.id },
+      { roleId: role.id },
+      { upsert: true }
+    );
+
+    const embed = new EmbedBuilder()
+      .setTitle("Rol automático configurado")
+      .setDescription(`${role} se asignará a cada usuario que entre al servidor`)
+      .setColor(GREEN)
+      .setTimestamp();
+
+    await ctx.send({ embeds: [embed] });
+    await sendLog(ctx.guild, new EmbedBuilder()
+      .setTitle("Rol join configurado")
+      .setColor(GREEN)
+      .addFields(
+        { name: "Rol",       value: `${role.name} (\`${role.id}\`)`, inline: true },
+        { name: "Moderador", value: modTag,                           inline: true },
+      )
+      .setTimestamp()
+    );
+  },
+}),
 };
 
 module.exports = { data };
