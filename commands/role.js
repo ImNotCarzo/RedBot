@@ -27,7 +27,6 @@ function noGuildReply(ctx) {
   });
 }
 
-/** Comprobaciones de jerarquía para comandos de edición de roles */
 function roleHierarchyCheck(ctx, role) {
   if (role.managed)
     return "No puedo editar roles gestionados por integraciones";
