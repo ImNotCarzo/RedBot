@@ -273,60 +273,72 @@ const data = {
   })
 
   // ── TRANSLATE ─────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "translate",
-      description: "Traduce texto a otro idioma",
-      aliases: ["traducir", "trans"],
+.addCommand({
+  data: new CommandBuilder({
+    name: "translate",
+    description: "Traduce texto a otro idioma",
+    aliases: ["traducir", "trans"],
+  }),
+  params: new ParamsBuilder()
+    .addString({
+      name: "texto",
+      description: "Texto a traducir",
+      required: true,
+    })
+    .addString({
+      name: "idioma",
+      description: "Idioma destino (ej: español, inglés, francés), por defecto español",
+      required: false,
     }),
-    params: new ParamsBuilder()
-      .addString({
-        name: "texto",
-        description: "Texto a traducir",
-        required: true,
-      })
-      .addString({
-        name: "idioma",
-        description: "Idioma destino (ej: es, en, fr, de) — por defecto español",
-        required: false,
-      }),
 
-    async code(ctx) {
-      const texto  = ctx.get("texto");
-      const idioma = ctx.get("idioma") ?? "es";
+  async code(ctx) {
+    const reply  = await prepare(ctx);
+    const texto  = ctx.get("texto");
+    const idioma = ctx.get("idioma") ?? "español";
+
+    try {
+      const respuesta = await generateHealer([{
+        role: "user",
+        content:
+          `Traduce el siguiente texto al ${idioma}.\n` +
+          `Responde ÚNICAMENTE con este formato JSON, sin texto adicional ni backticks:\n` +
+          `{"origen": "<idioma detectado en español>", "traduccion": "<texto traducido>"}\n\n` +
+          `Texto: ${texto}`,
+      }]);
+
+      let origen     = "desconocido";
+      let traduccion = null;
 
       try {
-        const detectRes  = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto.slice(0, 50))}&langpair=en|es`);
-        const detectData = await detectRes.json();
-        const idiomaOrigen = detectData.matches?.[0]?.source ?? "en";
-
-        const translateRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(texto)}&langpair=${idiomaOrigen}|${idioma}`);
-        const data         = await translateRes.json();
-
-        if (data.responseStatus !== 200)
-          return ctx.send({ content: `No se pudo traducir: \`${data.responseDetails}\``, flags: MessageFlags.Ephemeral });
-
-        const traduccion = data.responseData.translatedText;
-
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Traducción")
-              .setColor(RED)
-              .addFields(
-                { name: "Original",   value: texto.slice(0, 1024),      inline: false },
-                { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
-              )
-              .setFooter({ text: `${idiomaOrigen} → ${idioma}` })
-              .setTimestamp(),
-          ],
-        });
-      } catch (err) {
-        console.error("[util translate]", err);
-        await ctx.send({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
+        const parsed = JSON.parse(respuesta);
+        origen     = parsed.origen     ?? "desconocido";
+        traduccion = parsed.traduccion ?? null;
+      } catch {
+        traduccion = respuesta;
       }
-    },
-  })
+
+      if (!traduccion)
+        return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
+
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("Traducción")
+            .setColor(BLUE)
+            .addFields(
+              { name: "Original",   value: texto.slice(0, 1024),      inline: false },
+              { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
+            )
+            .setFooter({ text: `${origen} → ${idioma}` })
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      console.error("[util translate]", err);
+      await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
+    }
+  },
+})
 
   // ── DESCRIBE ──────────────────────────────────
   .addCommand({
