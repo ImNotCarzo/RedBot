@@ -39,7 +39,7 @@ const COMMANDS = {
     ask: {
       short: "ask",
       slash: "ask",
-      slashId: "1481436920075649286",
+      slashId: "1482626230078410762",
       usage: ".ask (pregunta)",
       aliases: ["ai", "ia"],
       description: "Hazle una pregunta a la IA",
@@ -47,7 +47,7 @@ const COMMANDS = {
     ping: {
       short: "ping",
       slash: "util ping",
-      slashId: "1481436920075649286",
+      slashId: "1482626230078410771",
       usage: ".ping",
       aliases: [],
       description: "Muestra la latencia actual del bot.",
@@ -55,7 +55,7 @@ const COMMANDS = {
     botinfo: {
       short: "botinfo",
       slash: "util botinfo",
-      slashId: "1481436920075649286",
+      slashId: "1482626230078410771",
       usage: ".botinfo",
       aliases: ["bot", "info"],
       description: "Muestra información general del bot.",
@@ -63,7 +63,7 @@ const COMMANDS = {
     invite: {
       short: "invite",
       slash: "util invite",
-      slashId: "1481436920075649286",
+      slashId: "1482626230078410771",
       usage: ".invite",
       aliases: ["inv"],
       description: "Envía la invitación del bot y el servidor de soporte.",
@@ -71,7 +71,7 @@ const COMMANDS = {
     setprefix: {
       short: "setprefix",
       slash: "util setprefix",
-      slashId: "1481436920075649286",
+      slashId: "1482626230078410771",
       usage: ".setprefix <nuevo>",
       aliases: ["prefix"],
       description: "Cambia o muestra el prefijo del bot en este servidor.",
@@ -79,17 +79,49 @@ const COMMANDS = {
     askreset: {
       short: "askreset",
       slash: "util askreset",
-      slashId: "1481436920075649286",
+      slashId: "1482626230078410771",
       usage: ".askreset",
       aliases: ["aireset", "reset"],
       description: "Limpia tu historial de conversación con la IA.",
+    },
+    translate: {
+      short: "translate",
+      slash: "util translate",
+      slashId: "1482626230078410771",
+      usage: ".translate <texto> [idioma]",
+      aliases: ["traducir", "trans"],
+      description: "Traduce texto a otro idioma.",
+    },
+    describe: {
+      short: "describe",
+      slash: "util describe",
+      slashId: "1482626230078410771",
+      usage: ".describe <url | adjunto>",
+      aliases: ["describir"],
+      description: "Describe el contenido de una imagen.",
+    },
+    transcribe: {
+      short: "transcribe",
+      slash: "util transcribe",
+      slashId: "1482626230078410771",
+      usage: ".transcribe <url | adjunto>",
+      aliases: ["transcribir"],
+      description: "Transcribe un audio o video a texto.",
+    },
+    resume: {
+      short: "resume",
+      slash: "util resume",
+      slashId: "1482626230078410771",
+      usage: ".resume <texto>",
+      aliases: ["resumir", "summarize"],
+      description: "Resume un texto largo.",
     },
   },
   usuario: {
     info: {
       short: "user",
       slash: "user info",
-      slashId: "1481436920075649285",
+      slashId: "1482626230078410770",
       usage: ".user [@usuario]",
       aliases: ["userinfo", "ui", "whois"],
       description: "Muestra información general de un usuario.",
@@ -97,7 +129,7 @@ const COMMANDS = {
     avatar: {
       short: "avatar",
       slash: "user avatar",
-      slashId: "1481436920075649285",
+      slashId: "1482626230078410770",
       usage: ".avatar [@usuario]",
       aliases: ["av", "pfp"],
       description: "Muestra el avatar de un usuario.",
@@ -105,7 +137,7 @@ const COMMANDS = {
     banner: {
       short: "banner",
       slash: "user banner",
-      slashId: "1481436920075649285",
+      slashId: "1482626230078410770",
       usage: ".banner [@usuario]",
       aliases: ["userbanner", "ub"],
       description: "Muestra el banner de un usuario.",
@@ -113,7 +145,7 @@ const COMMANDS = {
     roles: {
       short: "uroles",
       slash: "user roles",
-      slashId: "1481436920075649285",
+      slashId: "1482626230078410770",
       usage: ".uroles [@usuario]",
       aliases: ["userroles", "ur"],
       description: "Muestra los roles de un usuario.",
@@ -121,7 +153,7 @@ const COMMANDS = {
     permissions: {
       short: "perms",
       slash: "user permissions",
-      slashId: "1481436920075649285",
+      slashId: "1482626230078410770",
       usage: ".perms [@usuario]",
       aliases: ["userperms", "up"],
       description: "Muestra los permisos de un usuario en el servidor.",
@@ -131,7 +163,7 @@ const COMMANDS = {
     ban: {
       short: "ban",
       slash: "mod ban",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".ban <@usuario> [razón]",
       aliases: [],
       description: "Banea a un usuario del servidor.",
@@ -139,7 +171,7 @@ const COMMANDS = {
     unban: {
       short: "unban",
       slash: "mod unban",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".unban <id> [razón]",
       aliases: [],
       description: "Desbanea a un usuario por ID.",
@@ -147,7 +179,7 @@ const COMMANDS = {
     softban: {
       short: "softban",
       slash: "mod softban",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".softban <@usuario> [razón]",
       aliases: ["sb"],
       description: "Banea y desbanea al instante para borrar mensajes recientes.",
@@ -155,7 +187,7 @@ const COMMANDS = {
     tempban: {
       short: "tempban",
       slash: "mod tempban",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".tempban <@usuario> <tiempo> [razón]",
       aliases: ["tb"],
       description: "Banea a un usuario por un tiempo determinado.",
@@ -163,7 +195,7 @@ const COMMANDS = {
     massban: {
       short: "massban",
       slash: "mod massban",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".massban <@u1> [@u2] ... [razón]",
       aliases: ["mb"],
       description: "Banea hasta 5 usuarios seleccionados.",
@@ -171,7 +203,7 @@ const COMMANDS = {
     kick: {
       short: "kick",
       slash: "mod kick",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".kick <@usuario> [razón]",
       aliases: [],
       description: "Expulsa a un usuario del servidor.",
@@ -179,7 +211,7 @@ const COMMANDS = {
     mute: {
       short: "mute",
       slash: "mod mute",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".mute <@usuario> <tiempo> [razón]",
       aliases: ["timeout", "silenciar"],
       description: "Silencia a un usuario con timeout.",
@@ -187,7 +219,7 @@ const COMMANDS = {
     unmute: {
       short: "unmute",
       slash: "mod unmute",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".unmute <@usuario> [razón]",
       aliases: ["untimeout", "desmutear"],
       description: "Quita el timeout a un usuario.",
@@ -195,7 +227,7 @@ const COMMANDS = {
     purge: {
       short: "purge",
       slash: "mod purge",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".purge <cantidad> [@usuario]",
       aliases: ["clear", "limpiar"],
       description: "Elimina mensajes del canal.",
@@ -203,7 +235,7 @@ const COMMANDS = {
     warn: {
       short: "warn",
       slash: "mod warn",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".warn <@usuario> <razón>",
       aliases: ["advertir"],
       description: "Advierte a un usuario.",
@@ -211,7 +243,7 @@ const COMMANDS = {
     removewarn: {
       short: "removewarn",
       slash: "mod removewarn",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".removewarn <warnID>",
       aliases: ["rwarn", "delwarn"],
       description: "Elimina una advertencia por su ID.",
@@ -219,7 +251,7 @@ const COMMANDS = {
     clearwarns: {
       short: "clearwarns",
       slash: "mod clearwarns",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".clearwarns <@usuario>",
       aliases: ["cwarns", "resetwarns"],
       description: "Borra todas las advertencias de un usuario.",
@@ -227,7 +259,7 @@ const COMMANDS = {
     warnings: {
       short: "warnings",
       slash: "mod warnings",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".warnings <@usuario>",
       aliases: ["warns", "infracciones"],
       description: "Ver advertencias de un usuario.",
@@ -235,7 +267,7 @@ const COMMANDS = {
     setlogs: {
       short: "setlogs",
       slash: "mod setlogs",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".setlogs <#canal>",
       aliases: ["logs"],
       description: "Establece el canal de logs para RedBot.",
@@ -243,7 +275,7 @@ const COMMANDS = {
     removelogs: {
       short: "removelogs",
       slash: "mod removelogs",
-      slashId: "1481436920075649282",
+      slashId: "1482626230078410767",
       usage: ".removelogs",
       aliases: ["dellogs", "nologs"],
       description: "Desactiva los logs de RedBot en el servidor.",
@@ -253,7 +285,7 @@ const COMMANDS = {
     info: {
       short: "server",
       slash: "server info",
-      slashId: "1481436920075649284",
+      slashId: "1482626230078410767",
       usage: ".server",
       aliases: ["sv", "serverinfo", "si"],
       description: "Muestra información general del servidor.",
@@ -261,7 +293,7 @@ const COMMANDS = {
     logo: {
       short: "logo",
       slash: "server logo",
-      slashId: "1481436920075649284",
+      slashId: "1482626230078410767",
       usage: ".logo",
       aliases: ["icon", "servericon"],
       description: "Muestra el logo del servidor.",
@@ -269,7 +301,7 @@ const COMMANDS = {
     banner: {
       short: "sbanner",
       slash: "server banner",
-      slashId: "1481436920075649284",
+      slashId: "1482626230078410767",
       usage: ".sbanner",
       aliases: ["serverbanner"],
       description: "Muestra el banner del servidor.",
@@ -277,7 +309,7 @@ const COMMANDS = {
     emojis: {
       short: "emojis",
       slash: "server emojis",
-      slashId: "1481436920075649284",
+      slashId: "1482626230078410767",
       usage: ".emojis",
       aliases: ["serveremojis", "emoji"],
       description: "Muestra todos los emojis del servidor.",
@@ -285,7 +317,7 @@ const COMMANDS = {
     roles: {
       short: "sroles",
       slash: "server roles",
-      slashId: "1481436920075649284",
+      slashId: "1482626230078410767",
       usage: ".sroles",
       aliases: ["serverroles", "listroles"],
       description: "Lista los roles del servidor.",
@@ -295,7 +327,7 @@ const COMMANDS = {
     info: {
       short: "role",
       slash: "role info",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".role <@rol>",
       aliases: ["roleinfo", "ri"],
       description: "Muestra información de un rol.",
@@ -303,7 +335,7 @@ const COMMANDS = {
     icon: {
       short: "ricon",
       slash: "role icon",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".ricon <@rol>",
       aliases: ["roleicon"],
       description: "Muestra el icono de un rol.",
@@ -311,7 +343,7 @@ const COMMANDS = {
     color: {
       short: "rcolor",
       slash: "role color",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rcolor <@rol>",
       aliases: ["rolecolor", "rolcolor"],
       description: "Muestra el color de un rol.",
@@ -319,7 +351,7 @@ const COMMANDS = {
     users: {
       short: "rusers",
       slash: "role users",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rusers <@rol>",
       aliases: ["roleusers", "rwho"],
       description: "Lista usuarios con un rol.",
@@ -327,7 +359,7 @@ const COMMANDS = {
     add: {
       short: "radd",
       slash: "role add",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".radd <@usuario> <@rol>",
       aliases: ["roleadd", "addrole"],
       description: "Añade un rol a un usuario.",
@@ -335,7 +367,7 @@ const COMMANDS = {
     remove: {
       short: "rremove",
       slash: "role remove",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rremove <@usuario> <@rol>",
       aliases: ["roleremove", "delrole"],
       description: "Quita un rol a un usuario.",
@@ -343,7 +375,7 @@ const COMMANDS = {
     rename: {
       short: "rrename",
       slash: "role rename",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rrename <@rol> <nombre>",
       aliases: ["renamerole"],
       description: "Renombra un rol.",
@@ -351,7 +383,7 @@ const COMMANDS = {
     hoist: {
       short: "rhoist",
       slash: "role hoist",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rhoist <@rol>",
       aliases: ["rolehoist"],
       description: "Activa o desactiva si un rol se muestra separado.",
@@ -359,7 +391,7 @@ const COMMANDS = {
     mentionable: {
       short: "rmention",
       slash: "role mentionable",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rmention <@rol>",
       aliases: ["rolemention", "mentionable"],
       description: "Activa o desactiva si un rol es mencionable.",
@@ -367,7 +399,7 @@ const COMMANDS = {
     random: {
       short: "rrandom",
       slash: "role random",
-      slashId: "1481436920075649283",
+      slashId: "1482626230078410768",
       usage: ".rrandom",
       aliases: ["randomrole"],
       description: "Muestra un rol aleatorio del servidor.",
@@ -377,7 +409,7 @@ const COMMANDS = {
     info: {
       short: "cinfo",
       slash: "channel info",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".cinfo [#canal]",
       aliases: ["chinfo", "channelinfo"],
       description: "Muestra información de un canal.",
@@ -385,7 +417,7 @@ const COMMANDS = {
     rename: {
       short: "crename",
       slash: "channel rename",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".crename <#canal> <nombre>",
       aliases: ["chrename", "chanrename"],
       description: "Renombra un canal.",
@@ -393,7 +425,7 @@ const COMMANDS = {
     lock: {
       short: "lock",
       slash: "channel lock",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".lock [#canal]",
       aliases: ["lockdown", "cerrar"],
       description: "Bloquea un canal para usuarios normales.",
@@ -401,7 +433,7 @@ const COMMANDS = {
     unlock: {
       short: "unlock",
       slash: "channel unlock",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".unlock [#canal]",
       aliases: ["abrir", "desbloquear"],
       description: "Abre un canal bloqueado.",
@@ -409,7 +441,7 @@ const COMMANDS = {
     slowmode: {
       short: "sm",
       slash: "channel slowmode",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".sm <tiempo> [#canal]",
       aliases: ["slowmode", "lento"],
       description: "Establece el slowmode de un canal (0 para desactivar).",
@@ -417,7 +449,7 @@ const COMMANDS = {
     nuke: {
       short: "nuke",
       slash: "channel nuke",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".nuke [#canal]",
       aliases: ["vaciar", "limpiar"],
       description: "Recrea el canal borrando todos sus mensajes.",
@@ -425,7 +457,7 @@ const COMMANDS = {
     clone: {
       short: "clone",
       slash: "channel clone",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".clone [#canal]",
       aliases: ["clonar", "duplicar"],
       description: "Clona un canal con su configuración.",
@@ -433,7 +465,7 @@ const COMMANDS = {
     permit: {
       short: "permit",
       slash: "channel permit",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".permit <@usuario> [#canal]",
       aliases: ["allow", "acceso"],
       description: "Da acceso a un usuario en un canal.",
@@ -441,7 +473,7 @@ const COMMANDS = {
     deny: {
       short: "deny",
       slash: "channel deny",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".deny <@usuario> [#canal]",
       aliases: ["block", "denegar"],
       description: "Quita el acceso a un usuario en un canal.",
@@ -449,7 +481,7 @@ const COMMANDS = {
     hide: {
       short: "hide",
       slash: "channel hide",
-      slashId: "1481436920075649280",
+      slashId: "1482626230078410764",
       usage: ".hide [#canal]",
       aliases: ["ocultar", "esconder"],
       description: "Oculta un canal a @everyone.",
@@ -459,7 +491,7 @@ const COMMANDS = {
     opinion: {
       short: "opinion",
       slash: "fun opinion",
-      slashId: "1481436920075649281",
+      slashId: "1482626230078410765",
       usage: ".opinion <tema>",
       aliases: ["op", "opina"],
       description: "Pide mi opinión sin filtro sobre algo.",
@@ -467,7 +499,7 @@ const COMMANDS = {
     critica: {
       short: "critica",
       slash: "fun critica",
-      slashId: "1481436920075649281",
+      slashId: "1482626230078410765",
       usage: ".critica <tema>",
       aliases: ["criticar"],
       description: "Te doy una crítica despiadada de algo.",
@@ -475,7 +507,7 @@ const COMMANDS = {
     excusa: {
       short: "excusa",
       slash: "fun excusa",
-      slashId: "1481436920075649281",
+      slashId: "1482626230078410765",
       usage: ".excusa [situacion]",
       aliases: ["coartada"],
       description: "Genera una excusa ridícula pero creativa.",
@@ -483,7 +515,7 @@ const COMMANDS = {
     teoria: {
       short: "teoria",
       slash: "fun teoria",
-      slashId: "1481436920075649281",
+      slashId: "1482626230078410765",
       usage: ".teoria <tema>",
       aliases: ["conspira"],
       description: "Una teoría conspirativa sobre cualquier cosa.",
@@ -491,7 +523,7 @@ const COMMANDS = {
     roast: {
       short: "roast",
       slash: "fun roast",
-      slashId: "1481436920075649281",
+      slashId: "1482626230078410765",
       usage: ".roast [@usuario]",
       aliases: ["burn"],
       description: "Critica despiadadamente a un usuario.",
