@@ -57,7 +57,7 @@ const getCommands = () => ({
     translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",aliases: ["traducir", "trans"],            description: "Traduce texto a otro idioma." },
     describe:  { short: "describe",  slash: "util describe",  id: IDS.util(), usage: ".describe <url | adjunto>",  aliases: ["describir"],                    description: "Describe el contenido de una imagen." },
     transcribe:{ short: "transcribe",slash: "util transcribe",id: IDS.util(), usage: ".transcribe <url | adjunto>",aliases: ["transcribir"],                  description: "Transcribe un audio o video a texto." },
-    resumir:   { short: "resumir",   slash: "util resumir",   id: IDS.util(), usage: ".resumir <texto>",           aliases: ["resume", "summarize"],          description: "Resume un texto largo." },
+    resumir:   { short: "resume",   slash: "util resume",   id: IDS.util(), usage: ".resumie <texto>",           aliases: ["resumir", "summarize"],          description: "Resume un texto largo de 100 caracteres o más." },
   },
   usuario: {
     info:        { short: "user",   slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",   aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
@@ -100,7 +100,6 @@ const getCommands = () => ({
     rename:      { short: "rrename", slash: "role rename",      id: IDS.role(), usage: ".rrename <@rol> <nombre>", aliases: ["renamerole"],                  description: "Renombra un rol." },
     hoist:       { short: "rhoist",  slash: "role hoist",       id: IDS.role(), usage: ".rhoist <@rol>",           aliases: ["rolehoist"],                   description: "Activa o desactiva si un rol se muestra separado." },
     mentionable: { short: "rmention",slash: "role mentionable", id: IDS.role(), usage: ".rmention <@rol>",         aliases: ["rolemention"],                 description: "Activa o desactiva si un rol es mencionable." },
-    random:      { short: "rrandom", slash: "role random",      id: IDS.role(), usage: ".rrandom",                 aliases: ["randomrole"],                  description: "Muestra un rol aleatorio del servidor." },
     all:         { short: "roleall", slash: "role all",         id: IDS.role(), usage: ".roleall <@rol> [bots]",   aliases: ["allrole"],                     description: "Añade un rol a todos los miembros." },
     removeall:   { short: "roleremoveall", slash: "role removeall", id: IDS.role(), usage: ".roleremoveall <@rol>",aliases: ["removeroleall"],               description: "Quita un rol a todos los miembros que lo tengan." },
     bots:        { short: "rolebots",slash: "role bots",        id: IDS.role(), usage: ".rolebots <@rol> <add|remove>", aliases: ["botsrole"],               description: "Añade o quita un rol a todos los bots." },
