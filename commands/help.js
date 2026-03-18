@@ -46,7 +46,7 @@ const CATEGORY_LABELS = {
 //  COMANDOS
 // ─────────────────────────────────────────────
 
-const COMMANDS = {
+const getCommands = () => ({
   utilidad: {
     ask:       { short: "ask",       slash: "ask",            id: IDS.ask(),  usage: ".ask <pregunta>",            aliases: ["ai", "ia"],                    description: "Hazle una pregunta a la IA." },
     ping:      { short: "ping",      slash: "util ping",      id: IDS.util(), usage: ".ping",                      aliases: [],                               description: "Muestra la latencia actual del bot." },
@@ -126,7 +126,7 @@ const COMMANDS = {
     teoria:  { short: "teoria",  slash: "fun teoria",  id: IDS.fun(), usage: ".teoria <tema>",   aliases: ["conspira"],      description: "Una teoría conspirativa sobre cualquier cosa." },
     roast:   { short: "roast",   slash: "fun roast",   id: IDS.fun(), usage: ".roast [@usuario]", aliases: ["burn"],         description: "Critica despiadadamente a un usuario." },
   },
-};
+});
 
 // ─────────────────────────────────────────────
 //  HELPERS
@@ -158,7 +158,8 @@ const data = {
       const prefixCache = require("../utils/prefixCache");
       const prefix = (ctx.guild?.id && prefixCache.get(ctx.guild.id)) || ".";
 
-      // Bug fix: prefix siempre muestra prefixed, slash siempre muestra slash
+      const COMMANDS = getCommands();
+
       const formatCommand = (cmd) => {
         if (isSlash) return `</${cmd.slash}:${cmd.id}>`;
         return cmd.short ? `${prefix}${cmd.short}` : `</${cmd.slash}:${cmd.id}>`;
@@ -291,7 +292,6 @@ const data = {
 
         if (!cmd) return i.reply({ content: "No encontré ese comando", flags: MessageFlags.Ephemeral }).catch(() => {});
 
-        // En el detalle del select: slash siempre muestra mention, prefix siempre muestra .uso
         const usoValue = isSlash
           ? `</${cmd.slash}:${cmd.id}>`
           : cmd.short ? `\`${cmd.usage}\`` : `</${cmd.slash}:${cmd.id}>`;
