@@ -425,7 +425,7 @@ const COMMANDS = {
       slash: "role bots",
       slashId: "1481436920075649283",
       usage: ".rolebots <@rol> <add|remove>",
-      aliases: ["botsrole", "rolebots"],
+      aliases: ["botsrole"],
       description: "Añade o quita un rol a todos los bots.",
     },
     humans: {
@@ -433,7 +433,7 @@ const COMMANDS = {
       slash: "role humans",
       slashId: "1481436920075649283",
       usage: ".rolehumans <@rol> <add|remove>",
-      aliases: ["humansrole", "rolehumans"],
+      aliases: ["humansrole"],
       description: "Añade o quita un rol a todos los usuarios (sin bots).",
     },
     join: {
@@ -441,7 +441,7 @@ const COMMANDS = {
       slash: "role join",
       slashId: "1481436920075649283",
       usage: ".rolejoin [@rol]",
-      aliases: ["joinrole", "rolejoin", "autorole"],
+      aliases: ["joinrole", "autorole"],
       description: "Configura o desactiva el rol automático al entrar.",
     },
   },
