@@ -41,7 +41,7 @@ const data = {
             .setDescription(
               `**Usos:**\nResume un texto de 100 caracteres o más` +
               `\n\n**Aliases:**\n\`resumir\`, \`summarize\`` +
-              `\n\n\`\`\`js\n.resumir <texto>\nEjemplo: .resumir en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\``
+              `\n\n\`\`\`js\n.resume <texto>\nEjemplo: .resume en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\``
             )
             .setColor(RED),
         ],
