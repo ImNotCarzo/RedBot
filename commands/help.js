@@ -1,4 +1,3 @@
-const { getId } = require("../utils/commandIds");
 const { CommandBuilder } = require("erine");
 const {
   ContainerBuilder,
@@ -14,7 +13,7 @@ const {
   StringSelectMenuOptionBuilder,
   EmbedBuilder,
 } = require("discord.js");
-
+const { getId } = require("../utils/commandIds");
 const IDS = {
   ask:     () => getId("ask"),
   util:    () => getId("util"),
