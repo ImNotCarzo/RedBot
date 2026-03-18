@@ -189,7 +189,7 @@ const data = {
         new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId(`help_select_${category}`)
-            .setPlaceholder("Selecciona un comando para ver detalles")
+            .setPlaceholder("Selecciona un comando")
             .addOptions(
               Object.entries(COMMANDS[category]).map(([key, cmd]) =>
                 new StringSelectMenuOptionBuilder()
