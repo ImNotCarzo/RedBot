@@ -579,7 +579,9 @@ const data = {
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
 
-    await ctx.guild.members.fetch();
+    if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+  await ctx.guild.members.fetch().catch(() => {});
+}
     const targets = ctx.guild.members.cache.filter(m =>
       !m.roles.cache.has(role.id) &&
       (incluirBot ? true : !m.user.bot)
@@ -686,7 +688,9 @@ const data = {
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
 
-    await ctx.guild.members.fetch();
+    if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+  await ctx.guild.members.fetch().catch(() => {});
+}
     const targets = ctx.guild.members.cache.filter(m =>
       m.roles.cache.has(role.id) &&
       (incluirBot ? true : !m.user.bot)
@@ -793,7 +797,9 @@ const data = {
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
 
-    await ctx.guild.members.fetch();
+    if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+  await ctx.guild.members.fetch().catch(() => {});
+}
     const targets = ctx.guild.members.cache.filter(m =>
       m.user.bot &&
       (accion === "add" ? !m.roles.cache.has(role.id) : m.roles.cache.has(role.id))
@@ -903,8 +909,9 @@ const data = {
 
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
-
-    await ctx.guild.members.fetch();
+if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+  await ctx.guild.members.fetch().catch(() => {});
+}
     const targets = ctx.guild.members.cache.filter(m =>
       !m.user.bot &&
       (accion === "add" ? !m.roles.cache.has(role.id) : m.roles.cache.has(role.id))
