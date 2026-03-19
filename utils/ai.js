@@ -7,7 +7,7 @@ const aiClients = new Map();
 function getAI() {
   const apiKey = GEMINI_KEYS[currentKey];
   if (!apiKey) {
-    throw new Error("No hay ninguna API key de Gemini configurada");
+    throw new Error("No hay ninguna clave API de Gemini configurada");
   }
   if (!aiClients.has(apiKey)) {
     aiClients.set(apiKey, new GoogleGenAI({ apiKey }));
