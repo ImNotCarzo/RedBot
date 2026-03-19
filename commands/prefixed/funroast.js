@@ -1,5 +1,10 @@
 const { CommandBuilder } = require("erine");
-const { EmbedBuilder, MessageFlags } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
+const { GoogleGenAI } = require("@google/genai");
+
+// ─────────────────────────────────────────────
+//  CONSTANTS
+// ─────────────────────────────────────────────
 
 const COLOR = "#ff383d";
 
@@ -9,29 +14,55 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-async function generateHealer(prompt, imageUrl = null) {
-  const content = imageUrl
-    ? [
-        { type: "text",      text: prompt },
-        { type: "image_url", image_url: { url: imageUrl } },
-      ]
-    : prompt;
+// ─────────────────────────────────────────────
+//  AI
+// ─────────────────────────────────────────────
 
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openrouter/healer-alpha",
-      messages: [{ role: "user", content }],
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+function getAI() {
+  return new GoogleGenAI({ apiKey: process.env.GEMINI });
 }
+
+async function generateGemmaVision(prompt, imageUrl) {
+  const imgRes    = await fetch(imageUrl);
+  const imgBuf    = await imgRes.arrayBuffer();
+  const imgBase64 = Buffer.from(imgBuf).toString("base64");
+  const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
+
+  const response = await getAI().models.generateContent({
+    model: "gemma-3-12b-it",
+    contents: [{
+      role: "user",
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType, data: imgBase64 } },
+      ],
+    }],
+  });
+
+  return response.text?.trim() ?? null;
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+
+function msATexto(ms) {
+  const min  = Math.floor(ms / 60000);
+  const hrs  = Math.floor(min / 60);
+  const dias = Math.floor(hrs / 24);
+  const mes  = Math.floor(dias / 30);
+  const años = Math.floor(dias / 365);
+
+  if (años >= 1) return `${años} año${años > 1 ? "s" : ""}`;
+  if (mes  >= 1) return `${mes} mes${mes > 1 ? "es" : ""}`;
+  if (dias >= 1) return `${dias} día${dias > 1 ? "s" : ""}`;
+  if (hrs  >= 1) return `${hrs} hora${hrs > 1 ? "s" : ""}`;
+  return `${min} minuto${min > 1 ? "s" : ""}`;
+}
+
+// ─────────────────────────────────────────────
+//  COMMAND
+// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -43,7 +74,9 @@ const data = {
   }),
 
   async code(ctx) {
-    if (!ctx.guild) return ctx.send("Este comando solo funciona en servidores");
+    if (!ctx.guild) {
+      return ctx.send("Este comando solo funciona en servidores");
+    }
 
     try {
       const target = ctx.message?.mentions?.members?.first() ?? ctx.member;
@@ -52,10 +85,18 @@ const data = {
       const user     = target.user;
       const username = user.globalName ?? user.username;
       const usertag  = user.username;
-      const created  = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
-      const joined   = target.joinedTimestamp
-        ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>`
-        : "desconocido";
+
+      const ahoraMs     = Date.now();
+      const createdHace = msATexto(ahoraMs - user.createdTimestamp);
+      const createdDate = new Date(user.createdTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" });
+
+      const joinedHace = target.joinedTimestamp
+        ? msATexto(ahoraMs - target.joinedTimestamp)
+        : null;
+
+      const joinedDate = target.joinedTimestamp
+        ? new Date(target.joinedTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" })
+        : null;
 
       const activity = target.presence?.activities?.[0]?.name ?? null;
       const status   = target.presence?.status ?? "offline";
@@ -70,13 +111,14 @@ const data = {
         "Administrator", "ManageGuild", "ManageMessages",
         "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
       ];
+
       const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
       const badges = user.flags?.toArray()?.join(", ") || "ninguna";
 
       const datosUsuario = [
         `Nombre: ${username} (@${usertag})`,
-        `Cuenta creada: ${created}`,
-        `Entró al servidor: ${joined}`,
+        `Cuenta creada: hace ${createdHace} (${createdDate})`,
+        joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
         `Estado: ${status}`,
         activity ? `Actividad: ${activity}` : null,
         `Roles: ${roles}`,
@@ -85,22 +127,18 @@ const data = {
       ].filter(Boolean).join("\n");
 
       const prompt = `${PERSONA}
-
 Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
-Reglas estrictas:
-- RESPONDE ÚNICAMENTE EN ESPAÑOL. Ninguna palabra en otro idioma.
-- Mínimo 3 párrafos, máximo 4. No seas corto.
-- Sarcasmo, humor negro e ingenio. Sin amenazas reales.
-- Analiza la foto de perfil en detalle, describe qué ves y úsalo para burlarte.
-- Usa los datos del perfil para ataques específicos, no genéricos.
-- Nada de frases genéricas como "eres el típico usuario que...".
-- El roast debe sentirse personalizado, no una plantilla.
-
-Datos del usuario:
+Sarcasmo, humor negro e ingenio. Sin amenazas reales. Sin ser genérico.
+Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos.
 ${datosUsuario}`;
 
-      const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
-      const texto     = (await generateHealer(prompt, avatarUrl))?.slice(0, 4000)
+      const avatarUrl = user.displayAvatarURL({
+        size: 256,
+        extension: "png",
+        forceStatic: true,
+      });
+
+      const texto = (await generateGemmaVision(prompt, avatarUrl))?.slice(0, 4000)
         ?? "Ocurrió un error con la IA, intenta de nuevo";
 
       await ctx.send({
@@ -113,8 +151,9 @@ ${datosUsuario}`;
             .setTimestamp(),
         ],
       });
+
     } catch (err) {
-      console.error("[fun roast]", err);
+      console.error("[fun roast prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
     }
   },
