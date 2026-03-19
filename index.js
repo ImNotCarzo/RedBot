@@ -68,6 +68,54 @@ const bot = new Erine({
   },
 });
 
+function normalizeReplyPayload(payload) {
+  if (typeof payload === "string") return { content: payload };
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { content: String(payload ?? "") };
+  }
+  return payload;
+}
+
+function wrapPrefixedCommands() {
+  const prefixedPath = path.join(__dirname, "commands", "prefixed");
+  const prefixedFiles = fs.readdirSync(prefixedPath).filter((file) => file.endsWith(".js"));
+
+  for (const file of prefixedFiles) {
+    const modulePath = path.join(prefixedPath, file);
+    const commandModule = require(modulePath);
+    const command = commandModule?.data;
+    const originalCode = command?.code;
+
+    if (typeof originalCode !== "function" || originalCode.__prefixedReplyWrapped) continue;
+
+    const wrappedCode = async function (ctx, ...args) {
+      await ctx.channel.sendTyping().catch(() => {});
+
+      const originalMessageReply = ctx?.message?.reply?.bind(ctx.message);
+      if (originalMessageReply) {
+        const safeReply = (payload) => {
+          const replyPayload = normalizeReplyPayload(payload);
+          return originalMessageReply({
+            ...replyPayload,
+            allowedMentions: {
+              ...replyPayload.allowedMentions,
+              repliedUser: false,
+            },
+          });
+        };
+
+        ctx.message.reply = safeReply;
+        ctx.send = safeReply;
+      }
+
+      return originalCode.call(this, ctx, ...args);
+    };
+
+    wrappedCode.__prefixedReplyWrapped = true;
+    command.code = wrappedCode;
+  }
+}
+
 // ─────────────────────────────────────────────
 //  DB
 // ─────────────────────────────────────────────
@@ -81,6 +129,7 @@ mongoose
 //  LOADERS
 // ─────────────────────────────────────────────
 
+wrapPrefixedCommands();
 bot.load("commands");
 bot.login(process.env.TOKEN);
 bot.setMaxListeners(20);
