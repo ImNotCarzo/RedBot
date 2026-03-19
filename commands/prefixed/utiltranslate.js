@@ -44,9 +44,11 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
+            .setAuthor({ name: "Comando Translate", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Uso:**\n\`.translate <texto> [idioma]\`\n\n` +
-              `Ejemplo: \`.translate hello español\``
+              `**Usos:**\nTraduce texto a cualquier idioma` +
+              `\n\n**Aliases:**\n\`traducir\`, \`trans\`` +
+              `\n\n\`\`\`js\n.translate <texto> [idioma]\nEjemplo: .translate כלב español\`\`\``
             )
             .setColor(COLOR),
         ],
