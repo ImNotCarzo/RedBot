@@ -2,9 +2,14 @@ const { GoogleGenAI } = require("@google/genai");
 
 const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
 let currentKey = 0;
+const aiClients = new Map();
 
 function getAI() {
-  return new GoogleGenAI({ apiKey: GEMINI_KEYS[currentKey] });
+  const apiKey = GEMINI_KEYS[currentKey];
+  if (!aiClients.has(apiKey)) {
+    aiClients.set(apiKey, new GoogleGenAI({ apiKey }));
+  }
+  return aiClients.get(apiKey);
 }
 
 function rotateKey() {
@@ -46,4 +51,4 @@ function toGeminiHistory(historial) {
   }));
 }
 
-module.exports = { generateWithFallback, needsSearchAI, toGeminiHistory };
+module.exports = { generateWithFallback, needsSearchAI, toGeminiHistory, getAI };
