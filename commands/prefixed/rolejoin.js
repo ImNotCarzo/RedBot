@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const { GREEN, RED } = require("../../utils/colors");
-const { sendLog } = require("../../utils/helpers");
+const sendLog = require("../../utils/sendLog");
 
 function roleHierarchyCheck(ctx, role) {
   if (role.managed) return "No puedo editar roles gestionados por integraciones";

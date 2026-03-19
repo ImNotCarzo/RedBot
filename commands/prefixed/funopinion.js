@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
-const { GoogleGenAI } = require("@google/genai");
+const { getAI } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
 
@@ -11,10 +11,6 @@ Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
 // AI
-
-function getAI() {
-  return new GoogleGenAI({ apiKey: process.env.GEMINI });
-}
 
 async function generateGemma(prompt) {
   const response = await getAI().models.generateContent({

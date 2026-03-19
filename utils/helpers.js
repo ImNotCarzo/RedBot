@@ -32,6 +32,23 @@ async function resolveMember(ctx, input) {
   return null;
 }
 
+async function resolveMemberFlexible(ctx, input) {
+  if (!ctx?.guild) return null;
+  if (!input) return ctx.member ?? null;
+  if (typeof input === "object") return input;
+
+  const member = await resolveMember(ctx, input);
+  if (member) return member;
+
+  const lower = input.toLowerCase();
+  return ctx.guild.members.cache.find((m) => {
+    const username = m.user.username?.toLowerCase() ?? "";
+    const globalName = m.user.globalName?.toLowerCase() ?? "";
+    const nickname = m.nickname?.toLowerCase() ?? "";
+    return username.includes(lower) || globalName.includes(lower) || nickname.includes(lower);
+  }) ?? null;
+}
+
 const TempBan = require("../models/TempBan");
 
 function scheduleTempUnban(client, guildId, userId, unbanAt) {
@@ -52,4 +69,4 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
   else setTimeout(execute, delay);
 }
 
-module.exports = { generateId, parseDuration, formatDuration, resolveMember, scheduleTempUnban };
+module.exports = { generateId, parseDuration, formatDuration, resolveMember, resolveMemberFlexible, scheduleTempUnban };

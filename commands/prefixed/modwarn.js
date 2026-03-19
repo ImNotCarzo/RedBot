@@ -71,7 +71,7 @@ const data = {
 
       const logEmbed = new EmbedBuilder()
         .setTitle("Advertencia emitida")
-        .setColor(GREEN)
+        .setColor(YELLOW)
         .addFields(
           { name: "Usuario",     value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
           { name: "Moderador",   value: modTag,                                   inline: true },

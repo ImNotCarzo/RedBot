@@ -81,8 +81,8 @@ const data = {
         .setTitle("Massban ejecutado")
         .setColor(RED)
         .addFields(
-          { name: "Baneados", value: banned.length ? banned.map(m => m.user.tag).join(", ") : "Ninguno", inline: false },
-          ...(failed.length ? [{ name: "Fallidos", value: failed.map(m => m.user.tag).join(", "), inline: false }] : []),
+          { name: "Baneados", value: banned.length ? banned.map(m => m.user.username).join(", ") : "Ninguno", inline: false },
+          ...(failed.length ? [{ name: "Fallidos", value: failed.map(m => m.user.username).join(", "), inline: false }] : []),
         )
         .setTimestamp();
 
@@ -97,7 +97,7 @@ const data = {
             { name: "Baneados",  value: `${banned.length}`,                          inline: true },
             { name: "Fallidos",  value: `${failed.length}`,                          inline: true },
             { name: "Razón",     value: reason,                                      inline: false },
-            { name: "Usuarios",  value: banned.map(m => `${m.user.tag} (\`${m.id}\`)`).join("\n"), inline: false },
+            { name: "Usuarios",  value: banned.map(m => `${m.user.username} (\`${m.id}\`)`).join("\n"), inline: false },
           )
           .setTimestamp();
 
