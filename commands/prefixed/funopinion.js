@@ -2,10 +2,6 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { GoogleGenAI } = require("@google/genai");
 
-// ─────────────────────────────────────────────
-//  CONSTANTS
-// ─────────────────────────────────────────────
-
 const COLOR = "#ff383d";
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
@@ -14,9 +10,7 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
+// AI
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI });
@@ -26,16 +20,12 @@ async function generateGemma(prompt) {
   const response = await getAI().models.generateContent({
     model: "gemma-3-12b-it",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      temperature: 1.0,
-    },
+    config: { temperature: 1.0 },
   });
   return response.text?.trim() ?? null;
 }
 
-// ─────────────────────────────────────────────
-//  COMMAND
-// ─────────────────────────────────────────────
+// COMMAND
 
 const data = {
   data: new CommandBuilder({
@@ -64,6 +54,10 @@ const data = {
       });
     }
 
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
+
     try {
       const prompt = `${PERSONA}
 Da tu opinión personal, sarcástica y sin filtro sobre: "${tema}".
@@ -71,7 +65,7 @@ Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No import
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una opinión";
-await ctx.channel?.sendTyping?.();
+
       await ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -85,6 +79,8 @@ await ctx.channel?.sendTyping?.();
     } catch (err) {
       console.error("[fun opinion prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
