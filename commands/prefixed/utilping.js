@@ -27,8 +27,10 @@ const data = {
               `> **API:** \`${apiPing}ms\``
             )
             .setColor("#ff383d"),
-        ], allowedMentions: { repliedUser: false } });
+        ],
+        allowedMentions: { repliedUser: false },
       });
+
     } catch (err) {
       console.error("[ping]", err);
       await ctx.send("Algo salió mal");
