@@ -92,4 +92,4 @@ Responde en español. Máximo 3 párrafos.`;
   },
 };
 
-module.exports = { data };
+module.exports = { data, usesAI: true };
