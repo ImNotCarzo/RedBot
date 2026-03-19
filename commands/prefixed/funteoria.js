@@ -47,7 +47,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const tema = ctx.args?.join(" ").trim();
 
     if (!tema) {
@@ -73,7 +72,7 @@ Máximo 3 párrafos, sin aclarar que es ficción.`;
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una teoría";
-
+await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
