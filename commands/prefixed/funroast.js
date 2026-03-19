@@ -77,6 +77,7 @@ const data = {
   }),
 
   async code(ctx) {
+    await ctx.channel?.sendTyping?.();
     if (!ctx.guild) {
       return ctx.send("Este comando solo funciona en servidores");
     }
