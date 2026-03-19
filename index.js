@@ -121,24 +121,27 @@ function wrapPrefixedCommands() {
 
       let typingInterval;
       let typingStarted = false;
+      let delay;
 
-      const startTyping = () => {
-        if (typingStarted) return;
-        typingStarted = true;
+      if (commandModule.usesAI) {
+        const startTyping = () => {
+          if (typingStarted) return;
+          typingStarted = true;
 
-        typingInterval = setInterval(() => {
+          typingInterval = setInterval(() => {
+            ctx.channel?.sendTyping?.().catch(() => {});
+          }, 8000);
+
           ctx.channel?.sendTyping?.().catch(() => {});
-        }, 8000);
+        };
 
-        ctx.channel?.sendTyping?.().catch(() => {});
-      };
-
-      const delay = setTimeout(startTyping, 500);
+        delay = setTimeout(startTyping, 500);
+      }
 
       try {
         return await originalCode.call(this, ctx, ...args);
       } finally {
-        clearTimeout(delay);
+        if (delay) clearTimeout(delay);
         if (typingInterval) clearInterval(typingInterval);
       }
     };
