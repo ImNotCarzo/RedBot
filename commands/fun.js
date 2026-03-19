@@ -318,6 +318,21 @@ ${datosUsuario}`;
         await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
+  })
+    
+  .addCommand({
+    data: new CommandBuilder({
+      name: "lol",
+      description: "Ríete de algo asi bien jaja",
+    }),
+
+    async code(ctx) {
+        await ctx.send("😂🖕");
+      } catch (err) {
+        console.error("[fun lol]", err);
+        await reply({ content: "error we", flags: MessageFlags.Ephemeral });
+      }
+    },
   }),
 };
 
