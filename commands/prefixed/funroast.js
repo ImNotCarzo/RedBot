@@ -29,15 +29,18 @@ async function generateGemmaVision(prompt, imageUrl) {
   const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
 
   const response = await getAI().models.generateContent({
-    model: "gemma-3-12b-it",
-    contents: [{
-      role: "user",
-      parts: [
-        { text: prompt },
-        { inlineData: { mimeType, data: imgBase64 } },
-      ],
-    }],
-  });
+  model: "gemma-3-12b-it",
+  contents: [{
+    role: "user",
+    parts: [
+      { text: prompt },
+      { inlineData: { mimeType, data: imgBase64 } },
+    ],
+  }],
+  config: {
+    temperature: 1.2,
+  },
+});
 
   return response.text?.trim() ?? null;
 }
