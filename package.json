@@ -1,6 +1,6 @@
 {
   "name": "RedBot",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "description": "erine bot",
   "main": "index.js",
   "scripts": {
