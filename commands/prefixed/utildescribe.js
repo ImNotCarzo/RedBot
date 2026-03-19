@@ -42,7 +42,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const urlArg   = ctx.args?.[0]?.trim();
     const adjunto  = ctx.message?.attachments?.first();
     const imageUrl = urlArg || adjunto?.url;
@@ -68,7 +67,7 @@ Sé específico: colores, objetos, personas, texto visible, ambiente, estilo.
 Responde en español. Máximo 3 párrafos.`;
 
       const texto = await generateVision(prompt, imageUrl);
-
+await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
