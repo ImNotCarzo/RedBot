@@ -51,11 +51,13 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
+            .setAuthor({ name: "Comando Opinion", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Uso:**\n\`.opinion <tema>\`\n\n` +
-              `Ejemplo: \`.opinion la gente que aplaude en el avión\``
+              `**Usos:**\nPide mi opinión sin filtro sobre algo` +
+              `\n\n**Aliases:**\n\`op\`, \`opina\`` +
+              `\n\n\`\`\`js\n.opinion <tema>\nEjemplo: .opinion la chochoinflación\`\`\``
             )
-            .setColor(COLOR),
+            .setColor(RED),
         ],
       });
     }
