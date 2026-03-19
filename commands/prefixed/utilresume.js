@@ -83,4 +83,4 @@ ${texto.slice(0, 8000)}`;
   },
 };
 
-module.exports = { data };
+module.exports = { data, usesAI: true };
