@@ -63,7 +63,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-
+  usesAI: true,
   async code(ctx) {
     if (!ctx.guild) {
       return ctx.send("Este comando solo funciona en servidores");
