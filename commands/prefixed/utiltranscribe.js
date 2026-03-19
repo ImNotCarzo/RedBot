@@ -90,4 +90,4 @@ const data = {
   },
 };
 
-module.exports = { data };
+module.exports = { data, usesAI: true };
