@@ -1,25 +1,25 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { generateWithFallback } = require("../../utils/ai");
 
-const BLUE = "#5865f2";
-const RED  = "#ff383d";
+const COLOR = "#ff383d";
 
-async function generateHealer(messages) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openrouter/healer-alpha",
-      messages,
-    }),
+// ─────────────────────────────────────────────
+//  AI
+// ─────────────────────────────────────────────
+
+async function generateGeminiText(prompt) {
+  const response = await generateWithFallback({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+
+  return response.text?.trim() ?? null;
 }
+
+// ─────────────────────────────────────────────
+//  COMMAND
+// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -31,56 +31,57 @@ const data = {
   }),
 
   async code(ctx) {
-    const args    = ctx.args ?? [];
-    const ultimo  = args[args.length - 1];
+    const args   = ctx.args ?? [];
+    const ultimo = args[args.length - 1];
+
     const esIdioma = ultimo && !ultimo.includes(" ") && args.length > 1;
-    const idioma  = esIdioma ? ultimo : "español";
-    const texto   = esIdioma ? args.slice(0, -1).join(" ").trim() : args.join(" ").trim();
+    const idioma   = esIdioma ? ultimo : "español";
+    const texto    = esIdioma
+      ? args.slice(0, -1).join(" ").trim()
+      : args.join(" ").trim();
 
     if (!texto) {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
-            .setAuthor({ name: "Comando Translate", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Usos:**\nTraduce texto a cualquier idioma` +
-              `\n\n**Aliases:**\n\`traducir\`, \`trans\`` +
-              `\n\n\`\`\`js\n.translate <texto> [idioma]\nEjemplo: .translate כלב español\`\`\``
+              `**Uso:**\n\`.translate <texto> [idioma]\`\n\n` +
+              `Ejemplo: \`.translate hello español\``
             )
-            .setColor(RED),
+            .setColor(COLOR),
         ],
       });
     }
 
     try {
-      const respuesta = await generateHealer([{
-        role: "user",
-        content:
-          `Traduce el siguiente texto al ${idioma}.\n` +
-          `Responde ÚNICAMENTE con este formato JSON, sin texto adicional ni backticks:\n` +
-          `{"origen": "<idioma detectado en español>", "traduccion": "<texto traducido>"}\n\n` +
-          `Texto: ${texto}`,
-      }]);
+      const prompt =
+        `Traduce el siguiente texto al ${idioma}.\n` +
+        `Responde ÚNICAMENTE con este formato JSON, sin texto adicional:\n` +
+        `{"origen": "<idioma detectado en español>", "traduccion": "<texto traducido>"}\n\n` +
+        `Texto: ${texto}`;
+
+      const respuesta = await generateGeminiText(prompt);
 
       let origen     = "desconocido";
       let traduccion = null;
 
       try {
-        const parsed = JSON.parse(respuesta);
+        const parsed = JSON.parse(respuesta ?? "");
         origen     = parsed.origen     ?? "desconocido";
         traduccion = parsed.traduccion ?? null;
       } catch {
         traduccion = respuesta;
       }
 
-      if (!traduccion)
+      if (!traduccion) {
         return ctx.send("No se pudo generar la traducción");
+      }
 
       await ctx.send({
         embeds: [
           new EmbedBuilder()
             .setTitle("Traducción")
-            .setColor(RED)
+            .setColor(COLOR)
             .addFields(
               { name: "Original",   value: texto.slice(0, 1024),      inline: false },
               { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
@@ -89,8 +90,9 @@ const data = {
             .setTimestamp(),
         ],
       });
+
     } catch (err) {
-      console.error("[translate]", err);
+      console.error("[translate prefix]", err);
       await ctx.send("No se pudo conectar con el servicio de traducción");
     }
   },
