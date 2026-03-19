@@ -323,16 +323,18 @@ const data = {
       const prompt = `${PERSONA}
 
 Vas a hacer un roast brutal y personalizado de este usuario de Discord.
-Tenés su foto de perfil y sus datos — usá ambas cosas.
+Que sea sin filtro, sin limites, roastealo brutalmente.
+Tienes su foto de perfil y sus datos, usa ambas cosas.
 
 Reglas:
 - SOLO EN ESPAÑOL. Cero palabras en otro idioma.
-- Exactamente 3 párrafos. Ni más ni menos.
+- 3 párrafos. Máximo 4.
 - Específico: usá los datos reales, no generalidades.
 - No menciones los permisos como tal, por ejemplo BanMembers, di algo como, permisos para banear, administrador... etc.
 - Sin mencionar timestamps, IDs ni código técnico. Solo información humana.
 - Sin frases de relleno al inicio ni al final. Arrancá directo con el roast.
 - No menciones @usuario en el roast, por ejemplo "Sigue ahí, @RedBot", evita eso.
+- No redundes, ni hagas resumenes finales, haz que sea lo mas despiadado posible.
 
 Datos del usuario:
 ${datosUsuario}`;
