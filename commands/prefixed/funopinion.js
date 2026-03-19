@@ -47,7 +47,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const tema = ctx.args?.join(" ").trim();
 
     if (!tema) {
@@ -72,7 +71,7 @@ Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No import
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una opinión";
-
+await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
