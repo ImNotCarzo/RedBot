@@ -1,5 +1,6 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
+const { generateWithFallback } = require("../utils/ai");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -14,17 +15,17 @@ Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
 // ─────────────────────────────────────────────
-//  HEALER
+//  AI
 // ─────────────────────────────────────────────
+async function generateGemini(prompt) {
+  const response = await generateWithFallback({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+  return response.text?.trim() ?? null;
+}
 
-async function generateHealer(prompt, imageUrl = null) {
-  const content = imageUrl
-    ? [
-        { type: "text",      text: prompt },
-        { type: "image_url", image_url: { url: imageUrl } },
-      ]
-    : prompt;
-
+async function generateGemma(messages) {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -32,17 +33,12 @@ async function generateHealer(prompt, imageUrl = null) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openrouter/healer-alpha",
-      messages: [{ role: "user", content }],
+      model: "google/gemma-3-4b-it:free",
+      messages,
     }),
   });
-
   const data = await res.json();
-
-  if (!res.ok || data.error) {
-    throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  }
-
+  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
   return data.choices?.[0]?.message?.content?.trim() ?? null;
 }
 
@@ -90,8 +86,9 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const prompt = `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`;
-        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una opinión";
+        const texto = (await generateGemini(
+          `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`
+        ))?.slice(0, 4000) ?? "No pude generar una opinión";
 
         await reply({
           embeds: [
@@ -127,8 +124,9 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const prompt = `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`;
-        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una crítica";
+        const texto = (await generateGemini(
+          `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`
+        ))?.slice(0, 4000) ?? "No pude generar una crítica";
 
         await reply({
           embeds: [
@@ -164,8 +162,9 @@ const data = {
       const situacion = ctx.get("situacion") ?? "cualquier situación";
 
       try {
-        const prompt = `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.`;
-        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una excusa";
+        const texto = (await generateGemini(
+          `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.`
+        ))?.slice(0, 4000) ?? "No pude generar una excusa";
 
         await reply({
           embeds: [
@@ -201,8 +200,9 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const prompt = `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`;
-        const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una teoría";
+        const texto = (await generateGemini(
+          `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`
+        ))?.slice(0, 4000) ?? "No pude generar una teoría";
 
         await reply({
           embeds: [
@@ -299,8 +299,14 @@ Datos del usuario:
 ${datosUsuario}`;
 
         const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
-        const texto     = (await generateHealer(prompt, avatarUrl))?.slice(0, 4000)
-          ?? "Ocurrió un error con la IA, intenta de nuevo";
+
+        const texto = (await generateGemma([{
+          role: "user",
+          content: [
+            { type: "text",      text: prompt },
+            { type: "image_url", image_url: { url: avatarUrl } },
+          ],
+        }]))?.slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
 
         await reply({
           embeds: [
@@ -312,24 +318,25 @@ ${datosUsuario}`;
               .setTimestamp(),
           ],
         });
-
       } catch (err) {
         console.error("[fun roast]", err);
         await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
   })
-    
+
+  // ── LOL ───────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
       name: "lol",
-      description: "Ríete de algo asi bien jaja",
+      description: "Ríete de algo así bien jaja",
     }),
+    params: new ParamsBuilder(),
 
     async code(ctx) {
-        await ctx.send("😂🖕");
-      },
-    }),
+      await ctx.send("😂🖕");
+    },
+  }),
 };
 
 module.exports = { data };
