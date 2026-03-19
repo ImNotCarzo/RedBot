@@ -79,5 +79,4 @@ Máximo 3 párrafos, sin introducción genérica.`;
     }
   },
 };
-
-module.exports = { data };
+module.exports = { data, usesAI: true };
