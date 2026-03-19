@@ -51,9 +51,11 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
+            .setAuthor({ name: "Comando Critica", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Uso:**\n\`.critica <tema>\`\n\n` +
-              `Ejemplo: \`.critica los trabajos en grupo\``
+              `**Usos:**\nGenera una crítica despiadada de algo` +
+              `\n\n**Aliases:**\n\`criticar\`, \`criticize\`` +
+              `\n\n\`\`\`js\n.critica <tema>\nEjemplo: .critica la chochoinflación\`\`\``
             )
             .setColor(COLOR),
         ],
