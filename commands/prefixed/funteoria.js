@@ -2,10 +2,6 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { GoogleGenAI } = require("@google/genai");
 
-// ─────────────────────────────────────────────
-//  CONSTANTS
-// ─────────────────────────────────────────────
-
 const COLOR = "#ff383d";
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
@@ -14,9 +10,7 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
+// AI
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI });
@@ -33,9 +27,7 @@ async function generateGemma(prompt) {
   return response.text?.trim() ?? null;
 }
 
-// ─────────────────────────────────────────────
-//  COMMAND
-// ─────────────────────────────────────────────
+// COMMAND
 
 const data = {
   data: new CommandBuilder({
@@ -64,6 +56,10 @@ const data = {
       });
     }
 
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
+
     try {
       const prompt = `${PERSONA}
 Crea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}".
@@ -72,7 +68,7 @@ Máximo 3 párrafos, sin aclarar que es ficción.`;
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una teoría";
-await ctx.channel?.sendTyping?.();
+
       await ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -87,6 +83,8 @@ await ctx.channel?.sendTyping?.();
     } catch (err) {
       console.error("[fun teoria prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
