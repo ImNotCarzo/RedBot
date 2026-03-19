@@ -489,7 +489,7 @@ const data = {
 
       try {
         const resumen = await generateGeminiText(
-          `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español. No uses ninguna frase previo al resumen por ejemplo: "Aquí tienes un resumen conciso del texto:", solo haz el resumen\n\n${texto.slice(0, 8000)}`
+          `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
         );
 
         await reply({
