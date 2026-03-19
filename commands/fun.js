@@ -25,21 +25,39 @@ async function generateGemini(prompt) {
   return response.text?.trim() ?? null;
 }
 
-async function generateGemma(messages) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemma-3-4b-it:free",
-      messages,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+async function generateGemma(messages, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemma-3-4b-it:free",
+          messages,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.error?.message?.includes("Provider returned error") && attempt < retries) {
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+
+      if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
+      return data.choices?.[0]?.message?.content?.trim() ?? null;
+
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────
