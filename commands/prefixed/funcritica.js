@@ -21,13 +21,14 @@ RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI });
 }
-
 async function generateGemma(prompt) {
   const response = await getAI().models.generateContent({
     model: "gemma-3-12b-it",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      temperature: 1.0,
+    },
   });
-
   return response.text?.trim() ?? null;
 }
 
