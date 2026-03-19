@@ -323,7 +323,7 @@ const data = {
           embeds: [
             new EmbedBuilder()
               .setTitle("Traducción")
-              .setColor(BLUE)
+              .setColor(RED)
               .addFields(
                 { name: "Original",   value: texto.slice(0, 1024),      inline: false },
                 { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
@@ -371,7 +371,7 @@ const data = {
           content: [
             {
               type: "text",
-              text: "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español.",
+              text: "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.",
             },
             {
               type: "image_url",
@@ -386,7 +386,7 @@ const data = {
               .setTitle("Descripción de imagen")
               .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
               .setThumbnail(attachment.url)
-              .setColor(BLUE)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -453,7 +453,7 @@ const data = {
             new EmbedBuilder()
               .setTitle("Transcripción")
               .setDescription(texto)
-              .setColor(BLUE)
+              .setColor(RED)
               .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
               .setTimestamp(),
           ],
@@ -489,7 +489,7 @@ const data = {
 
       try {
         const resumen = await generateGeminiText(
-          `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español.\n\n${texto.slice(0, 8000)}`
+          `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español. No uses ninguna frase previo al resumen por ejemplo: "Aquí tienes un resumen conciso del texto:", solo haz el resumen\n\n${texto.slice(0, 8000)}`
         );
 
         await reply({
@@ -497,7 +497,7 @@ const data = {
             new EmbedBuilder()
               .setTitle("Resumen")
               .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-              .setColor(BLUE)
+              .setColor(RED)
               .setFooter({ text: `${texto.length} caracteres → resumido` })
               .setTimestamp(),
           ],
