@@ -55,6 +55,10 @@ const data = {
       });
     }
 
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
+
     try {
       const prompt =
         `Traduce el siguiente texto al ${idioma}.\n` +
@@ -79,7 +83,6 @@ const data = {
         return ctx.send("No se pudo generar la traducción");
       }
 
-    await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -97,6 +100,8 @@ const data = {
     } catch (err) {
       console.error("[translate prefix]", err);
       await ctx.send("No se pudo conectar con el servicio de traducción");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
