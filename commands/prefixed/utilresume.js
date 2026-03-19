@@ -29,7 +29,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-
+  usesAI: true,
   async code(ctx) {
     const texto = ctx.args?.join(" ").trim();
 
