@@ -67,7 +67,7 @@ const data = {
           files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
         });
       }
-
+await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
