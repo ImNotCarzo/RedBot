@@ -1,5 +1,10 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { GoogleGenAI } = require("@google/genai");
+
+// ─────────────────────────────────────────────
+//  CONSTANTS
+// ─────────────────────────────────────────────
 
 const COLOR = "#ff383d";
 
@@ -9,22 +14,26 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-async function generateHealer(prompt) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openrouter/healer-alpha",
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+// ─────────────────────────────────────────────
+//  AI
+// ─────────────────────────────────────────────
+
+function getAI() {
+  return new GoogleGenAI({ apiKey: process.env.GEMINI });
 }
+
+async function generateGemma(prompt) {
+  const response = await getAI().models.generateContent({
+    model: "gemma-3-12b-it",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+
+  return response.text?.trim() ?? null;
+}
+
+// ─────────────────────────────────────────────
+//  COMMAND
+// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -39,8 +48,13 @@ const data = {
     const situacion = ctx.args?.join(" ").trim() || "cualquier situación";
 
     try {
-      const prompt = `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.`;
-      const texto  = (await generateHealer(prompt))?.slice(0, 4000) ?? "No pude generar una excusa";
+      const prompt = `${PERSONA}
+Genera una excusa ridícula, creativa y medianamente plausible para: "${situacion}".
+Que sea graciosa, original y tenga una narrativa interesante.
+Máximo 2 párrafos.`;
+
+      const texto = (await generateGemma(prompt))?.slice(0, 4000)
+        ?? "No pude generar una excusa";
 
       await ctx.send({
         embeds: [
@@ -51,8 +65,9 @@ const data = {
             .setTimestamp(),
         ],
       });
+
     } catch (err) {
-      console.error("[fun excusa]", err);
+      console.error("[fun excusa prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
     }
   },
