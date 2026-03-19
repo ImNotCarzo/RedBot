@@ -61,13 +61,17 @@ const data = {
       });
     }
 
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
+
     try {
       const prompt = `Describe detalladamente qué hay en esta imagen.
 Sé específico: colores, objetos, personas, texto visible, ambiente, estilo.
 Responde en español. Máximo 3 párrafos.`;
 
       const texto = await generateVision(prompt, imageUrl);
-await ctx.channel?.sendTyping?.();
+
       await ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -82,6 +86,8 @@ await ctx.channel?.sendTyping?.();
     } catch (err) {
       console.error("[describe prefix]", err);
       await ctx.send("No se pudo procesar la imagen");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
