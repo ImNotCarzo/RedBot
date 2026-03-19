@@ -66,5 +66,4 @@ Máximo 2 párrafos.`;
     }
   },
 };
-
-module.exports = { data };
+module.exports = { data, usesAI: true };
