@@ -1,25 +1,37 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { generateWithFallback } = require("../../utils/ai");
 
-const BLUE = "#5865f2";
-const RED  = "#ff383d";
+const COLOR = "#ff383d";
 
-async function generateHealer(messages) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openrouter/healer-alpha",
-      messages,
-    }),
+// ─────────────────────────────────────────────
+//  AI (VISION)
+// ─────────────────────────────────────────────
+
+async function generateVision(prompt, imageUrl) {
+  const response = await generateWithFallback({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [{
+      role: "user",
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType: "image/png", data: await fetchToBase64(imageUrl) } },
+      ],
+    }],
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+
+  return response.text?.trim() ?? null;
 }
+
+async function fetchToBase64(url) {
+  const res = await fetch(url);
+  const buf = await res.arrayBuffer();
+  return Buffer.from(buf).toString("base64");
+}
+
+// ─────────────────────────────────────────────
+//  COMMAND
+// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -31,39 +43,29 @@ const data = {
   }),
 
   async code(ctx) {
-    const urlArg    = ctx.args?.[0]?.trim();
-    const adjunto   = ctx.message?.attachments?.first();
-    const imageUrl  = urlArg || adjunto?.url;
+    const urlArg   = ctx.args?.[0]?.trim();
+    const adjunto  = ctx.message?.attachments?.first();
+    const imageUrl = urlArg || adjunto?.url;
 
     if (!imageUrl) {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
-            .setAuthor({ name: "Comando Describe", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Usos:**\nDescribe el contenido de una imagen` +
-              `\n\n**Aliases:**\n\`describir\`` +
-              `\n\n\`\`\`js\n.describe <url | adjunto>\nEjemplo: .describe https://i.imgur.com/ejemplo.png\`\`\``
+              `**Uso:**\n\`.describe <url | adjunto>\`\n\n` +
+              `Ejemplo: \`.describe https://i.imgur.com/ejemplo.png\``
             )
-            .setColor(RED),
+            .setColor(COLOR),
         ],
       });
     }
 
     try {
-      const texto = await generateHealer([{
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español.",
-          },
-          {
-            type: "image_url",
-            image_url: { url: imageUrl },
-          },
-        ],
-      }]);
+      const prompt = `Describe detalladamente qué hay en esta imagen.
+Sé específico: colores, objetos, personas, texto visible, ambiente, estilo.
+Responde en español. Máximo 3 párrafos.`;
+
+      const texto = await generateVision(prompt, imageUrl);
 
       await ctx.send({
         embeds: [
@@ -71,12 +73,13 @@ const data = {
             .setTitle("Descripción de imagen")
             .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
             .setThumbnail(imageUrl)
-            .setColor(RED)
+            .setColor(COLOR)
             .setTimestamp(),
         ],
       });
+
     } catch (err) {
-      console.error("[describe]", err);
+      console.error("[describe prefix]", err);
       await ctx.send("No se pudo procesar la imagen");
     }
   },
