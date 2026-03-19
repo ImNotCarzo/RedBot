@@ -5,7 +5,7 @@ const { generateWithFallback } = require("../../utils/ai");
 const COLOR = "#ff383d";
 
 // ─────────────────────────────────────────────
-//  AI (VISION)
+//  AI
 // ─────────────────────────────────────────────
 
 async function generateVision(prompt, imageUrl) {
@@ -19,7 +19,6 @@ async function generateVision(prompt, imageUrl) {
       ],
     }],
   });
-
   return response.text?.trim() ?? null;
 }
 
