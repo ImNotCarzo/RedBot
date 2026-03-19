@@ -31,6 +31,7 @@ const data = {
   }),
 
   async code(ctx) {
+    await ctx.channel?.sendTyping?.();
     const texto = ctx.args?.join(" ").trim();
 
     if (!texto || texto.length < 100) {
