@@ -2,10 +2,6 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { GoogleGenAI } = require("@google/genai");
 
-// ─────────────────────────────────────────────
-//  CONSTANTS
-// ─────────────────────────────────────────────
-
 const COLOR = "#ff383d";
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
@@ -14,9 +10,7 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
+// AI
 
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI });
@@ -29,25 +23,21 @@ async function generateGemmaVision(prompt, imageUrl) {
   const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
 
   const response = await getAI().models.generateContent({
-  model: "gemma-3-12b-it",
-  contents: [{
-    role: "user",
-    parts: [
-      { text: prompt },
-      { inlineData: { mimeType, data: imgBase64 } },
-    ],
-  }],
-  config: {
-    temperature: 1.2,
-  },
-});
+    model: "gemma-3-12b-it",
+    contents: [{
+      role: "user",
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType, data: imgBase64 } },
+      ],
+    }],
+    config: { temperature: 1.2 },
+  });
 
   return response.text?.trim() ?? null;
 }
 
-// ─────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────
+// HELPERS
 
 function msATexto(ms) {
   const min  = Math.floor(ms / 60000);
@@ -63,9 +53,7 @@ function msATexto(ms) {
   return `${min} minuto${min > 1 ? "s" : ""}`;
 }
 
-// ─────────────────────────────────────────────
-//  COMMAND
-// ─────────────────────────────────────────────
+// COMMAND
 
 const data = {
   data: new CommandBuilder({
@@ -77,10 +65,13 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     if (!ctx.guild) {
       return ctx.send("Este comando solo funciona en servidores");
     }
+
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
 
     try {
       const target = ctx.message?.mentions?.members?.first() ?? ctx.member;
@@ -159,6 +150,8 @@ ${datosUsuario}`;
     } catch (err) {
       console.error("[fun roast prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
