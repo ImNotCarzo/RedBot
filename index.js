@@ -119,7 +119,28 @@ function wrapPrefixedCommands() {
         };
       }
 
-      return originalCode.call(this, ctx, ...args);
+      let typingInterval;
+      let typingStarted = false;
+
+      const startTyping = () => {
+        if (typingStarted) return;
+        typingStarted = true;
+
+        typingInterval = setInterval(() => {
+          ctx.channel?.sendTyping?.().catch(() => {});
+        }, 8000);
+
+        ctx.channel?.sendTyping?.().catch(() => {});
+      };
+
+      const delay = setTimeout(startTyping, 500);
+
+      try {
+        return await originalCode.call(this, ctx, ...args);
+      } finally {
+        clearTimeout(delay);
+        if (typingInterval) clearInterval(typingInterval);
+      }
     };
 
     wrappedOriginalCodes.add(originalCode);
