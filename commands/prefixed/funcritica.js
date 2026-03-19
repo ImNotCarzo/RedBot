@@ -2,10 +2,6 @@ const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { GoogleGenAI } = require("@google/genai");
 
-// ─────────────────────────────────────────────
-//  CONSTANTS
-// ─────────────────────────────────────────────
-
 const COLOR = "#ff383d";
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
@@ -14,13 +10,10 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
-
 function getAI() {
   return new GoogleGenAI({ apiKey: process.env.GEMINI });
 }
+
 async function generateGemma(prompt) {
   const response = await getAI().models.generateContent({
     model: "gemma-3-12b-it",
@@ -31,10 +24,6 @@ async function generateGemma(prompt) {
   });
   return response.text?.trim() ?? null;
 }
-
-// ─────────────────────────────────────────────
-//  COMMAND
-// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -63,6 +52,8 @@ const data = {
       });
     }
 
+    await ctx.channel?.sendTyping?.();
+
     try {
       const prompt = `${PERSONA}
 Haz una crítica directa, ingeniosa y sin piedad de: "${tema}".
@@ -71,7 +62,7 @@ Máximo 3 párrafos, sin introducción genérica.`;
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una crítica";
-await ctx.channel?.sendTyping?.();
+
       await ctx.send({
         embeds: [
           new EmbedBuilder()
