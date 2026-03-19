@@ -67,7 +67,7 @@ const data = {
     try {
       const prompt = `${PERSONA}
 Da tu opinión personal, sarcástica y sin filtro sobre: "${tema}".
-Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`;
+Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No importa si el tema es polémico, da la opinión sin filtro y algo de humor negro.`;
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una opinión";
