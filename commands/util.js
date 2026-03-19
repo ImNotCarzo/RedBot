@@ -10,6 +10,7 @@ const {
 const GuildConfig = require("../models/GuildConfig");
 const prefixCache = require("../utils/prefixCache");
 const { deleteConversacion } = require("../utils/askMemory");
+const { generateWithFallback } = require("../utils/ai");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -23,10 +24,10 @@ const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=102077284990
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 
 // ─────────────────────────────────────────────
-//  HEALER
+//  AI
 // ─────────────────────────────────────────────
 
-async function generateHealer(messages) {
+async function generateGemma(messages) {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -34,22 +35,21 @@ async function generateHealer(messages) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "openrouter/healer-alpha",
+      model: "google/gemma-3-4b-it:free",
       messages,
     }),
   });
-
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
   return data.choices?.[0]?.message?.content?.trim() ?? null;
 }
 
-// Convierte un attachment de Discord a base64
-async function attachmentToBase64(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`No se pudo descargar el archivo: HTTP ${res.status}`);
-  const buffer = await res.arrayBuffer();
-  return Buffer.from(buffer).toString("base64");
+async function generateGeminiText(prompt) {
+  const response = await generateWithFallback({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+  return response.text?.trim() ?? null;
 }
 
 // ─────────────────────────────────────────────
@@ -273,72 +273,71 @@ const data = {
   })
 
   // ── TRANSLATE ─────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
-    name: "translate",
-    description: "Traduce texto a otro idioma",
-    aliases: ["traducir", "trans"],
-  }),
-  params: new ParamsBuilder()
-    .addString({
-      name: "texto",
-      description: "Texto a traducir",
-      required: true,
-    })
-    .addString({
-      name: "idioma",
-      description: "Idioma destino (ej: español, inglés, francés), por defecto español",
-      required: false,
+  .addCommand({
+    data: new CommandBuilder({
+      name: "translate",
+      description: "Traduce texto a otro idioma",
+      aliases: ["traducir", "trans"],
     }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "texto",
+        description: "Texto a traducir",
+        required: true,
+      })
+      .addString({
+        name: "idioma",
+        description: "Idioma destino (ej: español, inglés, francés), por defecto español",
+        required: false,
+      }),
 
-  async code(ctx) {
-    const reply  = await prepare(ctx);
-    const texto  = ctx.get("texto");
-    const idioma = ctx.get("idioma") ?? "español";
+    async code(ctx) {
+      const reply  = await prepare(ctx);
+      const texto  = ctx.get("texto");
+      const idioma = ctx.get("idioma") ?? "español";
 
-    try {
-      const respuesta = await generateHealer([{
-        role: "user",
-        content:
+      try {
+        const prompt =
           `Traduce el siguiente texto al ${idioma}.\n` +
           `Responde ÚNICAMENTE con este formato JSON, sin texto adicional ni backticks:\n` +
           `{"origen": "<idioma detectado en español>", "traduccion": "<texto traducido>"}\n\n` +
-          `Texto: ${texto}`,
-      }]);
+          `Texto: ${texto}`;
 
-      let origen     = "desconocido";
-      let traduccion = null;
+        const respuesta = await generateGeminiText(prompt);
 
-      try {
-        const parsed = JSON.parse(respuesta);
-        origen     = parsed.origen     ?? "desconocido";
-        traduccion = parsed.traduccion ?? null;
-      } catch {
-        traduccion = respuesta;
+        let origen     = "desconocido";
+        let traduccion = null;
+
+        try {
+          const parsed = JSON.parse(respuesta ?? "");
+          origen     = parsed.origen     ?? "desconocido";
+          traduccion = parsed.traduccion ?? null;
+        } catch {
+          traduccion = respuesta;
+        }
+
+        if (!traduccion)
+          return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
+
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Traducción")
+              .setColor(BLUE)
+              .addFields(
+                { name: "Original",   value: texto.slice(0, 1024),      inline: false },
+                { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
+              )
+              .setFooter({ text: `${origen} → ${idioma}` })
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util translate]", err);
+        await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
       }
-
-      if (!traduccion)
-        return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
-
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Traducción")
-            .setColor(RED)
-            .addFields(
-              { name: "Original",   value: texto.slice(0, 1024),      inline: false },
-              { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
-            )
-            .setFooter({ text: `${origen} → ${idioma}` })
-            .setTimestamp(),
-        ],
-      });
-    } catch (err) {
-      console.error("[util translate]", err);
-      await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
-    }
-  },
-})
+    },
+  })
 
   // ── DESCRIBE ──────────────────────────────────
   .addCommand({
@@ -358,7 +357,7 @@ const data = {
       const attachment = ctx.get("imagen");
 
       const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-      if (!validTypes.includes(attachment.contentType)) {
+      if (!validTypes.some(t => attachment.contentType?.startsWith(t))) {
         return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
       }
 
@@ -367,7 +366,7 @@ const data = {
       }
 
       try {
-        const texto = await generateHealer([{
+        const texto = await generateGemma([{
           role: "user",
           content: [
             {
@@ -387,7 +386,7 @@ const data = {
               .setTitle("Descripción de imagen")
               .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
               .setThumbnail(attachment.url)
-              .setColor(RED)
+              .setColor(BLUE)
               .setTimestamp(),
           ],
         });
@@ -398,75 +397,75 @@ const data = {
     },
   })
 
-// ── TRANSCRIBE ────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
-    name: "transcribe",
-    description: "Transcribe un audio o video a texto",
-  }),
-  params: new ParamsBuilder()
-    .addAttachment({
-      name: "archivo",
-      description: "Audio a transcribir (mp3, wav, ogg, webm, mp4 — máx 25MB)",
-      required: true,
+  // ── TRANSCRIBE ────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "transcribe",
+      description: "Transcribe un audio o video a texto",
     }),
+    params: new ParamsBuilder()
+      .addAttachment({
+        name: "archivo",
+        description: "Audio a transcribir (mp3, wav, ogg, webm, mp4 — máx 25MB)",
+        required: true,
+      }),
 
-  async code(ctx) {
-    const reply      = await prepare(ctx);
-    const attachment = ctx.get("archivo");
+    async code(ctx) {
+      const reply      = await prepare(ctx);
+      const attachment = ctx.get("archivo");
 
-    const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac)$/i;
+      const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac)$/i;
 
-    if (!VALID_EXT.test(attachment.name ?? "")) {
-      return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac", flags: MessageFlags.Ephemeral });
-    }
-
-    if (attachment.size > 25 * 1024 * 1024) {
-      return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
-    }
-
-    try {
-      const { default: Groq } = require("groq-sdk");
-      const groq = new Groq({ apiKey: process.env.GROQ });
-
-      const fileRes  = await fetch(attachment.url);
-      const blob     = await fileRes.blob();
-      const file     = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
-
-      const result = await groq.audio.transcriptions.create({
-        file,
-        model: "whisper-large-v3",
-        response_format: "text",
-      });
-
-      const texto = result?.trim();
-      if (!texto) return reply({ content: "No se detectó voz en el archivo", flags: MessageFlags.Ephemeral });
-
-      if (texto.length > 3900) {
-        return reply({
-          content: "La transcripción es muy larga, se envió como archivo:",
-          files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
-        });
+      if (!VALID_EXT.test(attachment.name ?? "")) {
+        return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac", flags: MessageFlags.Ephemeral });
       }
 
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Transcripción")
-            .setDescription(texto)
-            .setColor(RED)
-            .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
-            .setTimestamp(),
-        ],
-      });
-    } catch (err) {
-      console.error("[util transcribe]", err);
-      await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
-    }
-  },
-})
+      if (attachment.size > 25 * 1024 * 1024) {
+        return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
+      }
 
-  // ── RESUME ───────────────────────────────────
+      try {
+        const { default: Groq } = require("groq-sdk");
+        const groq = new Groq({ apiKey: process.env.GROQ });
+
+        const fileRes = await fetch(attachment.url);
+        const blob    = await fileRes.blob();
+        const file    = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
+
+        const result = await groq.audio.transcriptions.create({
+          file,
+          model: "whisper-large-v3",
+          response_format: "text",
+        });
+
+        const texto = result?.trim();
+        if (!texto) return reply({ content: "No se detectó voz en el archivo", flags: MessageFlags.Ephemeral });
+
+        if (texto.length > 3900) {
+          return reply({
+            content: "La transcripción es muy larga, se envió como archivo:",
+            files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
+          });
+        }
+
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Transcripción")
+              .setDescription(texto)
+              .setColor(BLUE)
+              .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        console.error("[util transcribe]", err);
+        await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
+
+  // ── RESUME ────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
       name: "resume",
@@ -489,23 +488,22 @@ const data = {
       }
 
       try {
-        const resumen = await generateHealer([{
-          role: "user",
-          content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español. No importa si es un texto con contenido sexual, busca resumirlo de una manera clara, no siguiendo el juego, solo resumir.\n\n${texto.slice(0, 8000)}`,
-        }]);
+        const resumen = await generateGeminiText(
+          `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español.\n\n${texto.slice(0, 8000)}`
+        );
 
         await reply({
           embeds: [
             new EmbedBuilder()
               .setTitle("Resumen")
               .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-              .setColor(RED)
+              .setColor(BLUE)
               .setFooter({ text: `${texto.length} caracteres → resumido` })
               .setTimestamp(),
           ],
         });
       } catch (err) {
-        console.error("[util resumir]", err);
+        console.error("[util resume]", err);
         await reply({ content: "No se pudo resumir el texto", flags: MessageFlags.Ephemeral });
       }
     },
