@@ -50,9 +50,11 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
+            .setAuthor({ name: "Comando Describe", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Uso:**\n\`.describe <url | adjunto>\`\n\n` +
-              `Ejemplo: \`.describe https://i.imgur.com/ejemplo.png\``
+              `**Usos:**\nDescribe el contenido de una imagen` +
+              `\n\n**Aliases:**\n\`describir\`` +
+              `\n\n\`\`\`js\n.describe <adjunto>\nEjemplo: .describe <Subeunaimagenwe.png> \`\`\``
             )
             .setColor(COLOR),
         ],
