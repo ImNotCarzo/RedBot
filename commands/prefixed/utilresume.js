@@ -48,6 +48,10 @@ const data = {
       });
     }
 
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
+
     try {
       const prompt = `Resume el siguiente texto.
 Solo el resumen, sin frases previas ni comentarios adicionales.
@@ -58,7 +62,7 @@ Responde en español.
 ${texto.slice(0, 8000)}`;
 
       const resumen = await generateGeminiText(prompt);
-await ctx.channel?.sendTyping?.();
+
       await ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -73,6 +77,8 @@ await ctx.channel?.sendTyping?.();
     } catch (err) {
       console.error("[resume prefix]", err);
       await ctx.send("No se pudo resumir el texto");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
