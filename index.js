@@ -78,10 +78,60 @@ mongoose
   .catch((err) => console.error("[DB] Error:", err));
 
 // ─────────────────────────────────────────────
+//  WRAP
+// ─────────────────────────────────────────────
+
+function normalizeReplyPayload(payload) {
+  if (typeof payload === "string") return { content: payload };
+  if (Array.isArray(payload)) return { content: payload.join("\n") };
+  if (!payload || typeof payload !== "object") return { content: String(payload ?? "") };
+  return payload;
+}
+
+const wrappedOriginalCodes = new WeakSet();
+
+function wrapPrefixedCommands() {
+  const prefixedPath  = path.join(__dirname, "commands", "prefixed");
+  const prefixedFiles = fs.readdirSync(prefixedPath).filter(f => f.endsWith(".js"));
+
+  for (const file of prefixedFiles) {
+    const commandModule = require(path.join(prefixedPath, file));
+    const command       = commandModule?.data;
+    const originalCode  = command?.code;
+
+    if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) continue;
+
+    command.code = async function (ctx, ...args) {
+
+      const originalReply = ctx?.message?.reply?.bind(ctx.message);
+
+      if (originalReply) {
+        ctx.send = (payload) => {
+          const normalized = normalizeReplyPayload(payload);
+
+          return originalReply({
+            ...normalized,
+            allowedMentions: {
+              ...normalized.allowedMentions,
+              repliedUser: false,
+            },
+          });
+        };
+      }
+
+      return originalCode.call(this, ctx, ...args);
+    };
+
+    wrappedOriginalCodes.add(originalCode);
+  }
+}
+
+// ─────────────────────────────────────────────
 //  LOADERS
 // ─────────────────────────────────────────────
 
 bot.load("commands");
+wrapPrefixedCommands();
 bot.login(process.env.TOKEN);
 bot.setMaxListeners(20);
 
@@ -104,7 +154,7 @@ console.log(`[Events] ${eventFiles.length} cargados`);
 //  READY
 // ─────────────────────────────────────────────
 
-const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
+const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user", "server"];
 
 bot.on("clientReady", async (bot) => {
   await bot.sync();
