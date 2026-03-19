@@ -237,7 +237,7 @@ bot.on("messageCreate", async (message) => {
       .setDescription(texto)
       .setColor("#ff383d");
 
-    const botMsg = await message.reply({ embeds: [embed] });
+    const botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
     setConversacion(message.author.id, historial, botMsg.id);
 
   } catch (err) {
