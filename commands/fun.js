@@ -328,12 +328,8 @@ ${datosUsuario}`;
 
     async code(ctx) {
         await ctx.send("😂🖕");
-      } catch (err) {
-        console.error("[fun lol]", err);
-        await reply({ content: "error we", flags: MessageFlags.Ephemeral });
-      }
-    },
-  }),
+      },
+    }),
 };
 
 module.exports = { data };
