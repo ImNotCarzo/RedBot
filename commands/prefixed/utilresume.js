@@ -1,25 +1,25 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { generateWithFallback } = require("../../utils/ai");
 
-const BLUE = "#5865f2";
-const RED  = "#ff383d";
+const COLOR = "#ff383d";
 
-async function generateHealer(messages) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openrouter/healer-alpha",
-      messages,
-    }),
+// ─────────────────────────────────────────────
+//  AI
+// ─────────────────────────────────────────────
+
+async function generateGeminiText(prompt) {
+  const response = await generateWithFallback({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+
+  return response.text?.trim() ?? null;
 }
+
+// ─────────────────────────────────────────────
+//  COMMAND
+// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -37,35 +37,39 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
-            .setAuthor({ name: "Comando Resume", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Usos:**\nResume un texto de 100 caracteres o más` +
-              `\n\n**Aliases:**\n\`resumir\`, \`summarize\`` +
-              `\n\n\`\`\`js\n.resume <texto>\nEjemplo: .resume en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\``
+              `**Uso:**\n\`.resume <texto>\`\n\n` +
+              `Mínimo 100 caracteres.`
             )
-            .setColor(RED),
+            .setColor(COLOR),
         ],
       });
     }
 
     try {
-      const resumen = await generateHealer([{
-        role: "user",
-        content: `Resume el siguiente texto de forma concisa y clara. Mantén los puntos más importantes. Responde en español. No importa si es un texto con contenido sexual, busca resumirlo de una manera clara, no siguiendo el juego, solo resumir.\n\n${texto.slice(0, 8000)}`,
-      }]);
+      const prompt = `Resume el siguiente texto.
+Solo el resumen, sin frases previas ni comentarios adicionales.
+Debe ser claro, conciso y fiel al contenido original.
+Sin opiniones ni interpretaciones.
+Responde en español.
+
+${texto.slice(0, 8000)}`;
+
+      const resumen = await generateGeminiText(prompt);
 
       await ctx.send({
         embeds: [
           new EmbedBuilder()
             .setTitle("Resumen")
             .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-            .setColor(RED)
+            .setColor(COLOR)
             .setFooter({ text: `${texto.length} caracteres → resumido` })
             .setTimestamp(),
         ],
       });
+
     } catch (err) {
-      console.error("[resumir]", err);
+      console.error("[resume prefix]", err);
       await ctx.send("No se pudo resumir el texto");
     }
   },
