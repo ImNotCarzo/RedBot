@@ -55,6 +55,19 @@ async function prepare(ctx) {
   return (payload) => ctx.send(payload);
 }
 
+function msATexto(ms) {
+  const min  = Math.floor(ms / 60000);
+  const hrs  = Math.floor(min / 60);
+  const dias = Math.floor(hrs / 24);
+  const mes  = Math.floor(dias / 30);
+  const años = Math.floor(dias / 365);
+  if (años >= 1)  return `${años} año${años > 1 ? "s" : ""}`;
+  if (mes >= 1)   return `${mes} mes${mes > 1 ? "es" : ""}`;
+  if (dias >= 1)  return `${dias} día${dias > 1 ? "s" : ""}`;
+  if (hrs >= 1)   return `${hrs} hora${hrs > 1 ? "s" : ""}`;
+  return `${min} minuto${min > 1 ? "s" : ""}`;
+}
+
 // ─────────────────────────────────────────────
 //  DATA
 // ─────────────────────────────────────────────
@@ -223,107 +236,115 @@ const data = {
 
   // ── ROAST ─────────────────────────────────────
   .addCommand({
-    data: new CommandBuilder({
-      name: "roast",
-      description: "Critica despiadadamente a un usuario",
+  data: new CommandBuilder({
+    name: "roast",
+    description: "Critica despiadadamente a un usuario",
+  }),
+  params: new ParamsBuilder()
+    .addMember({
+      name: "usuario",
+      description: "Menciona a alguien",
+      required: false,
     }),
-    params: new ParamsBuilder()
-      .addMember({
-        name: "usuario",
-        description: "Menciona a alguien",
-        required: false,
-      }),
 
-    async code(ctx) {
-      if (!ctx.guild) {
-        return ctx.send({
-          content: "Este comando solo funciona en servidores",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+  async code(ctx) {
+    if (!ctx.guild) {
+      return ctx.send({
+        content: "Este comando solo funciona en servidores",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
 
-      const reply = await prepare(ctx);
+    const reply = await prepare(ctx);
 
-      try {
-        const target = ctx.get("usuario") ?? ctx.member;
-        if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
+    try {
+      const target = ctx.get("usuario") ?? ctx.member;
+      if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
 
-        const user     = target.user;
-        const username = user.globalName ?? user.username;
-        const usertag  = user.username;
-        const created  = `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`;
-        const joined   = target.joinedTimestamp
-          ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:R>`
-          : "desconocido";
+      const user     = target.user;
+      const username = user.globalName ?? user.username;
+      const usertag  = user.username;
 
-        const activity = target.presence?.activities?.[0]?.name ?? null;
-        const status   = target.presence?.status ?? "offline";
+      const ahoraMs     = Date.now();
+      const createdHace = msATexto(ahoraMs - user.createdTimestamp);
+      const createdDate = new Date(user.createdTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" });
+      const joinedHace  = target.joinedTimestamp
+        ? msATexto(ahoraMs - target.joinedTimestamp)
+        : null;
+      const joinedDate  = target.joinedTimestamp
+        ? new Date(target.joinedTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" })
+        : null;
 
-        const roles = target.roles?.cache
-          ?.filter(r => r.id !== ctx.guild.id)
-          ?.map(r => r.name)
-          ?.slice(0, 8)
-          ?.join(", ") || "ninguno";
+      const activity = target.presence?.activities?.[0]?.name ?? null;
+      const status   = target.presence?.status ?? "offline";
 
-        const PERMS_RELEVANTES = [
-          "Administrator", "ManageGuild", "ManageMessages",
-          "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
-        ];
-        const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
-        const badges = user.flags?.toArray()?.join(", ") || "ninguna";
+      const roles = target.roles?.cache
+        ?.filter(r => r.id !== ctx.guild.id)
+        ?.map(r => r.name)
+        ?.slice(0, 8)
+        ?.join(", ") || "ninguno";
 
-        const datosUsuario = [
-          `Nombre: ${username} (@${usertag})`,
-          `Cuenta creada: ${created}`,
-          `Entró al servidor: ${joined}`,
-          `Estado: ${status}`,
-          activity ? `Actividad: ${activity}` : null,
-          `Roles: ${roles}`,
-          `Permisos notables: ${perms}`,
-          `Insignias: ${badges}`,
-        ].filter(Boolean).join("\n");
+      const PERMS_RELEVANTES = [
+        "Administrator", "ManageGuild", "ManageMessages",
+        "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
+      ];
+      const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
+      const badges = user.flags?.toArray()?.join(", ") || "ninguna";
 
-        const prompt = `${PERSONA}
+      const datosUsuario = [
+        `Nombre: ${username} (@${usertag})`,
+        `Cuenta creada: hace ${createdHace} (${createdDate})`,
+        joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
+        `Estado: ${status}`,
+        activity ? `Jugando/escuchando: ${activity}` : null,
+        `Roles: ${roles}`,
+        `Permisos notables: ${perms}`,
+        `Insignias: ${badges}`,
+      ].filter(Boolean).join("\n");
 
-Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
-Reglas estrictas:
-- RESPONDE ÚNICAMENTE EN ESPAÑOL. Ninguna palabra en otro idioma.
-- Mínimo 3 párrafos, máximo 4. No seas corto.
-- Sarcasmo, humor negro e ingenio. Sin amenazas reales.
-- Analiza la foto de perfil en detalle, describe qué ves y úsalo para burlarte.
-- Usa los datos del perfil para ataques específicos, no genéricos.
-- Nada de frases genéricas como "eres el típico usuario que...".
-- El roast debe sentirse personalizado, no una plantilla.
+      const prompt = `${PERSONA}
+
+Vas a hacer un roast brutal y personalizado de este usuario de Discord.
+Tenés su foto de perfil y sus datos — usá ambas cosas.
+
+Reglas:
+- SOLO EN ESPAÑOL. Cero palabras en otro idioma.
+- Exactamente 3 párrafos. Ni más ni menos.
+- Cada párrafo ataca un aspecto diferente: uno sobre la foto, uno sobre la cuenta/antigüedad/roles, uno sobre los permisos/insignias/actividad.
+- Sarcasmo e ingenio, no insultos vacíos. Que duela pero con clase.
+- Específico: usá los datos reales, no generalidades.
+- Sin mencionar timestamps, IDs ni código técnico. Solo información humana.
+- Sin frases de relleno al inicio ni al final. Arrancá directo con el roast.
 
 Datos del usuario:
 ${datosUsuario}`;
 
-        const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+      const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
 
-        const texto = (await generateGemma([{
-          role: "user",
-          content: [
-            { type: "text",      text: prompt },
-            { type: "image_url", image_url: { url: avatarUrl } },
-          ],
-        }]))?.slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
+      const texto = (await generateGemma([{
+        role: "user",
+        content: [
+          { type: "text",      text: prompt },
+          { type: "image_url", image_url: { url: avatarUrl } },
+        ],
+      }]))?.slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(`Roast de ${username}`)
-              .setThumbnail(avatarUrl)
-              .setDescription(texto)
-              .setColor(COLOR)
-              .setTimestamp(),
-          ],
-        });
-      } catch (err) {
-        console.error("[fun roast]", err);
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
-      }
-    },
-  })
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(`Roast de ${username}`)
+            .setThumbnail(avatarUrl)
+            .setDescription(texto)
+            .setColor(COLOR)
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      console.error("[fun roast]", err);
+      await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+    }
+  },
+})
 
   // ── LOL ───────────────────────────────────────
   .addCommand({
