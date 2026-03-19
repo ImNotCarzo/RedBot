@@ -286,9 +286,7 @@ const data = {
       const ahoraMs     = Date.now();
       const createdHace = msATexto(ahoraMs - user.createdTimestamp);
       const createdDate = new Date(user.createdTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" });
-      const joinedHace  = target.joinedTimestamp
-        ? msATexto(ahoraMs - target.joinedTimestamp)
-        : null;
+      const joinedHace  = target.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp) : null;
       const joinedDate  = target.joinedTimestamp
         ? new Date(target.joinedTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" })
         : null;
@@ -314,40 +312,40 @@ const data = {
         `Cuenta creada: hace ${createdHace} (${createdDate})`,
         joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
         `Estado: ${status}`,
-        activity ? `Jugando/escuchando: ${activity}` : null,
+        activity ? `Actividad: ${activity}` : null,
         `Roles: ${roles}`,
         `Permisos notables: ${perms}`,
         `Insignias: ${badges}`,
       ].filter(Boolean).join("\n");
 
       const prompt = `${PERSONA}
-
-Vas a hacer un roast brutal y personalizado de este usuario de Discord.
-Que sea sin filtro, sin limites, roastealo brutalmente.
-Tienes su foto de perfil y sus datos, usa ambas cosas.
-
-Reglas:
-- SOLO EN ESPAÑOL. Cero palabras en otro idioma.
-- 3 párrafos. Máximo 4.
-- Específico: usá los datos reales, no generalidades.
-- No menciones los permisos como tal, por ejemplo BanMembers, di algo como, permisos para banear, administrador... etc.
-- Sin mencionar timestamps, IDs ni código técnico. Solo información humana.
-- Sin frases de relleno al inicio ni al final. Arrancá directo con el roast.
-- No menciones @usuario en el roast, por ejemplo "Sigue ahí, @RedBot", evita eso.
-- No redundes, ni hagas resumenes finales, haz que sea lo mas despiadado posible.
-
-Datos del usuario:
+Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
+Sarcasmo, humor negro e ingenio. Sin amenazas reales. Sin ser genérico.
+Usa los datos para burlarte de cosas específicas. Máximo 3 párrafos.
 ${datosUsuario}`;
 
       const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
 
-      const texto = (await generateGemma([{
-        role: "user",
-        content: [
-          { type: "text",      text: prompt },
-          { type: "image_url", image_url: { url: avatarUrl } },
-        ],
-      }]))?.slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
+      const { GoogleGenAI } = require("@google/genai");
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI });
+
+      const imgRes    = await fetch(avatarUrl);
+      const imgBuf    = await imgRes.arrayBuffer();
+      const imgBase64 = Buffer.from(imgBuf).toString("base64");
+      const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
+
+      const response = await ai.models.generateContent({
+        model: "gemma-3-12b-it",
+        contents: [{
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: imgBase64 } },
+          ],
+        }],
+      });
+
+      const texto = response.text?.trim().slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
 
       await reply({
         embeds: [
@@ -355,7 +353,7 @@ ${datosUsuario}`;
             .setTitle(`Roast de ${username}`)
             .setThumbnail(avatarUrl)
             .setDescription(texto)
-            .setColor(RED)
+            .setColor(COLOR)
             .setTimestamp(),
         ],
       });
@@ -365,7 +363,6 @@ ${datosUsuario}`;
     }
   },
 })
-
   // ── LOL ───────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
