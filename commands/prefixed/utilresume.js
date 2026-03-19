@@ -43,7 +43,7 @@ const data = {
               `\n\n**Aliases:**\n\`resumir\`, \`summarize\`` +
               `\n\n\`\`\`js\n.resume <texto>\nEjemplo: .resume en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\``
             )
-            .setColor(RED),
+            .setColor(COLOR),
         ],
       });
     }
