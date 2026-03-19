@@ -31,7 +31,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-
+  usesAI: true,
   async code(ctx) {
     const situacion = ctx.args?.join(" ").trim() || "cualquier situación";
 
