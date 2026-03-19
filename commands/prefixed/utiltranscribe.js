@@ -16,7 +16,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const urlArg  = ctx.args?.[0]?.trim();
     const adjunto = ctx.message?.attachments?.first();
 
@@ -35,16 +34,20 @@ const data = {
       });
     }
 
+    const fileUrl  = urlArg || adjunto.url;
+    const fileName = adjunto?.name ?? fileUrl.split("/").pop().split("?")[0];
+
+    if (adjunto && adjunto.size > 25 * 1024 * 1024)
+      return ctx.send("El archivo no puede superar los 25MB");
+
+    if (!VALID_EXT.test(fileName))
+      return ctx.send("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac");
+
+    const typing = setInterval(() => {
+      ctx.channel?.sendTyping?.().catch(() => {});
+    }, 8000);
+
     try {
-      const fileUrl  = urlArg || adjunto.url;
-      const fileName = adjunto?.name ?? fileUrl.split("/").pop().split("?")[0];
-
-      if (adjunto && adjunto.size > 25 * 1024 * 1024)
-        return ctx.send("El archivo no puede superar los 25MB");
-
-      if (!VALID_EXT.test(fileName))
-        return ctx.send("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac");
-
       const { default: Groq } = require("groq-sdk");
       const groq = new Groq({ apiKey: process.env.GROQ });
 
@@ -67,7 +70,7 @@ const data = {
           files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
         });
       }
-await ctx.channel?.sendTyping?.();
+
       await ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -81,6 +84,8 @@ await ctx.channel?.sendTyping?.();
     } catch (err) {
       console.error("[transcribe]", err);
       await ctx.send("No se pudo transcribir el archivo");
+    } finally {
+      clearInterval(typing);
     }
   },
 };
