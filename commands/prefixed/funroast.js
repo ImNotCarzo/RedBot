@@ -156,4 +156,4 @@ ${datosUsuario}`;
   },
 };
 
-module.exports = { data };
+module.exports = { data, usesAI: true };
