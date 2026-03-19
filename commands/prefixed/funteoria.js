@@ -89,4 +89,4 @@ Máximo 3 párrafos, sin aclarar que es ficción.`;
   },
 };
 
-module.exports = { data };
+module.exports = { data, usesAI: true };
