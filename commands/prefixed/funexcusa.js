@@ -47,7 +47,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const situacion = ctx.args?.join(" ").trim() || "cualquier situación";
 
     try {
@@ -58,7 +57,7 @@ Máximo 2 párrafos.`;
 
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una excusa";
-
+await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
