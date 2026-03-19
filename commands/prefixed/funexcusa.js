@@ -47,6 +47,7 @@ const data = {
   }),
 
   async code(ctx) {
+    await ctx.channel?.sendTyping?.();
     const situacion = ctx.args?.join(" ").trim() || "cualquier situación";
 
     try {
