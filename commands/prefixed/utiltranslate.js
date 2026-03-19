@@ -31,6 +31,7 @@ const data = {
   }),
 
   async code(ctx) {
+    await ctx.channel?.sendTyping?.();
     const args   = ctx.args ?? [];
     const ultimo = args[args.length - 1];
 
