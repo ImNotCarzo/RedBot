@@ -57,7 +57,7 @@ const data = {
               `\n\n**Aliases:**\n\`op\`, \`opina\`` +
               `\n\n\`\`\`js\n.opinion <tema>\nEjemplo: .opinion la chochoinflación\`\`\``
             )
-            .setColor(RED),
+            .setColor(COLOR),
         ],
       });
     }
