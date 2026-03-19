@@ -31,7 +31,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const args   = ctx.args ?? [];
     const ultimo = args[args.length - 1];
 
@@ -80,6 +79,7 @@ const data = {
         return ctx.send("No se pudo generar la traducción");
       }
 
+    await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
