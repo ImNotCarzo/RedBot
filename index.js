@@ -70,11 +70,14 @@ const bot = new Erine({
 
 function normalizeReplyPayload(payload) {
   if (typeof payload === "string") return { content: payload };
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (Array.isArray(payload)) return { content: payload.join("\n") };
+  if (!payload || typeof payload !== "object") {
     return { content: String(payload ?? "") };
   }
   return payload;
 }
+
+const wrappedOriginalCodes = new WeakSet();
 
 function wrapPrefixedCommands() {
   const prefixedPath = path.join(__dirname, "commands", "prefixed");
@@ -86,10 +89,11 @@ function wrapPrefixedCommands() {
     const command = commandModule?.data;
     const originalCode = command?.code;
 
-    if (typeof originalCode !== "function" || originalCode.__prefixedReplyWrapped) continue;
+    if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) continue;
 
     const wrappedCode = async function (ctx, ...args) {
-      await ctx.channel.sendTyping().catch(() => {});
+      // Si no se puede mostrar "escribiendo", el comando sigue normalmente.
+      await Promise.resolve(ctx.channel?.sendTyping?.()).catch(() => {});
 
       const originalMessageReply = ctx?.message?.reply?.bind(ctx.message);
       if (originalMessageReply) {
@@ -104,14 +108,14 @@ function wrapPrefixedCommands() {
           });
         };
 
-        ctx.message.reply = safeReply;
+        // Intencional: en prefixed, ctx.send debe responder sin mencionar al autor.
         ctx.send = safeReply;
       }
 
       return originalCode.call(this, ctx, ...args);
     };
 
-    wrappedCode.__prefixedReplyWrapped = true;
+    wrappedOriginalCodes.add(originalCode);
     command.code = wrappedCode;
   }
 }
