@@ -6,25 +6,7 @@ const {
   ButtonStyle,
   ComponentType,
 } = require("discord.js");
-
-async function resolveMember(ctx, input) {
-  if (!input) return ctx.member ?? null;
-  if (typeof input === "object") return input;
-  if (ctx.message?.mentions?.members?.size) return ctx.message.mentions.members.first();
-  if (/^\d{17,20}$/.test(input)) {
-    const byId = await ctx.guild.members.fetch(input).catch(() => null);
-    if (byId) return byId;
-  }
-  const results = await ctx.guild.members.fetch({ query: input, limit: 1 }).catch(() => null);
-  if (results?.size) return results.first();
-  const lower = input.toLowerCase();
-  return ctx.guild.members.cache.find((m) => {
-    const username = m.user.username?.toLowerCase() ?? "";
-    const globalName = m.user.globalName?.toLowerCase() ?? "";
-    const nickname = m.nickname?.toLowerCase() ?? "";
-    return username.includes(lower) || globalName.includes(lower) || nickname.includes(lower);
-  }) ?? null;
-}
+const { resolveMemberFlexible } = require("../../utils/helpers");
 
 function buildRolesEmbed(member, user, usernameDisplay, roles, page, totalPages) {
   return new EmbedBuilder()
@@ -48,7 +30,7 @@ const data = {
     try {
       const input = ctx.args?.join(" ").trim() || null;
       const invoker = ctx.author;
-      const member = await resolveMember(ctx, input);
+      const member = await resolveMemberFlexible(ctx, input);
       if (!member) return ctx.send("No pude encontrar al usuario");
 
       const user = member.user;

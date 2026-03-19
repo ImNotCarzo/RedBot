@@ -302,12 +302,13 @@ const data = {
       try {
         const guild = ctx.guild;
           if (!guild) return noGuildReply(ctx);
-        if (!guild.bannerURL()) return ctx.send("Este servidor no tiene banner");
+        const bannerURL = guild.bannerURL({ size: 4096, extension: "png" });
+        if (!bannerURL) return ctx.send("Este servidor no tiene banner");
 
         const embed = new EmbedBuilder()
           .setTitle(`Banner de ${guild.name}`)
-          .setURL(guild.bannerURL({ size: 4096, extension: "png" }))
-          .setImage(guild.bannerURL({ size: 4096, extension: "png" }))
+          .setURL(bannerURL)
+          .setImage(bannerURL)
           .setColor(COLOR)
           .setTimestamp();
 
