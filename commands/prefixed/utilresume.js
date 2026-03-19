@@ -31,7 +31,6 @@ const data = {
   }),
 
   async code(ctx) {
-    await ctx.channel?.sendTyping?.();
     const texto = ctx.args?.join(" ").trim();
 
     if (!texto || texto.length < 100) {
@@ -59,7 +58,7 @@ Responde en español.
 ${texto.slice(0, 8000)}`;
 
       const resumen = await generateGeminiText(prompt);
-
+await ctx.channel?.sendTyping?.();
       await ctx.send({
         embeds: [
           new EmbedBuilder()
