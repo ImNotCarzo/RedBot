@@ -6,7 +6,7 @@ const { generateWithFallback } = require("../utils/ai");
 //  CONSTANTS
 // ─────────────────────────────────────────────
 
-const COLOR = "#ff383d";
+const RED = "#ff383d";
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -108,7 +108,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Mi opinión sobre: ${tema}`)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -146,7 +146,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Crítica de: ${tema}`)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -184,7 +184,7 @@ const data = {
             new EmbedBuilder()
               .setTitle("Tu excusa profesional")
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -222,7 +222,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Teoría: ${tema}`)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setFooter({ text: "Esto es ficción... o quizás no." })
               .setTimestamp(),
           ],
@@ -335,7 +335,7 @@ ${datosUsuario}`;
             .setTitle(`Roast de ${username}`)
             .setThumbnail(avatarUrl)
             .setDescription(texto)
-            .setColor(COLOR)
+            .setColor(RED)
             .setTimestamp(),
         ],
       });
