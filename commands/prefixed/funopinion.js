@@ -84,5 +84,4 @@ Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No import
     }
   },
 };
-
-module.exports = { data };
+module.exports = { data, usesAI: true };
