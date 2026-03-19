@@ -16,6 +16,7 @@ const data = {
   }),
 
   async code(ctx) {
+    await ctx.channel?.sendTyping?.();
     const urlArg  = ctx.args?.[0]?.trim();
     const adjunto = ctx.message?.attachments?.first();
 
