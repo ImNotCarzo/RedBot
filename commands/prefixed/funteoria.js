@@ -51,9 +51,11 @@ const data = {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
+            .setAuthor({ name: "Comando Teoria", iconURL: ctx.bot.user.displayAvatarURL() })
             .setDescription(
-              `**Uso:**\n\`.teoria <tema>\`\n\n` +
-              `Ejemplo: \`.teoria las palomas son drones del gobierno\``
+              `**Usos:**\nGenera una teoría conspirativa sobre cualquier cosa` +
+              `\n\n**Aliases:**\n\`conspira\`, \`conspiracion\`, \`theory\`` +
+              `\n\n\`\`\`js\n.teoria <tema>\nEjemplo: .teoria las palomas son drones\`\`\``
             )
             .setColor(COLOR),
         ],
