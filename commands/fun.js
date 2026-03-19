@@ -1,12 +1,12 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { generateWithFallback } = require("../utils/ai");
+const { GoogleGenAI } = require("@google/genai");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
 // ─────────────────────────────────────────────
 
-const RED = "#ff383d";
+const COLOR = "#ff383d";
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -17,47 +17,36 @@ RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 // ─────────────────────────────────────────────
 //  AI
 // ─────────────────────────────────────────────
-async function generateGemini(prompt) {
-  const response = await generateWithFallback({
-    model: "gemini-3.1-flash-lite-preview",
+
+function getAI() {
+  return new GoogleGenAI({ apiKey: process.env.GEMINI });
+}
+
+async function generateGemma(prompt) {
+  const response = await getAI().models.generateContent({
+    model: "gemma-3-12b-it",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
   return response.text?.trim() ?? null;
 }
 
-async function generateGemma(messages, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemma-3-4b-it:free",
-          messages,
-        }),
-      });
+async function generateGemmaVision(prompt, imageUrl) {
+  const imgRes    = await fetch(imageUrl);
+  const imgBuf    = await imgRes.arrayBuffer();
+  const imgBase64 = Buffer.from(imgBuf).toString("base64");
+  const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
 
-      const data = await res.json();
-
-      if (data.error?.message?.includes("Provider returned error") && attempt < retries) {
-        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
-        continue;
-      }
-
-      if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-      return data.choices?.[0]?.message?.content?.trim() ?? null;
-
-    } catch (err) {
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
-        continue;
-      }
-      throw err;
-    }
-  }
+  const response = await getAI().models.generateContent({
+    model: "gemma-3-12b-it",
+    contents: [{
+      role: "user",
+      parts: [
+        { text: prompt },
+        { inlineData: { mimeType, data: imgBase64 } },
+      ],
+    }],
+  });
+  return response.text?.trim() ?? null;
 }
 
 // ─────────────────────────────────────────────
@@ -79,10 +68,10 @@ function msATexto(ms) {
   const dias = Math.floor(hrs / 24);
   const mes  = Math.floor(dias / 30);
   const años = Math.floor(dias / 365);
-  if (años >= 1)  return `${años} año${años > 1 ? "s" : ""}`;
-  if (mes >= 1)   return `${mes} mes${mes > 1 ? "es" : ""}`;
-  if (dias >= 1)  return `${dias} día${dias > 1 ? "s" : ""}`;
-  if (hrs >= 1)   return `${hrs} hora${hrs > 1 ? "s" : ""}`;
+  if (años >= 1) return `${años} año${años > 1 ? "s" : ""}`;
+  if (mes  >= 1) return `${mes} mes${mes > 1 ? "es" : ""}`;
+  if (dias >= 1) return `${dias} día${dias > 1 ? "s" : ""}`;
+  if (hrs  >= 1) return `${hrs} hora${hrs > 1 ? "s" : ""}`;
   return `${min} minuto${min > 1 ? "s" : ""}`;
 }
 
@@ -117,7 +106,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGemini(
+        const texto = (await generateGemma(
           `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`
         ))?.slice(0, 4000) ?? "No pude generar una opinión";
 
@@ -126,7 +115,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Mi opinión sobre: ${tema}`)
               .setDescription(texto)
-              .setColor(RED)
+              .setColor(COLOR)
               .setTimestamp(),
           ],
         });
@@ -155,7 +144,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGemini(
+        const texto = (await generateGemma(
           `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`
         ))?.slice(0, 4000) ?? "No pude generar una crítica";
 
@@ -164,7 +153,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Crítica de: ${tema}`)
               .setDescription(texto)
-              .setColor(RED)
+              .setColor(COLOR)
               .setTimestamp(),
           ],
         });
@@ -193,7 +182,7 @@ const data = {
       const situacion = ctx.get("situacion") ?? "cualquier situación";
 
       try {
-        const texto = (await generateGemini(
+        const texto = (await generateGemma(
           `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.`
         ))?.slice(0, 4000) ?? "No pude generar una excusa";
 
@@ -202,7 +191,7 @@ const data = {
             new EmbedBuilder()
               .setTitle("Tu excusa profesional")
               .setDescription(texto)
-              .setColor(RED)
+              .setColor(COLOR)
               .setTimestamp(),
           ],
         });
@@ -231,7 +220,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGemini(
+        const texto = (await generateGemma(
           `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`
         ))?.slice(0, 4000) ?? "No pude generar una teoría";
 
@@ -240,7 +229,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Teoría: ${tema}`)
               .setDescription(texto)
-              .setColor(RED)
+              .setColor(COLOR)
               .setFooter({ text: "Esto es ficción... o quizás no." })
               .setTimestamp(),
           ],
@@ -254,115 +243,97 @@ const data = {
 
   // ── ROAST ─────────────────────────────────────
   .addCommand({
-  data: new CommandBuilder({
-    name: "roast",
-    description: "Critica despiadadamente a un usuario",
-  }),
-  params: new ParamsBuilder()
-    .addMember({
-      name: "usuario",
-      description: "Menciona a alguien",
-      required: false,
+    data: new CommandBuilder({
+      name: "roast",
+      description: "Critica despiadadamente a un usuario",
     }),
+    params: new ParamsBuilder()
+      .addMember({
+        name: "usuario",
+        description: "Menciona a alguien",
+        required: false,
+      }),
 
-  async code(ctx) {
-    if (!ctx.guild) {
-      return ctx.send({
-        content: "Este comando solo funciona en servidores",
-        flags: MessageFlags.Ephemeral,
-      });
-    }
+    async code(ctx) {
+      if (!ctx.guild) {
+        return ctx.send({
+          content: "Este comando solo funciona en servidores",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
 
-    const reply = await prepare(ctx);
+      const reply = await prepare(ctx);
 
-    try {
-      const target = ctx.get("usuario") ?? ctx.member;
-      if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
+      try {
+        const target = ctx.get("usuario") ?? ctx.member;
+        if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
 
-      const user     = target.user;
-      const username = user.globalName ?? user.username;
-      const usertag  = user.username;
+        const user     = target.user;
+        const username = user.globalName ?? user.username;
+        const usertag  = user.username;
 
-      const ahoraMs     = Date.now();
-      const createdHace = msATexto(ahoraMs - user.createdTimestamp);
-      const createdDate = new Date(user.createdTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" });
-      const joinedHace  = target.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp) : null;
-      const joinedDate  = target.joinedTimestamp
-        ? new Date(target.joinedTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" })
-        : null;
+        const ahoraMs     = Date.now();
+        const createdHace = msATexto(ahoraMs - user.createdTimestamp);
+        const createdDate = new Date(user.createdTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" });
+        const joinedHace  = target.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp) : null;
+        const joinedDate  = target.joinedTimestamp
+          ? new Date(target.joinedTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" })
+          : null;
 
-      const activity = target.presence?.activities?.[0]?.name ?? null;
-      const status   = target.presence?.status ?? "offline";
+        const activity = target.presence?.activities?.[0]?.name ?? null;
+        const status   = target.presence?.status ?? "offline";
 
-      const roles = target.roles?.cache
-        ?.filter(r => r.id !== ctx.guild.id)
-        ?.map(r => r.name)
-        ?.slice(0, 8)
-        ?.join(", ") || "ninguno";
+        const roles = target.roles?.cache
+          ?.filter(r => r.id !== ctx.guild.id)
+          ?.map(r => r.name)
+          ?.slice(0, 8)
+          ?.join(", ") || "ninguno";
 
-      const PERMS_RELEVANTES = [
-        "Administrator", "ManageGuild", "ManageMessages",
-        "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
-      ];
-      const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
-      const badges = user.flags?.toArray()?.join(", ") || "ninguna";
+        const PERMS_RELEVANTES = [
+          "Administrator", "ManageGuild", "ManageMessages",
+          "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
+        ];
+        const perms  = target.permissions?.toArray()?.filter(p => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
+        const badges = user.flags?.toArray()?.join(", ") || "ninguna";
 
-      const datosUsuario = [
-        `Nombre: ${username} (@${usertag})`,
-        `Cuenta creada: hace ${createdHace} (${createdDate})`,
-        joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
-        `Estado: ${status}`,
-        activity ? `Actividad: ${activity}` : null,
-        `Roles: ${roles}`,
-        `Permisos notables: ${perms}`,
-        `Insignias: ${badges}`,
-      ].filter(Boolean).join("\n");
+        const datosUsuario = [
+          `Nombre: ${username} (@${usertag})`,
+          `Cuenta creada: hace ${createdHace} (${createdDate})`,
+          joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
+          `Estado: ${status}`,
+          activity ? `Actividad: ${activity}` : null,
+          `Roles: ${roles}`,
+          `Permisos notables: ${perms}`,
+          `Insignias: ${badges}`,
+        ].filter(Boolean).join("\n");
 
-      const prompt = `${PERSONA}
+        const prompt = `${PERSONA}
 Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
 Sarcasmo, humor negro e ingenio. Sin amenazas reales. Sin ser genérico.
-Usa los datos para burlarte de cosas específicas. Máximo 3 párrafos.
+Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos.
 ${datosUsuario}`;
 
-      const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+        const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+        const texto     = (await generateGemmaVision(prompt, avatarUrl))?.slice(0, 4000)
+          ?? "Ocurrió un error con la IA, intenta de nuevo";
 
-      const { GoogleGenAI } = require("@google/genai");
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI });
-
-      const imgRes    = await fetch(avatarUrl);
-      const imgBuf    = await imgRes.arrayBuffer();
-      const imgBase64 = Buffer.from(imgBuf).toString("base64");
-      const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
-
-      const response = await ai.models.generateContent({
-        model: "gemma-3-12b-it",
-        contents: [{
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType, data: imgBase64 } },
+        await reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(`Roast de ${username}`)
+              .setThumbnail(avatarUrl)
+              .setDescription(texto)
+              .setColor(COLOR)
+              .setTimestamp(),
           ],
-        }],
-      });
+        });
+      } catch (err) {
+        console.error("[fun roast]", err);
+        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
 
-      const texto = response.text?.trim().slice(0, 4000) ?? "Ocurrió un error con la IA, intenta de nuevo";
-
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`Roast de ${username}`)
-            .setThumbnail(avatarUrl)
-            .setDescription(texto)
-            .setColor(COLOR)
-            .setTimestamp(),
-        ],
-      });
-    } catch (err) {
-      console.error("[fun roast]", err);
-      await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
-    }
-  },
-})
   // ── LOL ───────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
