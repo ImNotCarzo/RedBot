@@ -328,11 +328,11 @@ Tenés su foto de perfil y sus datos — usá ambas cosas.
 Reglas:
 - SOLO EN ESPAÑOL. Cero palabras en otro idioma.
 - Exactamente 3 párrafos. Ni más ni menos.
-- Cada párrafo ataca un aspecto diferente: uno sobre la foto, uno sobre la cuenta/antigüedad/roles, uno sobre los permisos/insignias/actividad.
-- Sarcasmo e ingenio, no insultos vacíos. Que duela pero con clase.
 - Específico: usá los datos reales, no generalidades.
+- No menciones los permisos como tal, por ejemplo BanMembers, di algo como, permisos para banear, administrador... etc.
 - Sin mencionar timestamps, IDs ni código técnico. Solo información humana.
 - Sin frases de relleno al inicio ni al final. Arrancá directo con el roast.
+- No menciones @usuario en el roast, por ejemplo "Sigue ahí, @RedBot", evita eso.
 
 Datos del usuario:
 ${datosUsuario}`;
