@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 // ─────────────────────────────────────────────
 //  AI
@@ -49,7 +50,7 @@ const data = {
     }
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
+      const thinking = await sendThinkingReply(ctx);
 
       const prompt = `Resume el siguiente texto.
 Solo el resumen, sin frases previas ni comentarios adicionales.
@@ -61,7 +62,7 @@ ${texto.slice(0, 8000)}`;
 
       const resumen = await generateGeminiText(prompt);
 
-      await thinking.edit({
+      await editThinkingReply(thinking, {
         content: "",
         embeds: [
           new EmbedBuilder()

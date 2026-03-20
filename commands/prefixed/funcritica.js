@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { getAI } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -49,7 +50,7 @@ const data = {
     }
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
+      const thinking = await sendThinkingReply(ctx);
 
       const prompt = `${PERSONA}
 Haz una crítica directa, ingeniosa y sin piedad de: "${tema}".
@@ -59,7 +60,7 @@ Máximo 3 párrafos, sin introducción genérica.`;
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una crítica";
 
-      await thinking.edit({
+      await editThinkingReply(thinking, {
         content: "",
         embeds: [
           new EmbedBuilder()

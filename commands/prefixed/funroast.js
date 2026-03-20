@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { getAI } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -66,10 +67,10 @@ const data = {
     }
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
+      const thinking = await sendThinkingReply(ctx);
 
       const target = ctx.message?.mentions?.members?.first() ?? ctx.member;
-      if (!target) return thinking.edit("No pude obtener la información del usuario");
+      if (!target) return editThinkingReply(thinking, { content: "No pude obtener la información del usuario" });
 
       const user     = target.user;
       const username = user.globalName ?? user.username;
@@ -130,7 +131,7 @@ ${datosUsuario}`;
       const texto = (await generateGemmaVision(prompt, avatarUrl))?.slice(0, 4000)
         ?? "Ocurrió un error con la IA, intenta de nuevo";
 
-      await thinking.edit({
+      await editThinkingReply(thinking, {
         content: "",
         embeds: [
           new EmbedBuilder()

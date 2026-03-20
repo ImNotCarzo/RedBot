@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 // ─────────────────────────────────────────────
 //  AI
@@ -58,7 +59,7 @@ const data = {
     let thinking;
 
     try {
-      thinking = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
+      thinking = await sendThinkingReply(ctx);
 
       const prompt =
         `Traduce el siguiente texto al ${idioma}.\n` +
@@ -80,10 +81,10 @@ const data = {
       }
 
       if (!traduccion) {
-        return thinking.edit({ content: "No se pudo generar la traducción" });
+        return editThinkingReply(thinking, { content: "No se pudo generar la traducción" });
       }
 
-      await thinking.edit({
+      await editThinkingReply(thinking, {
         content: "",
         embeds: [
           new EmbedBuilder()
@@ -101,7 +102,7 @@ const data = {
     } catch (err) {
       console.error("[translate prefix]", err);
       if (thinking) {
-        await thinking.edit({ content: "No se pudo conectar con el servicio de traducción" }).catch(() => {});
+        await editThinkingReply(thinking, { content: "No se pudo conectar con el servicio de traducción" }).catch(() => {});
       } else {
         await ctx.send("No se pudo conectar con el servicio de traducción");
       }

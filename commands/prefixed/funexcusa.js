@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { getAI } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -32,7 +33,7 @@ const data = {
     const situacion = ctx.args?.join(" ").trim() || "cualquier situación";
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
+      const thinking = await sendThinkingReply(ctx);
 
       const prompt = `${PERSONA}
 Genera una excusa ridícula, creativa y medianamente plausible para: "${situacion}".
@@ -42,7 +43,7 @@ Máximo 2 párrafos.`;
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una excusa";
 
-      await thinking.edit({
+      await editThinkingReply(thinking, {
         content: "",
         embeds: [
           new EmbedBuilder()
