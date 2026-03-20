@@ -102,37 +102,29 @@ function wrapPrefixedCommands() {
     if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) continue;
 
     command.code = async function (ctx, ...args) {
-  const originalReply = ctx?.message?.reply?.bind(ctx.message);
+      const originalReply = ctx?.message?.reply?.bind(ctx.message);
 
-  if (originalReply) {
-    ctx.send = (payload) => {
-      const normalized = normalizeReplyPayload(payload);
-      return originalReply({
-        ...normalized,
-        allowedMentions: { ...normalized.allowedMentions, repliedUser: false },
-      });
+      if (originalReply) {
+        ctx.send = (payload) => {
+          const normalized = normalizeReplyPayload(payload);
+
+          return originalReply({
+            ...normalized,
+            allowedMentions: {
+              ...normalized.allowedMentions,
+              repliedUser: false,
+            },
+          });
+        };
+      }
+
+      try {
+        return await originalCode.call(this, ctx, ...args);
+      } catch (err) {
+        console.error(`[${command?.data?.name ?? file}]`, err);
+        return ctx.send("Ocurrió un error ejecutando el comando");
+      }
     };
-  }
-
-  // El comando llama ctx.startTyping() manualmente después de validar
-  if (commandModule.usesAI) {
-    let typingInterval;
-    ctx.startTyping = () => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-      typingInterval = setInterval(() => {
-        ctx.channel?.sendTyping?.().catch(() => {});
-      }, 8000);
-      // Limpiar cuando el comando termine
-      const originalSend = ctx.send;
-      ctx.send = (...a) => {
-        clearInterval(typingInterval);
-        return originalSend(...a);
-      };
-    };
-  }
-
-  return originalCode.call(this, ctx, ...args);
-};
 
     wrappedOriginalCodes.add(originalCode);
   }
