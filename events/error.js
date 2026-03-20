@@ -52,6 +52,7 @@ const event = {
     }
 
     if (is(err, Errors.MissingRequiredParam)) {
+      if (err.ctx) {
       const bot = ctx.bot.user;
       const paramerror = new EmbedBuilder()
         .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
@@ -61,7 +62,9 @@ const event = {
           `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
         )
         .setColor(RED);
-      return err.ctx?.send({ embeds: [paramerror] });
+      return err.ctx.send({ embeds: [paramerror] });
+    }
+      return;
     }
     
     if (is(err, Errors.NotNSFW)) {
