@@ -54,7 +54,7 @@ const data = {
         ],
       });
     }
-
+    ctx.startTyping?.();
     try {
       const prompt =
         `Traduce el siguiente texto al ${idioma}.\n` +
