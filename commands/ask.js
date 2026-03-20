@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../utils/ai");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../utils/askMemory");
 const { RED } = require("../utils/colors");
+const { sendThinkingReply, editThinkingReply } = require("../utils/thinkingReply");
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya, tampoco seas super arrogante.
@@ -61,7 +62,7 @@ const data = {
       if (isSlash) {
         await ctx.interaction.deferReply();
       } else {
-        thinking = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
+        thinking = await sendThinkingReply(ctx);
       }
 
       const prev = getConversacion(userId);
@@ -101,7 +102,7 @@ const data = {
         const sent = await ctx.interaction.fetchReply();
         setConversacion(userId, historial, sent.id);
       } else {
-        await thinking.edit({ content: "", embeds: [embed] });
+        await editThinkingReply(thinking, { content: "", embeds: [embed] });
         setConversacion(userId, historial, thinking.id);
       }
 

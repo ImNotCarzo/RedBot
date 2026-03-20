@@ -3,6 +3,7 @@ const { EmbedBuilder } = require("discord.js");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../../utils/ai");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../../utils/askMemory");
 const { RED } = require("../../utils/colors");
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya, tampoco seas super arrogante.
@@ -48,9 +49,7 @@ const data = {
       });
     }
 
-    const thinking = await ctx.message.channel.send({
-      content: "<a:typing:1484407380291616778>  RedBot está pensando...",
-    });
+    const thinking = await sendThinkingReply(ctx);
 
     try {
       const userId   = ctx.author?.id;
@@ -87,12 +86,12 @@ const data = {
         .setDescription(texto)
         .setColor("#ff383d");
 
-      await thinking.edit({ content: "", embeds: [embed] });
+      await editThinkingReply(thinking, { content: "", embeds: [embed] });
       setConversacion(userId, historial, thinking.id);
 
     } catch (err) {
       console.error("[ask prefix]", err);
-      await thinking.edit({ content: "Ocurrió un error, intenta de nuevo" });
+      await editThinkingReply(thinking, { content: "Ocurrió un error, intenta de nuevo" });
     }
   },
 };

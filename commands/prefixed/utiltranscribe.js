@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
 
 const BLUE = "#5865f2";
 const RED  = "#ff383d";
@@ -44,7 +45,7 @@ const data = {
       return ctx.send("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac");
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
+      const thinking = await sendThinkingReply(ctx);
 
       const { default: Groq } = require("groq-sdk");
       const groq = new Groq({ apiKey: process.env.GROQ });
@@ -62,17 +63,17 @@ const data = {
       const texto = result?.trim();
 
       if (!texto) {
-        return thinking.edit("No se detectó voz en el archivo");
+        return editThinkingReply(thinking, "No se detectó voz en el archivo");
       }
 
       if (texto.length > 3900) {
-        return thinking.edit({
+        return editThinkingReply(thinking, {
           content: "La transcripción es muy larga, se envió como archivo:",
           files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
         });
       }
 
-      await thinking.edit({
+      await editThinkingReply(thinking, {
         content: "",
         embeds: [
           new EmbedBuilder()
