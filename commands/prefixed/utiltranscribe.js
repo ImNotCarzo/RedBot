@@ -14,7 +14,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const urlArg  = ctx.args?.[0]?.trim();
     const adjunto = ctx.message?.attachments?.first();
@@ -33,7 +33,7 @@ const data = {
         ],
       });
     }
-    ctx.startTyping?.();
+
     const fileUrl  = urlArg || adjunto.url;
     const fileName = adjunto?.name ?? fileUrl.split("/").pop().split("?")[0];
 
@@ -43,11 +43,9 @@ const data = {
     if (!VALID_EXT.test(fileName))
       return ctx.send("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac");
 
-    const typing = setInterval(() => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-    }, 8000);
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const { default: Groq } = require("groq-sdk");
       const groq = new Groq({ apiKey: process.env.GROQ });
 
@@ -62,16 +60,20 @@ const data = {
       });
 
       const texto = result?.trim();
-      if (!texto) return ctx.send("No se detectó voz en el archivo");
+
+      if (!texto) {
+        return thinking.edit("No se detectó voz en el archivo");
+      }
 
       if (texto.length > 3900) {
-        return ctx.send({
+        return thinking.edit({
           content: "La transcripción es muy larga, se envió como archivo:",
           files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
         });
       }
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle("Transcripción")
@@ -81,13 +83,12 @@ const data = {
             .setTimestamp(),
         ],
       });
+
     } catch (err) {
       console.error("[transcribe]", err);
       await ctx.send("No se pudo transcribir el archivo");
-    } finally {
-      clearInterval(typing);
     }
   },
 };
 
-module.exports = { data, usesAI: true };
+module.exports = { data };
