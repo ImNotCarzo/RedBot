@@ -33,7 +33,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const tema = ctx.args?.join(" ").trim();
 
@@ -52,11 +52,9 @@ const data = {
       });
     }
 
-    const typing = setInterval(() => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-    }, 8000);
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const prompt = `${PERSONA}
 Crea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}".
 Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas.
@@ -65,7 +63,8 @@ Máximo 3 párrafos, sin aclarar que es ficción.`;
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una teoría";
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle(`Teoría: ${tema}`)
@@ -79,10 +78,8 @@ Máximo 3 párrafos, sin aclarar que es ficción.`;
     } catch (err) {
       console.error("[fun teoria prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
-    } finally {
-      clearInterval(typing);
     }
   },
 };
 
-module.exports = { data, usesAI: true };
+module.exports = { data };
