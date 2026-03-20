@@ -33,7 +33,7 @@ const data = {
         ],
       });
     }
-
+    ctx.startTyping?.();
     const fileUrl  = urlArg || adjunto.url;
     const fileName = adjunto?.name ?? fileUrl.split("/").pop().split("?")[0];
 
