@@ -29,7 +29,7 @@ const data = {
   params: new ParamsBuilder().addString({
     name: "pregunta",
     description: "¿Qué quieres preguntar?",
-    required: true,
+    required: false,
   }),
 
   async code(ctx) {
