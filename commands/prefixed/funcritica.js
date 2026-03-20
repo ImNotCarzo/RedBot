@@ -10,7 +10,6 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-
 async function generateGemma(prompt) {
   const response = await getAI().models.generateContent({
     model: "gemma-3-12b-it",
@@ -30,7 +29,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const tema = ctx.args?.join(" ").trim();
 
@@ -49,9 +48,9 @@ const data = {
       });
     }
 
-    await ctx.channel?.sendTyping?.();
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const prompt = `${PERSONA}
 Haz una crítica directa, ingeniosa y sin piedad de: "${tema}".
 Señala sus puntos débiles con humor y sarcasmo.
@@ -60,7 +59,8 @@ Máximo 3 párrafos, sin introducción genérica.`;
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una crítica";
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle(`Crítica de: ${tema}`)
@@ -76,4 +76,5 @@ Máximo 3 párrafos, sin introducción genérica.`;
     }
   },
 };
-module.exports = { data, usesAI: true };
+
+module.exports = { data };
