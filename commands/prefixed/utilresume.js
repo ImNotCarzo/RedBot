@@ -29,7 +29,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const texto = ctx.args?.join(" ").trim();
 
@@ -48,11 +48,9 @@ const data = {
       });
     }
 
-    const typing = setInterval(() => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-    }, 8000);
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const prompt = `Resume el siguiente texto.
 Solo el resumen, sin frases previas ni comentarios adicionales.
 Debe ser claro, conciso y fiel al contenido original.
@@ -63,7 +61,8 @@ ${texto.slice(0, 8000)}`;
 
       const resumen = await generateGeminiText(prompt);
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle("Resumen")
@@ -77,10 +76,8 @@ ${texto.slice(0, 8000)}`;
     } catch (err) {
       console.error("[resume prefix]", err);
       await ctx.send("No se pudo resumir el texto");
-    } finally {
-      clearInterval(typing);
     }
   },
 };
 
-module.exports = { data, usesAI: true };
+module.exports = { data };
