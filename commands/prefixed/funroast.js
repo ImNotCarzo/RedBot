@@ -70,7 +70,7 @@ const data = {
       const thinking = await sendThinkingReply(ctx);
 
       const target = ctx.message?.mentions?.members?.first() ?? ctx.member;
-      if (!target) return editThinkingReply(thinking, "No pude obtener la información del usuario");
+      if (!target) return editThinkingReply(thinking, { content: "No pude obtener la información del usuario" });
 
       const user     = target.user;
       const username = user.globalName ?? user.username;

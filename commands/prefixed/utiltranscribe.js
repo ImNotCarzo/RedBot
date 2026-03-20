@@ -63,7 +63,7 @@ const data = {
       const texto = result?.trim();
 
       if (!texto) {
-        return editThinkingReply(thinking, "No se detectó voz en el archivo");
+        return editThinkingReply(thinking, { content: "No se detectó voz en el archivo" });
       }
 
       if (texto.length > 3900) {
