@@ -1,8 +1,8 @@
 const { CommandBuilder, ParamsBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback, needsSearchAI, toGeminiHistory } = require(".../utils/ai");
-const { MAX_HISTORIAL, setConversacion, getConversacion } = require(".../utils/askMemory");
-const { RED } = require(".../utils/colors");
+const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../../utils/ai");
+const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../../utils/askMemory");
+const { RED } = require("../../utils/colors");
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya, tampoco seas super arrogante.
