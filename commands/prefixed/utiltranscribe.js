@@ -44,7 +44,7 @@ const data = {
       return ctx.send("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac");
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
 
       const { default: Groq } = require("groq-sdk");
       const groq = new Groq({ apiKey: process.env.GROQ });
