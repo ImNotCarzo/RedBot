@@ -102,49 +102,43 @@ function wrapPrefixedCommands() {
     if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) continue;
 
     command.code = async function (ctx, ...args) {
+  const originalReply = ctx?.message?.reply?.bind(ctx.message);
+  let replied = false;
 
-      const originalReply = ctx?.message?.reply?.bind(ctx.message);
-
-      if (originalReply) {
-        ctx.send = (payload) => {
-          const normalized = normalizeReplyPayload(payload);
-
-          return originalReply({
-            ...normalized,
-            allowedMentions: {
-              ...normalized.allowedMentions,
-              repliedUser: false,
-            },
-          });
-        };
-      }
-
-      let typingInterval;
-      let typingStarted = false;
-      let delay;
-
-      if (commandModule.usesAI) {
-        const startTyping = () => {
-          if (typingStarted) return;
-          typingStarted = true;
-
-          typingInterval = setInterval(() => {
-            ctx.channel?.sendTyping?.().catch(() => {});
-          }, 8000);
-
-          ctx.channel?.sendTyping?.().catch(() => {});
-        };
-
-        delay = setTimeout(startTyping, 500);
-      }
-
-      try {
-        return await originalCode.call(this, ctx, ...args);
-      } finally {
-        if (delay) clearTimeout(delay);
-        if (typingInterval) clearInterval(typingInterval);
-      }
+  if (originalReply) {
+    ctx.send = (payload) => {
+      replied = true;
+      const normalized = normalizeReplyPayload(payload);
+      return originalReply({
+        ...normalized,
+        allowedMentions: {
+          ...normalized.allowedMentions,
+          repliedUser: false,
+        },
+      });
     };
+  }
+
+  let typingInterval;
+  let delay;
+
+  if (commandModule.usesAI) {
+    delay = setTimeout(() => {
+      if (replied) return;
+      ctx.channel?.sendTyping?.().catch(() => {});
+      typingInterval = setInterval(() => {
+        ctx.channel?.sendTyping?.().catch(() => {});
+      }, 8000);
+    }, 500);
+  }
+
+  try {
+    return await originalCode.call(this, ctx, ...args);
+  } finally {
+    clearTimeout(delay);
+    if (typingInterval) clearInterval(typingInterval);
+  }
+};
 
     wrappedOriginalCodes.add(originalCode);
   }
@@ -273,7 +267,7 @@ bot.on("messageCreate", async (message) => {
 //  UNHANDLED ERRORS
 // ─────────────────────────────────────────────
 
-process.on("SIGTERM", () => console.log("[Process] SIGTERM recibido — el host está apagando el servidor"));
+process.on("SIGTERM", () => console.log("[Process] SIGTERM recibido - Shut"));
 process.on("SIGINT",  () => console.log("[Process] SIGINT recibido"));
 process.on("unhandledRejection", (err) => console.error("[UnhandledRejection]", err));
 process.on("uncaughtException",  (err) => console.error("[UncaughtException]",  err));
