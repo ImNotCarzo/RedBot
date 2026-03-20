@@ -103,41 +103,35 @@ function wrapPrefixedCommands() {
 
     command.code = async function (ctx, ...args) {
   const originalReply = ctx?.message?.reply?.bind(ctx.message);
-  let replied = false;
 
   if (originalReply) {
     ctx.send = (payload) => {
-      replied = true;
       const normalized = normalizeReplyPayload(payload);
       return originalReply({
         ...normalized,
-        allowedMentions: {
-          ...normalized.allowedMentions,
-          repliedUser: false,
-        },
+        allowedMentions: { ...normalized.allowedMentions, repliedUser: false },
       });
     };
   }
 
-  let typingInterval;
-  let delay;
-
+  // El comando llama ctx.startTyping() manualmente después de validar
   if (commandModule.usesAI) {
-    delay = setTimeout(() => {
-      if (replied) return;
+    let typingInterval;
+    ctx.startTyping = () => {
       ctx.channel?.sendTyping?.().catch(() => {});
       typingInterval = setInterval(() => {
         ctx.channel?.sendTyping?.().catch(() => {});
       }, 8000);
-    }, 500);
+      // Limpiar cuando el comando termine
+      const originalSend = ctx.send;
+      ctx.send = (...a) => {
+        clearInterval(typingInterval);
+        return originalSend(...a);
+      };
+    };
   }
 
-  try {
-    return await originalCode.call(this, ctx, ...args);
-  } finally {
-    clearTimeout(delay);
-    if (typingInterval) clearInterval(typingInterval);
-  }
+  return originalCode.call(this, ctx, ...args);
 };
 
     wrappedOriginalCodes.add(originalCode);
