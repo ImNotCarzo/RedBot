@@ -32,7 +32,7 @@ const data = {
     const situacion = ctx.args?.join(" ").trim() || "cualquier situación";
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
 
       const prompt = `${PERSONA}
 Genera una excusa ridícula, creativa y medianamente plausible para: "${situacion}".
