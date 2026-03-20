@@ -40,7 +40,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const urlArg   = ctx.args?.[0]?.trim();
     const adjunto  = ctx.message?.attachments?.first();
@@ -61,18 +61,17 @@ const data = {
       });
     }
 
-    const typing = setInterval(() => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-    }, 8000);
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const prompt = `Describe detalladamente qué hay en esta imagen.
 Sé específico: colores, objetos, personas, texto visible, ambiente, estilo.
 Responde en español. Máximo 3 párrafos.`;
 
       const texto = await generateVision(prompt, imageUrl);
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle("Descripción de imagen")
@@ -86,10 +85,8 @@ Responde en español. Máximo 3 párrafos.`;
     } catch (err) {
       console.error("[describe prefix]", err);
       await ctx.send("No se pudo procesar la imagen");
-    } finally {
-      clearInterval(typing);
     }
   },
 };
 
-module.exports = { data, usesAI: true };
+module.exports = { data };
