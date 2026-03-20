@@ -45,7 +45,7 @@ const data = {
         .setDescription(
           `**Usos:**\nHazle una pregunta a la IA` +
           `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cómo está el clima\`\`\``
+          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
         )
         .setColor(RED);
 
@@ -62,7 +62,7 @@ const data = {
       if (isSlash) {
         await ctx.interaction.deferReply();
       } else {
-        thinking = await ctx.send({ content: "..." });
+        thinking = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
       }
 
       const prev = getConversacion(userId);
