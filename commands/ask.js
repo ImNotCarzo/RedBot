@@ -23,7 +23,6 @@ const data = {
     name: "ask",
     description: "Hazle una pregunta a la IA",
     aliases: ["ia", "ai"],
-    guildOnly: false,
     as_prefix: false,
     as_slash: true,
   }),
