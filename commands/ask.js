@@ -24,7 +24,7 @@ const data = {
     name: "ask",
     description: "Hazle una pregunta a la IA",
     aliases: ["ia", "ai"],
-    as_prefix: false,
+    as_prefix: true,
     as_slash: true,
   }),
   params: new ParamsBuilder().addString({
