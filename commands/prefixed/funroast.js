@@ -66,7 +66,7 @@ const data = {
     }
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
 
       const target = ctx.message?.mentions?.members?.first() ?? ctx.member;
       if (!target) return thinking.edit("No pude obtener la información del usuario");
