@@ -51,7 +51,7 @@ const data = {
     }
 
     try {
-      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+      const thinking = await ctx.send("<a:typing:1484407380291616778>  RedBot está pensando...");
 
       const prompt = `${PERSONA}
 Da tu opinión personal, sarcástica y sin filtro sobre: "${tema}".
