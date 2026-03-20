@@ -59,19 +59,17 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     if (!ctx.guild) {
       return ctx.send("Este comando solo funciona en servidores");
     }
 
-    const typing = setInterval(() => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-    }, 8000);
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const target = ctx.message?.mentions?.members?.first() ?? ctx.member;
-      if (!target) return ctx.send("No pude obtener la información del usuario");
+      if (!target) return thinking.edit("No pude obtener la información del usuario");
 
       const user     = target.user;
       const username = user.globalName ?? user.username;
@@ -132,7 +130,8 @@ ${datosUsuario}`;
       const texto = (await generateGemmaVision(prompt, avatarUrl))?.slice(0, 4000)
         ?? "Ocurrió un error con la IA, intenta de nuevo";
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle(`Roast de ${username}`)
@@ -146,10 +145,8 @@ ${datosUsuario}`;
     } catch (err) {
       console.error("[fun roast prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
-    } finally {
-      clearInterval(typing);
     }
   },
 };
 
-module.exports = { data, usesAI: true };
+module.exports = { data };
