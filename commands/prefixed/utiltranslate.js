@@ -58,7 +58,7 @@ const data = {
     let thinking;
 
     try {
-      thinking = await ctx.send({ content: "..." });
+      thinking = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
 
       const prompt =
         `Traduce el siguiente texto al ${idioma}.\n` +
