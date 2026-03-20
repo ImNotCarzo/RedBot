@@ -31,7 +31,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const tema = ctx.args?.join(" ").trim();
 
@@ -50,11 +50,9 @@ const data = {
       });
     }
 
-    const typing = setInterval(() => {
-      ctx.channel?.sendTyping?.().catch(() => {});
-    }, 8000);
-
     try {
+      const thinking = await ctx.send("<a:typing:1484407380291616778> RedBot está pensando...");
+
       const prompt = `${PERSONA}
 Da tu opinión personal, sarcástica y sin filtro sobre: "${tema}".
 Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No importa si el tema es polémico, da la opinión sin filtro y algo de humor negro.`;
@@ -62,7 +60,8 @@ Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No import
       const texto = (await generateGemma(prompt))?.slice(0, 4000)
         ?? "No pude generar una opinión";
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle(`Mi opinión sobre: ${tema}`)
@@ -75,9 +74,8 @@ Máximo 3 párrafos, sin introducción genérica, ve directo al punto. No import
     } catch (err) {
       console.error("[fun opinion prefix]", err);
       await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
-    } finally {
-      clearInterval(typing);
     }
   },
 };
-module.exports = { data, usesAI: true };
+
+module.exports = { data };
