@@ -29,7 +29,7 @@ const data = {
     as_prefix: true,
     as_slash: false,
   }),
-  usesAI: true,
+
   async code(ctx) {
     const args   = ctx.args ?? [];
     const ultimo = args[args.length - 1];
@@ -54,8 +54,12 @@ const data = {
         ],
       });
     }
-    ctx.startTyping?.();
+
+    let thinking;
+
     try {
+      thinking = await ctx.send({ content: "..." });
+
       const prompt =
         `Traduce el siguiente texto al ${idioma}.\n` +
         `Responde ÚNICAMENTE con este formato JSON, sin texto adicional:\n` +
@@ -76,10 +80,11 @@ const data = {
       }
 
       if (!traduccion) {
-        return ctx.send("No se pudo generar la traducción");
+        return thinking.edit({ content: "No se pudo generar la traducción" });
       }
 
-      await ctx.send({
+      await thinking.edit({
+        content: "",
         embeds: [
           new EmbedBuilder()
             .setTitle("Traducción")
@@ -95,9 +100,13 @@ const data = {
 
     } catch (err) {
       console.error("[translate prefix]", err);
-      await ctx.send("No se pudo conectar con el servicio de traducción");
+      if (thinking) {
+        await thinking.edit({ content: "No se pudo conectar con el servicio de traducción" }).catch(() => {});
+      } else {
+        await ctx.send("No se pudo conectar con el servicio de traducción");
+      }
     }
   },
 };
 
-module.exports = { data, usesAI: true };
+module.exports = { data };
