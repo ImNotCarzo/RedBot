@@ -1,5 +1,7 @@
 const { Errors } = require("erine");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../utils/colors");
+
 function is(err, Type) {
   try {
     return Type && err instanceof Type;
@@ -52,21 +54,21 @@ const event = {
     }
 
     if (is(err, Errors.MissingRequiredParam)) {
-      if (err.ctx) {
-      const bot = ctx.bot.user;
-      const paramerror = new EmbedBuilder()
-        .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
-        .setDescription(
-          `**Usos:**\nHazle una pregunta a la IA` +
-          `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
-        )
-        .setColor(RED);
-      return err.ctx.send({ embeds: [paramerror] });
-    }
-      return;
-    }
-    
+      if (!err.ctx) return;
+        const bot = err.ctx.bot.user;
+
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `**Usos:**\nHazle una pregunta a la IA` +
+            `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
+            `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
+          )
+          .setColor(RED);
+
+        return err.ctx.send({ embeds: [paramerror] });
+      }
+
     if (is(err, Errors.NotNSFW)) {
       return err.ctx?.send("Este comando solo se puede usar en canales NSFW");
     }
@@ -100,7 +102,6 @@ const event = {
       return err.ctx?.send("Ocurrió un error desconocido con el comando");
     }
 
-    // Cualquier otra cosa
     console.error("[Erine Error]", err);
   },
 };
