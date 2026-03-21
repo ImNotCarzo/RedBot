@@ -52,7 +52,7 @@ const data = {
               `\n\n\`\`\`js\n.translate <texto> [idioma]\nEjemplo: .translate כלב español\`\`\``
             )
             .setColor(COLOR),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
     }
 
