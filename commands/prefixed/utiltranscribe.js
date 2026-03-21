@@ -82,7 +82,7 @@ const data = {
             .setColor(RED)
             .setFooter({ text: `${fileName} · ${adjunto ? `${(adjunto.size / 1024).toFixed(1)}KB` : "URL"}` })
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
