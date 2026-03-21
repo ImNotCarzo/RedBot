@@ -1,4 +1,4 @@
-const THINKING_TEXT = "<a:typing:1484407380291616778> RedBot está pensando...";
+const THINKING_TEXT = "<a:typing:1484407380291616778>  RedBot está pensando...";
 
 async function sendThinkingReply(ctx) {
   return ctx.send({
