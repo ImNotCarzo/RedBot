@@ -89,10 +89,11 @@ const data = {
     async code(ctx) {
       try {
         const before  = Date.now();
+        const sent    = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
         const msgPing = Date.now() - before;
         const apiPing = ctx.bot?.ws?.ping ?? 0;
 
-        await ctx.send({
+        await sent.edit({
           content: "",
           embeds: [
             new EmbedBuilder()
