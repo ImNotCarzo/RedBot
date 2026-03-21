@@ -13,11 +13,10 @@ const data = {
   async code(ctx) {
     try {
       const before  = Date.now();
-      const sent    = await ctx.send({ content: "..." });
       const msgPing = Date.now() - before;
       const apiPing = ctx.bot?.ws?.ping ?? 0;
 
-      await sent.edit({
+      await ctx.send({
         content: "",
         embeds: [
           new EmbedBuilder()
