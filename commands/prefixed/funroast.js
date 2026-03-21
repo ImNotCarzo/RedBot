@@ -140,7 +140,7 @@ ${datosUsuario}`;
             .setDescription(texto)
             .setColor(COLOR)
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
