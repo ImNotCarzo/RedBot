@@ -96,7 +96,7 @@ const data = {
             )
             .setFooter({ text: `${origen} → ${idioma}` })
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
