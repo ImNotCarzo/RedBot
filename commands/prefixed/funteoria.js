@@ -73,7 +73,7 @@ Máximo 3 párrafos, sin aclarar que es ficción.`;
             .setColor(COLOR)
             .setFooter({ text: "Esto es ficción... o quizás no." })
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
