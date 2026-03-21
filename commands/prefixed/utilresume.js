@@ -71,7 +71,7 @@ ${texto.slice(0, 8000)}`;
             .setColor(COLOR)
             .setFooter({ text: `${texto.length} caracteres → resumido` })
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
