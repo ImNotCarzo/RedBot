@@ -335,8 +335,10 @@ const data = {
             const pPrevId = `perms_prev_${Date.now()}`;
             const pNextId = `perms_next_${Date.now()}`;
             const buildPermsEmbed = (pg) => new EmbedBuilder()
-              .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-              .setTitle(user.username)
+              .setAuthor({ 
+                name: `Permisos de ${user.username}`,
+                iconURL: user.displayAvatarURL({ size: 128 })
+              })
               .setDescription(pages[pg].join("\n"))
               .setColor(colorRol)
               .setTimestamp();
@@ -562,8 +564,10 @@ const data = {
         const prevId = `perms_prev_${Date.now()}`;
         const nextId = `perms_next_${Date.now()}`;
         const buildEmbed = (pg) => new EmbedBuilder()
-          .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-          .setTitle(user.username)
+          .setAuthor({ 
+            name: `Permisos de ${user.username}`, 
+            iconURL: user.displayAvatarURL({ size: 128 })
+          })
           .setDescription(pages[pg].join("\n"))
           .setColor(color)
           .setTimestamp();
