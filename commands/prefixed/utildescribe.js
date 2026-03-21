@@ -80,7 +80,7 @@ Responde en español. Máximo 3 párrafos.`;
             .setThumbnail(imageUrl)
             .setColor(COLOR)
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
