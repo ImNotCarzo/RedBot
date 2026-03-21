@@ -268,7 +268,7 @@ const data = {
     async code(ctx) {
       const userId = ctx.user?.id ?? ctx.author?.id;
       deleteConversacion(userId);
-      await ctx.send({ content: "Historial borrado" });
+      await ctx.send({ content: "Bite the dust, f" });
     },
   })
 
@@ -454,7 +454,6 @@ const data = {
               .setTitle("Transcripción")
               .setDescription(texto)
               .setColor(RED)
-              .setFooter({ text: `${attachment.name} · ${(attachment.size / 1024).toFixed(1)}KB` })
               .setTimestamp(),
           ],
         });
@@ -498,7 +497,6 @@ const data = {
               .setTitle("Resumen")
               .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
               .setColor(RED)
-              .setFooter({ text: `${texto.length} caracteres → resumido` })
               .setTimestamp(),
           ],
         });
