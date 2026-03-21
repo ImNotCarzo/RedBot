@@ -995,13 +995,22 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
   params: new ParamsBuilder()
     .addRole({
       name: "rol",
-      description: "Rol a asignar al entrar (no usar para desactivar)",
+      description: "Rol a asignar al entrar (omitir para desactivar)",
       required: false,
+    })
+    .addString({
+      name: "ignorar_bots",
+      description: "¿Ignorar bots?",
+      required: false,
+      choices: [
+        { name: "Sí", value: "true" },
+      ],
     }),
 
   async code(ctx) {
-    const role   = ctx.get("rol");
-    const modTag = ctx.user?.tag ?? ctx.author?.tag;
+    const role       = ctx.get("rol");
+    const ignoreBots = ctx.get("ignorar_bots") === "true";
+    const modTag     = ctx.user?.tag ?? ctx.author?.tag;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
       return ctx.send({ content: "Necesitas el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
@@ -1027,7 +1036,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
     await JoinRole.findOneAndUpdate(
       { guildId: ctx.guild.id },
-      { roleId: role.id },
+      { roleId: role.id, ignoreBots },
       { upsert: true }
     );
 
@@ -1035,6 +1044,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       .setTitle("Rol automático configurado")
       .setDescription(`${role} se asignará a cada usuario que entre al servidor`)
       .setColor(GREEN)
+      .addFields({ name: "Ignorar bots", value: ignoreBots ? "Sí" : "No", inline: true })
       .setTimestamp();
 
     await ctx.send({ embeds: [embed] });
@@ -1042,8 +1052,9 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       .setTitle("Rol join configurado")
       .setColor(GREEN)
       .addFields(
-        { name: "Rol",       value: `${role.name} (\`${role.id}\`)`, inline: true },
-        { name: "Moderador", value: modTag,                           inline: true },
+        { name: "Rol",          value: `${role.name} (\`${role.id}\`)`, inline: true },
+        { name: "Moderador",    value: modTag,                           inline: true },
+        { name: "Ignorar bots", value: ignoreBots ? "Sí" : "No",        inline: true },
       )
       .setTimestamp()
     );
