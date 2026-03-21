@@ -187,72 +187,77 @@ const data = {
   }),
   params: new ParamsBuilder()
     .addMember({ name: "usuario", description: "Usuario a softbanear", required: true })
-    .addString({ name: "razon", description: "Razón", required: false })
-    .addString({ name: "dias", description: "Días de mensajes a borrar (1-7)", required: false }),
+    .addString({ name: "razon",   description: "Razón",                           required: false })
+    .addString({ name: "dias",    description: "Días de mensajes a borrar (1-7)", required: false }),
 
   async code(ctx) {
+    const isSlash = !!ctx.interaction;
+    if (isSlash) await ctx.interaction.deferReply();
+
+    const send = (payload) => isSlash
+      ? ctx.interaction.editReply(payload)
+      : ctx.send(payload);
+
     const member  = ctx.get("usuario");
     const reason  = ctx.get("razon") ?? "Sin razón";
     const daysRaw = ctx.get("dias");
     const days    = daysRaw ? Math.min(7, Math.max(1, parseInt(daysRaw) || 7)) : 7;
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-      return ctx.send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
+      return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
 
     if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-      return ctx.send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
+      return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
     if (member.id === ctx.guild.ownerId)
-      return ctx.send({ content: "No puedo softbanear al dueño del servidor", flags: MessageFlags.Ephemeral });
+      return send({ content: "No puedo softbanear al dueño del servidor", flags: MessageFlags.Ephemeral });
 
     if (member.roles.highest.position >= ctx.guild.members.me.roles.highest.position)
-      return ctx.send({ content: "No puedo actuar sobre alguien con igual o mayor rango que el mío", flags: MessageFlags.Ephemeral });
+      return send({ content: "No puedo actuar sobre alguien con igual o mayor rango que el mío", flags: MessageFlags.Ephemeral });
 
     if (member.roles.highest.position >= ctx.member.roles.highest.position)
-      return ctx.send({ content: "No puedes actuar sobre alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
+      return send({ content: "No puedes actuar sobre alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
 
     try {
-      // Intentar enviar DM antes de banear
       await member.user.send({
         embeds: [
           new EmbedBuilder()
             .setColor(YELLOW)
-            .setDescription(`Fuiste softbaneado de **${ctx.guild.name}**${reason ? `\nRazón: ${reason}` : ""}`)
+            .setDescription(`Fuiste softbaneado de **${ctx.guild.name}**\nRazón: ${reason}`)
             .setTimestamp(),
         ],
       }).catch(() => {});
 
-      // Ejecutar softban
-      await member.ban({ deleteMessageDays: days, reason: `[SOFTBAN] ${ctx.user?.tag ?? ctx.author?.tag}${reason ? `: ${reason}` : ""}` });
+      await member.ban({
+        deleteMessageSeconds: days * 24 * 60 * 60,
+        reason: `[SOFTBAN] ${ctx.user?.tag ?? ctx.author?.tag}${reason ? `: ${reason}` : ""}`,
+      });
       await ctx.guild.members.unban(member.id, `[SOFTBAN] ${ctx.user?.tag ?? ctx.author?.tag}`);
 
       const username = member.user.globalName || member.user.username;
 
-      // Embed público minimalista
       const publicEmbed = new EmbedBuilder()
         .setDescription(`**${username}** fue softbaneado`)
         .setColor(YELLOW)
         .setTimestamp();
 
-      await ctx.send({ embeds: [publicEmbed] });
+      await send({ embeds: [publicEmbed] });
 
-      // Embed de logs
       const logEmbed = new EmbedBuilder()
         .setTitle("Usuario softbaneado")
         .setColor(YELLOW)
         .addFields(
           { name: "Usuario",   value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-          { name: "Moderador", value: `${ctx.user?.tag ?? ctx.author?.tag}`, inline: true },
-          ...(reason ? [{ name: "Razón", value: reason, inline: false }] : []),
-          { name: "Mensajes", value: `${days} días borrados`, inline: true },
+          { name: "Moderador", value: `${ctx.user?.tag ?? ctx.author?.tag}`,   inline: true },
+          { name: "Razón",     value: reason,                                   inline: false },
+          { name: "Mensajes",  value: `${days} días borrados`,                  inline: true },
         )
         .setFooter({ text: "El usuario puede volver a entrar al servidor" })
         .setTimestamp();
 
       await sendLog(ctx.guild, logEmbed);
-
     } catch {
-      await ctx.send({ content: "No pude softbanear al usuario", flags: MessageFlags.Ephemeral });
+      await send({ content: "No pude softbanear al usuario", flags: MessageFlags.Ephemeral });
     }
   },
 })
