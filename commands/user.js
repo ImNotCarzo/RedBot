@@ -161,7 +161,6 @@ const data = {
           return;
         }
 
-        // ── Con guild ──
         const member = await resolveMember(ctx, input);
         if (!member) return ctx.send("No se encontró ningún usuario");
 
@@ -191,7 +190,7 @@ const data = {
               value: `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`,
             }
           )
-          .setTimestamp(); // sin footer de "solicitado por"
+          .setTimestamp();
 
         const baseOptions = [
           { label: "Avatar",     value: "avatar",      description: "Avatar del usuario" },
@@ -227,7 +226,7 @@ const data = {
           const isAuthor = interaction.user.id === authorId;
 
           if ([prevId, nextId].includes(interaction.customId)) {
-            if (!isAuthor) return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
+            if (!isAuthor) return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
             return;
           }
 
@@ -259,7 +258,7 @@ const data = {
               const embed = new EmbedBuilder().setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) }).setTitle(user.username).setDescription(perms.join("\n")).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
-            return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
+            return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           }
 
           if (selected === "info") return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
@@ -524,7 +523,7 @@ const data = {
           filter: i => [prevId, nextId].includes(i.customId),
         });
         collector.on("collect", async i => {
-          if (i.user.id !== invoker.id) return i.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
+          if (i.user.id !== invoker.id) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
           await i.update({ embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)], components: [buildPaginationRow(prevId, nextId, page, pages.length)] });
@@ -579,7 +578,7 @@ const data = {
           filter: i => [prevId, nextId].includes(i.customId),
         });
         collector.on("collect", async i => {
-          if (i.user.id !== invoker.id) return i.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
+          if (i.user.id !== invoker.id) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
           await i.update({ embeds: [buildEmbed(page)], components: [buildPaginationRow(prevId, nextId, page, pages.length)] });
