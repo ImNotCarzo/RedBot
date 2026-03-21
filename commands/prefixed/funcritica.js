@@ -68,7 +68,7 @@ Máximo 3 párrafos, sin introducción genérica.`;
             .setDescription(texto)
             .setColor(COLOR)
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
