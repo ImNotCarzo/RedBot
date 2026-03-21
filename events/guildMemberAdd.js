@@ -1,17 +1,21 @@
 const mongoose = require("mongoose");
 
 const joinRoleSchema = new mongoose.Schema({
-  guildId: { type: String, required: true, unique: true },
-  roleId:  { type: String, required: true },
+  guildId:    { type: String,  required: true, unique: true },
+  roleId:     { type: String,  required: true },
+  ignoreBots: { type: Boolean, default: false },
 });
 
 const JoinRole = mongoose.models.JoinRole || mongoose.model("JoinRole", joinRoleSchema);
+
 const event = {
   name: "guildMemberAdd",
   async code(bot, member) {
     try {
       const config = await JoinRole.findOne({ guildId: member.guild.id });
       if (!config) return;
+
+      if (config.ignoreBots && member.user.bot) return;
 
       const role = member.guild.roles.cache.get(config.roleId);
       if (!role) {
