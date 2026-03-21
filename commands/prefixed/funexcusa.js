@@ -51,7 +51,7 @@ Máximo 2 párrafos.`;
             .setDescription(texto)
             .setColor(COLOR)
             .setTimestamp(),
-        ],
+        ], allowedMentions: { repliedUser: false },
       });
 
     } catch (err) {
