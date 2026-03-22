@@ -69,7 +69,6 @@ const data = {
       return ctx.send({ content: "No puedes banear a alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
 
     try {
-      // Intentar enviar DM antes de ban
       await member.user.send({
         embeds: [
           new EmbedBuilder()
@@ -79,20 +78,16 @@ const data = {
         ],
       }).catch(() => {});
 
-      // Ejecutar ban
       await member.ban({ deleteMessageDays: days, reason: `${ctx.user?.tag ?? ctx.author?.tag}${reason ? `: ${reason}` : ""}` });
 
       const username = member.user.globalName || member.user.username;
 
-      // Embed público
       const publicEmbed = new EmbedBuilder()
         .setDescription(`**${username}** fue baneado`)
         .setColor(RED)
-        .setTimestamp();
 
       await ctx.send({ embeds: [publicEmbed] });
 
-      // Embed de logs
       const logEmbed = new EmbedBuilder()
         .setTitle("Usuario baneado")
         .setColor(RED)
@@ -137,30 +132,24 @@ const data = {
       if (!ban)
         return ctx.send({ content: "Ese usuario no está baneado", flags: MessageFlags.Ephemeral });
 
-      // Intentar enviar DM antes de desban
       await ban.user.send({
         embeds: [
           new EmbedBuilder()
             .setColor(GREEN)
             .setDescription(`Fuiste desbaneado de **${ctx.guild.name}**${reason ? `\nRazón: ${reason}` : ""}`)
-            .setTimestamp(),
         ],
       }).catch(() => {});
 
-      // Ejecutar desban
       await ctx.guild.members.unban(userId, `${ctx.user?.tag ?? ctx.author?.tag}${reason ? `: ${reason}` : ""}`);
 
       const username = ban.user.globalName || ban.user.username;
 
-      // Embed público simple
       const publicEmbed = new EmbedBuilder()
         .setDescription(`**${username}** fue desbaneado`)
         .setColor(GREEN)
-        .setTimestamp();
 
       await ctx.send({ embeds: [publicEmbed] });
 
-      // Embed de logs
       const logEmbed = new EmbedBuilder()
         .setTitle("Usuario desbaneado")
         .setColor(GREEN)
@@ -222,9 +211,8 @@ const data = {
       await member.user.send({
         embeds: [
           new EmbedBuilder()
-            .setColor(YELLOW)
+            .setColor(RED)
             .setDescription(`Fuiste softbaneado de **${ctx.guild.name}**\nRazón: ${reason}`)
-            .setTimestamp(),
         ],
       }).catch(() => {});
 
@@ -238,14 +226,13 @@ const data = {
 
       const publicEmbed = new EmbedBuilder()
         .setDescription(`**${username}** fue softbaneado`)
-        .setColor(YELLOW)
-        .setTimestamp();
+        .setColor(RED)
 
       await send({ embeds: [publicEmbed] });
 
       const logEmbed = new EmbedBuilder()
         .setTitle("Usuario softbaneado")
-        .setColor(YELLOW)
+        .setColor(RED)
         .addFields(
           { name: "Usuario",   value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
           { name: "Moderador", value: `${ctx.user?.tag ?? ctx.author?.tag}`,   inline: true },
@@ -269,69 +256,94 @@ const data = {
     description: "Banea a un usuario por un tiempo determinado",
   }),
   params: new ParamsBuilder()
-    .addMember({ name: "usuario",  description: "Usuario a banear",                required: true })
-    .addString({ name: "duracion", description: "Duración (ej: 1h, 30m, 2d)",     required: true })
-    .addString({ name: "razon",    description: "Razón",                            required: false }),
+    .addMember({ name: "usuario",  description: "Usuario a banear",            required: true })
+    .addString({ name: "duracion", description: "Duración (ej: 1h, 30m, 2d)", required: true })
+    .addString({ name: "razon",    description: "Razón",                        required: false }),
 
   async code(ctx) {
+    const isSlash = !!ctx.interaction;
+    if (isSlash) await ctx.interaction.deferReply();
+
+    const send = (payload) => isSlash
+      ? ctx.interaction.editReply(payload)
+      : ctx.send(payload);
+
     const member   = ctx.get("usuario");
     const durStr   = ctx.get("duracion");
     const reason   = ctx.get("razon") ?? "Sin razón";
     const duration = parseDuration(durStr);
 
     if (!duration)
-      return ctx.send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
+      return send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
 
     if (duration > 28 * 86_400_000)
-      return ctx.send({ content: "La duración máxima es 28 días", flags: MessageFlags.Ephemeral });
+      return send({ content: "La duración máxima es 28 días", flags: MessageFlags.Ephemeral });
 
     if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-      return ctx.send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
+      return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
 
     if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-      return ctx.send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
+      return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
     if (member.id === ctx.guild.ownerId)
-      return ctx.send({ content: "No puedo banear al dueño del servidor", flags: MessageFlags.Ephemeral });
+      return send({ content: "No puedo banear al dueño del servidor", flags: MessageFlags.Ephemeral });
 
     if (member.roles.highest.position >= ctx.guild.members.me.roles.highest.position)
-      return ctx.send({ content: "No puedo actuar sobre alguien con igual o mayor rango que el mío", flags: MessageFlags.Ephemeral });
+      return send({ content: "No puedo actuar sobre alguien con igual o mayor rango que el mío", flags: MessageFlags.Ephemeral });
 
     if (member.roles.highest.position >= ctx.member.roles.highest.position)
-      return ctx.send({ content: "No puedes actuar sobre alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
+      return send({ content: "No puedes actuar sobre alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
 
     try {
-      const unbanAt = new Date(Date.now() + duration);
+      const unbanAt  = new Date(Date.now() + duration);
+      const username = member.user.globalName || member.user.username;
+      const modTag   = ctx.user?.tag ?? ctx.author?.tag;
+      await member.user.send({
+  embeds: [
+    new EmbedBuilder()
+      .setColor(RED)
+      .setDescription(`Fuiste tempbaneado de **${ctx.guild.name}**`)
+      .addFields(
+        { name: "Razón",    value: reason,                   inline: true },
+        { name: "Duración", value: formatDuration(duration), inline: true },
+      )
+      .setTimestamp(),
+  ],
+}).catch(() => {});
+      await member.ban({
+        reason: `[TEMPBAN ${formatDuration(duration)}] ${modTag}: ${reason}`,
+      });
 
-      await member.ban({ reason: `[TEMPBAN ${formatDuration(duration)}] ${ctx.user?.tag ?? ctx.author?.tag}: ${reason}` });
-
-      // Guardar en DB — si ya existía uno anterior lo reemplaza
       await TempBan.findOneAndUpdate(
         { guildId: ctx.guild.id, userId: member.id },
         { unbanAt },
         { upsert: true }
       );
 
-      // Schedulear el unban en memoria para esta sesión
       scheduleTempUnban(ctx.guild.client, ctx.guild.id, member.id, unbanAt);
 
-      const embed = new EmbedBuilder()
-        .setTitle("Usuario baneado temporalmente")
+      const publicEmbed = new EmbedBuilder()
+        .setDescription(`**${username}** fue tempbaneado por **${formatDuration(duration)}**`)
         .setColor(RED)
-        .addFields(
-          { name: "Usuario",   value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-          { name: "Moderador", value: `${ctx.user?.tag ?? ctx.author?.tag}`,   inline: true },
-          { name: "Duración",  value: formatDuration(duration),                 inline: true },
-          { name: "Expira",    value: `<t:${Math.floor(unbanAt.getTime() / 1000)}:R>`,   inline: true },
-          { name: "Razón",     value: reason,                                   inline: false },
-        )
-        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
         .setTimestamp();
 
-      await ctx.send({ embeds: [embed] });
-      await sendLog(ctx.guild, embed);
+      await send({ embeds: [publicEmbed] });
+
+      const logEmbed = new EmbedBuilder()
+        .setTitle("Usuario tempbaneado")
+        .setColor(RED)
+        .addFields(
+          { name: "Usuario",   value: `${member.user.tag} (\`${member.id}\`)`,           inline: true },
+          { name: "Moderador", value: modTag,                                              inline: true },
+          { name: "Duración",  value: formatDuration(duration),                            inline: true },
+          { name: "Expira",    value: `<t:${Math.floor(unbanAt.getTime() / 1000)}:R>`,    inline: true },
+          { name: "Razón",     value: reason,                                              inline: false },
+        )
+        .setTimestamp();
+
+      await sendLog(ctx.guild, logEmbed);
     } catch {
-      await ctx.send({ content: "No pude hacer el tempban", flags: MessageFlags.Ephemeral });
+      await send({ content: "No pude hacer el tempban", flags: MessageFlags.Ephemeral });
     }
   },
 })
