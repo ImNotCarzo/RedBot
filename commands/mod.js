@@ -138,7 +138,7 @@ const data = {
 
         const username = ban.user.globalName || ban.user.username;
 
-        await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue desbaneado`).setColor(GREEN))] });
+        await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue desbaneado`).setColor(GREEN)] });
 
         await sendLog(ctx.guild, new EmbedBuilder()
           .setTitle("Usuario desbaneado").setColor(GREEN)
