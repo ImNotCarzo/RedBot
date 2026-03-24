@@ -1,3 +1,4 @@
+e · JS
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const {
   ActionRowBuilder,
@@ -10,73 +11,94 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const sendLog = require("../utils/sendLog");
-const { RED, GREEN, BLUE, DARK } = require("../utils/colors");
-
+const mongoose = require("mongoose");
+ 
+// ─────────────────────────────────────────────
+//  SHARED LOG SCHEMA
+// ─────────────────────────────────────────────
+ 
+const logSchema = new mongoose.Schema({
+  guildId:   { type: String, required: true, unique: true },
+  channelId: { type: String, required: true },
+});
+const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
+ 
+// ─────────────────────────────────────────────
+//  CONSTANTS
+// ─────────────────────────────────────────────
+ 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
-
+const RED   = "#ff383d";
+const GREEN = "#23a55a";
+const DARK  = "#2b2d31";
+ 
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+ 
 function noGuildReply(ctx) {
   return ctx.send({
     embeds: [new EmbedBuilder().setDescription("Este comando solo funciona en servidores").setColor(RED)],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel("Invítame").setStyle(ButtonStyle.Link).setURL(INVITE_URL)
-      ),
-    ],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel("Invítame").setStyle(ButtonStyle.Link).setURL(INVITE_URL)
+    )],
     flags: MessageFlags.Ephemeral,
   });
 }
-
+ 
 function roleHierarchyCheck(ctx, role) {
-  if (role.managed)
-    return "No puedo editar roles gestionados por integraciones";
-  if (role.id === ctx.guild.id)
-    return "No puedo editar el rol @everyone";
+  if (role.managed)      return "No puedo editar roles gestionados por integraciones";
+  if (role.id === ctx.guild?.id) return "No puedo editar el rol @everyone";
   if (role.position >= ctx.guild.members.me.roles.highest.position)
     return "No puedo actuar sobre ese rol porque está por encima del mío";
   return null;
 }
-
-function buildRoleEmbed(role) {
-  const perms = role.permissions.toArray().map(p => `\`${p}\``);
-  const hex   = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "Sin color";
-
-  const embed = new EmbedBuilder()
-    .setTitle(role.name)
-    .setColor(role.color || DARK)
-    .addFields(
-      {
-        name: "Información",
-        value:
-          `> **ID:** \`${role.id}\`\n` +
-          `> **Color:** \`${hex}\`\n` +
-          `> **Posición:** \`${role.position}\`\n` +
-          `> **Mencionable:** \`${role.mentionable}\`\n` +
-          `> **Gestionado:** \`${role.managed}\`\n` +
-          `> **Separado (hoist):** \`${role.hoist}\``,
-      },
-      {
-        name: `Permisos (${perms.length})`,
-        value: perms.length ? perms.join(", ") : "Sin permisos",
-      },
-    )
-    .setTimestamp();
-
-  if (role.icon) embed.setThumbnail(role.iconURL({ size: 1024 }));
-  return embed;
+ 
+async function sendLog(guild, embed) {
+  try {
+    const doc = await Log.findOne({ guildId: guild.id });
+    if (!doc) return;
+    const ch = guild.channels.cache.get(doc.channelId);
+    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
+  } catch {}
 }
-
+ 
 function buildPagRow(prevId, nextId, page, total) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === total - 1),
+    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === total - 1)
   );
 }
-
+ 
+// Embed base de info sin permisos
+function buildRoleInfoEmbed(role) {
+  const hex = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "Sin color";
+  const embed = new EmbedBuilder()
+    .setTitle(role.name)
+    .setColor(role.color || DARK)
+    .addFields({
+      name: "Información",
+      value:
+        `> **ID:** \`${role.id}\`\n` +
+        `> **Color:** \`${hex}\`\n` +
+        `> **Posición:** \`${role.position}\`\n` +
+        `> **Mencionable:** \`${role.mentionable}\`\n` +
+        `> **Gestionado:** \`${role.managed}\`\n` +
+        `> **Separado:** \`${role.hoist}\``,
+    })
+    .setTimestamp();
+  if (role.icon) embed.setThumbnail(role.iconURL({ size: 1024 }));
+  return embed;
+}
+ 
+function formatPerm(p) {
+  return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``;
+}
+ 
 // ─────────────────────────────────────────────
 //  DATA
 // ─────────────────────────────────────────────
-
+ 
 const data = {
   data: new GroupBuilder({
     name: "role",
@@ -85,11 +107,18 @@ const data = {
     as_prefix: false,
     as_slash: true,
   })
-
-    // ── INFO ──────────────────────────────────────
+ 
+  // ── INFO ──────────────────────────────────────
   .addCommand({
-    data: new CommandBuilder({ name: "info", description: "Muestra información de un rol" }),
-    params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
+    data: new CommandBuilder({ 
+      name: "info", 
+      description: "Muestra información de un rol" 
+    }),
+    params: new ParamsBuilder()
+      .addRole({ 
+        name: "rol",
+        description: "Rol a inspeccionar",
+        required: true }),
  
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
