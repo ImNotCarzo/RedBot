@@ -196,6 +196,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
   const defs = slashCommand?.params?.params ?? [];
   const args = [...(ctx.args ?? [])];
   const values = {};
+  let missingRequired = false;
 
   for (let i = 0; i < defs.length; i++) {
     const def = defs[i];
@@ -231,9 +232,11 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       value = args.shift();
     }
 
-    values[def.name] = value ?? null;
+    const normalizedValue = value ?? null;
+    values[def.name] = normalizedValue;
+    if (def.required && normalizedValue === null) missingRequired = true;
   }
-  return values;
+  return { values, missingRequired };
 }
 
 function wrapPrefixedCommands() {
@@ -275,10 +278,13 @@ function wrapPrefixedCommands() {
         try {
           const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
           if (!parsedValues) return;
+          if (parsedValues.missingRequired) {
+            return await originalCode.call(this, ctx, ...args);
+          }
           const originalGet = ctx.get?.bind(ctx);
           const hadUser = Object.prototype.hasOwnProperty.call(ctx, "user");
           const originalUser = ctx.user;
-          ctx.get = (name) => parsedValues[name] ?? null;
+          ctx.get = (name) => parsedValues.values[name] ?? null;
           if (!ctx.user && ctx.author) ctx.user = ctx.author;
           try {
             return await slashCommand.code(ctx, ...args);
