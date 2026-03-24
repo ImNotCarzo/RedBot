@@ -232,8 +232,9 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       value = args.shift();
     }
 
-    values[def.name] = value ?? null;
-    if (def.required && values[def.name] == null) missingRequired = true;
+    const normalizedValue = value ?? null;
+    values[def.name] = normalizedValue;
+    if (def.required && normalizedValue === null) missingRequired = true;
   }
   return { values, missingRequired };
 }
