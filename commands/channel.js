@@ -188,7 +188,6 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`**${channel} fue cerrado**`)
           .setColor(RED)
-          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -235,7 +234,6 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`**${channel} fue abierto**`)
           .setColor(GREEN)
-          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -288,22 +286,20 @@ const data = {
           .setDescription(
             seconds === 0
               ? `El slowmode en ${channel} fue desactivado`
-              : `El slowmode en ${channel} se estableció en **${formatted}**`
+              : `El slowmode de ${channel} se estableció en **${formatted}**`
           )
-          .setColor(BLUE)
-          .setTimestamp();
+          .setColor(RED)
 
         await ctx.send({ embeds: [publicEmbed] });
 
         const logEmbed = new EmbedBuilder()
           .setTitle("Slowmode actualizado")
-          .setColor(BLUE)
+          .setColor(RED)
           .addFields(
             { name: "Canal",     value: `${channel} (\`${channel.id}\`)`, inline: true },
             { name: "Moderador", value: modTag,                            inline: true },
             { name: "Slowmode",  value: formatted,                         inline: true },
           )
-          .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
       } catch {
@@ -313,80 +309,151 @@ const data = {
   })
 
   // ── NUKE ──────────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "nuke",
-      description: "Recrea el canal borrando todos sus mensajes",
+.addCommand({
+  data: new CommandBuilder({
+    name: "nuke",
+    description: "Recrea el canal borrando todos sus mensajes",
+  }),
+
+  params: new ParamsBuilder()
+    .addChannel({
+      name: "canal",
+      description: "Canal a nukear (opcional, por defecto el actual)",
+      required: false,
     }),
-    params: new ParamsBuilder()
-      .addChannel({ name: "canal", description: "Canal a nukear (opcional, por defecto el actual)", required: false }),
 
-    async code(ctx) {
-      const channel = ctx.get("canal") ?? ctx.channel;
-      const modTag  = ctx.user?.tag ?? ctx.author?.tag;
+  async code(ctx) {
+    const channel = ctx.get("canal") ?? ctx.channel;
+    const guild = ctx.guild;
+    const modTag = ctx.user?.tag ?? ctx.author?.tag;
+    const authorId = ctx.user?.id ?? ctx.author?.id;
 
-      if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-        return ctx.send({ content: "No tienes el permiso `Administrator`", flags: MessageFlags.Ephemeral });
+    if (!guild || !channel) {
+      return ctx.send({ content: "No se pudo obtener el canal", flags: MessageFlags.Ephemeral });
+    }
 
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para gestionar canales", flags: MessageFlags.Ephemeral });
+    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
+      return ctx.send({ content: "No tienes el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
-      try {
-        // Guardar datos del canal original
-        const parent   = channel.parentId;
-        const position = channel.position;
-        const name     = channel.name;
-        const topic    = channel.topic;
-        const nsfw     = channel.nsfw;
-        const slowmode = channel.rateLimitPerUser;
-        const overwrites = channel.permissionOverwrites.cache;
+    if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
+      return ctx.send({ content: "No tengo permiso para gestionar canales", flags: MessageFlags.Ephemeral });
 
-        // Crear canal nuevo con misma config
-        const newChannel = await ctx.guild.channels.create({
-          name,
-          type:             channel.type,
-          topic:            topic ?? undefined,
-          nsfw,
-          rateLimitPerUser: slowmode,
-          parent:           parent ?? undefined,
-          permissionOverwrites: overwrites.map(o => ({
-            id:    o.id,
-            allow: o.allow,
-            deny:  o.deny,
-          })),
-          reason: `${modTag}: channel nuke`,
+    const confirmId = `nuke_confirm_${Date.now()}`;
+    const cancelId  = `nuke_cancel_${Date.now()}`;
+
+    const confirmEmbed = new EmbedBuilder()
+      .setTitle("¿Estás seguro?")
+      .setDescription("Al confirmar esta acción, el canal será **borrado** y posteriormente clonado con los mismos permisos")
+      .setColor(RED)
+      .setFooter({ text: "Todos los mensajes se borrarán" });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(confirmId)
+        .setLabel("Confirmar")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(cancelId)
+        .setLabel("Cancelar")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    const msg = await ctx.send({
+      embeds: [confirmEmbed],
+      components: [row],
+    });
+
+    const collector = msg.createMessageComponentCollector({
+      time: 30_000,
+      filter: (i) => [confirmId, cancelId].includes(i.customId),
+    });
+
+    collector.on("collect", async (interaction) => {
+      if (interaction.user.id !== authorId) {
+        return interaction.reply({
+          content: "No puedes usar estos botones",
+          flags: MessageFlags.Ephemeral,
         });
-
-        // Mover a la posición original
-        await newChannel.setPosition(position).catch(() => {});
-
-        // Borrar el canal original
-        await channel.delete(`${modTag}: channel nuke`);
-
-        // Anunciar en el nuevo canal
-        const nukeEmbed = new EmbedBuilder()
-          .setDescription("Canal nukeado, f")
-          .setColor(RED)
-          .setTimestamp();
-
-        await newChannel.send({ embeds: [nukeEmbed] });
-
-        const logEmbed = new EmbedBuilder()
-          .setTitle("Canal nukeado")
-          .setColor(RED)
-          .addFields(
-            { name: "Canal",     value: `\`#${name}\``,                       inline: true },
-            { name: "Nuevo ID",  value: `\`${newChannel.id}\``,               inline: true },
-            { name: "Moderador", value: modTag,                                inline: true },
-          )
-          .setTimestamp();
-
-        await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo nukear el canal", flags: MessageFlags.Ephemeral });
       }
-    },
-  })
+
+      if (interaction.customId === cancelId) {
+        collector.stop();
+
+        return interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setDescription("Acción cancelada")
+              .setColor(RED)
+              .setTimestamp(),
+          ],
+          components: [],
+        });
+      }
+
+      if (interaction.customId === confirmId) {
+        collector.stop();
+
+        try {
+          const position = channel.position;
+
+          const newChannel = await channel.clone({
+            reason: `${modTag}: channel nuke`,
+          });
+
+          await newChannel.setPosition(position).catch(() => {});
+
+          await channel.delete(`${modTag}: channel nuke`);
+
+          await newChannel.send({
+            embeds: [
+              new EmbedBuilder()
+                .setDescription("Canal nukeado")
+                .setColor(RED),
+            ],
+          });
+
+          const logEmbed = new EmbedBuilder()
+            .setTitle("Canal nukeado")
+            .setColor(RED)
+            .addFields(
+              { name: "Canal", value: `\`#${newChannel.name}\``, inline: true },
+              { name: "Nuevo ID", value: `\`${newChannel.id}\``, inline: true },
+              { name: "Moderador", value: modTag, inline: true }
+            )
+            .setTimestamp();
+
+          await sendLog(guild, logEmbed);
+
+          await interaction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setDescription("Canal nukeado correctamente")
+                .setColor(RED),
+            ],
+            components: [],
+          });
+
+        } catch (err) {
+          console.error("Error en nuke:", err);
+
+          await interaction.update({
+            embeds: [
+              new EmbedBuilder()
+                .setDescription("No se pudo nukear el canal")
+                .setColor(RED)
+                .setTimestamp(),
+            ],
+            components: [],
+          });
+        }
+      }
+    });
+
+    collector.on("end", async () => {
+      await msg.edit({ components: [] }).catch(() => {});
+    });
+  },
+})
 
   // ── CLONE ─────────────────────────────────────
   .addCommand({
