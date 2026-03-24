@@ -91,6 +91,7 @@ function normalizeReplyPayload(payload) {
 
 const wrappedOriginalCodes = new WeakSet();
 const slashCommandMap = new Map();
+const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 
 const PREFIXED_TO_SLASH = {
   channel: "channel/info",
@@ -154,7 +155,7 @@ function parseMaybeNumber(value) {
 async function resolveRoleFlexible(ctx, input) {
   if (!ctx?.guild || !input) return null;
   const mention = input.match(/^<@&(\d{17,20})>$/)?.[1];
-  const roleId = mention ?? (/^\d{17,20}$/.test(input) ? input : null);
+  const roleId = mention ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
   if (roleId) {
     const byId = await ctx.guild.roles.fetch(roleId).catch(() => null);
     if (byId) return byId;
@@ -166,7 +167,7 @@ async function resolveRoleFlexible(ctx, input) {
 async function resolveChannelFlexible(ctx, input) {
   if (!ctx?.guild || !input) return null;
   const mention = input.match(/^<#(\d{17,20})>$/)?.[1];
-  const channelId = mention ?? (/^\d{17,20}$/.test(input) ? input : null);
+  const channelId = mention ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
   if (channelId) {
     const byId = await ctx.guild.channels.fetch(channelId).catch(() => null);
     if (byId) return byId;
