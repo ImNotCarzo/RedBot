@@ -367,9 +367,9 @@ const data = {
     });
 
     const collector = msg.createMessageComponentCollector({
-      time: 30_000,
-      filter: (i) => [confirmId, cancelId].includes(i.customId),
-    });
+  time: 5 * 60 * 1000,
+  filter: (i) => [confirmId, cancelId].includes(i.customId),
+});
 
     collector.on("collect", async (interaction) => {
       if (interaction.user.id !== authorId) {
