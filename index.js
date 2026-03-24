@@ -9,6 +9,7 @@ const prefixCache  = require("./utils/prefixCache");
 const { setId }    = require("./utils/commandIds");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("./utils/askMemory");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("./utils/ai");
+const { resolveMemberFlexible } = require("./utils/helpers");
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya.
@@ -89,8 +90,159 @@ function normalizeReplyPayload(payload) {
 }
 
 const wrappedOriginalCodes = new WeakSet();
+const slashCommandMap = new Map();
+
+const PREFIXED_TO_SLASH = {
+  channel: "channel/info",
+  channelclone: "channel/clone",
+  channelunlock: "channel/unlock",
+  role: "role/info",
+  roleadd: "role/add",
+  roleall: "role/all",
+  rolebots: "role/bots",
+  rolehoist: "role/hoist",
+  rolehumans: "role/humans",
+  roleicon: "role/icon",
+  rolejoin: "role/join",
+  rolementionable: "role/mentionable",
+  roleremove: "role/remove",
+  roleremoveall: "role/removeall",
+  rolerename: "role/rename",
+  roleusers: "role/users",
+  roleperms: "role/permissions",
+  server: "server/info",
+  serverbanner: "server/banner",
+  user: "user/info",
+  uroles: "user/roles",
+  userperms: "user/permissions",
+};
+
+function inferGroupFromPrefixedFile(file, prefixedName) {
+  const base = file.replace(/\.js$/, "");
+  if (base.startsWith("channel")) return "channel";
+  if (base.startsWith("fun")) return "fun";
+  if (base.startsWith("mod")) return "mod";
+  if (base.startsWith("role")) return "role";
+  if (base.startsWith("server")) return "server";
+  if (base.startsWith("user")) return "user";
+  if (base.startsWith("util")) return "util";
+  if (prefixedName === "ask") return "ask";
+  return null;
+}
+
+function loadSlashCommandMap() {
+  if (slashCommandMap.size) return;
+  const slashFiles = ["channel", "fun", "mod", "role", "server", "user", "util"];
+  for (const file of slashFiles) {
+    const mod = require(path.join(__dirname, "commands", `${file}.js`));
+    const group = mod?.data?.data;
+    const commands = group?.commands ?? [];
+    for (const cmd of commands) {
+      const name = cmd?.data?.name;
+      if (name) slashCommandMap.set(`${file}/${name}`, cmd);
+    }
+  }
+  const ask = require(path.join(__dirname, "commands", "ask.js"))?.data;
+  if (ask?.data?.name) slashCommandMap.set(`ask/${ask.data.name}`, ask);
+}
+
+function parseMaybeNumber(value) {
+  if (typeof value !== "string") return null;
+  return /^\d+$/.test(value) ? value : null;
+}
+
+async function resolveRoleFlexible(ctx, input) {
+  if (!ctx?.guild || !input) return null;
+  const mention = input.match(/^<@&(\d{17,20})>$/)?.[1];
+  const roleId = mention ?? (/^\d{17,20}$/.test(input) ? input : null);
+  if (roleId) {
+    const byId = await ctx.guild.roles.fetch(roleId).catch(() => null);
+    if (byId) return byId;
+  }
+  const lower = input.toLowerCase();
+  return ctx.guild.roles.cache.find((r) => r.name.toLowerCase().includes(lower)) ?? null;
+}
+
+async function resolveChannelFlexible(ctx, input) {
+  if (!ctx?.guild || !input) return null;
+  const mention = input.match(/^<#(\d{17,20})>$/)?.[1];
+  const channelId = mention ?? (/^\d{17,20}$/.test(input) ? input : null);
+  if (channelId) {
+    const byId = await ctx.guild.channels.fetch(channelId).catch(() => null);
+    if (byId) return byId;
+  }
+  const lower = input.toLowerCase();
+  return ctx.guild.channels.cache.find((c) => c.name?.toLowerCase?.().includes(lower)) ?? null;
+}
+
+function buildAttachmentFromInput(ctx, input) {
+  const attached = ctx.message?.attachments?.first?.();
+  if (attached) return attached;
+  if (!input || !/^https?:\/\//i.test(input)) return null;
+  const name = input.split("/").pop()?.split("?")[0] ?? "archivo";
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const imageTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
+  const audioTypes = { mp3: "audio/mpeg", mp4: "video/mp4", wav: "audio/wav", ogg: "audio/ogg", webm: "video/webm", m4a: "audio/mp4", flac: "audio/flac" };
+  return {
+    name,
+    url: input,
+    contentType: imageTypes[ext] ?? audioTypes[ext] ?? null,
+    size: 0,
+  };
+}
+
+async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
+  const defs = slashCommand?.params?.params ?? [];
+  const args = [...(ctx.args ?? [])];
+  const values = {};
+
+  for (let i = 0; i < defs.length; i++) {
+    const def = defs[i];
+    const isLast = i === defs.length - 1;
+    const token = args[0];
+    let value = null;
+
+    if (def.type === 6) {
+      if (token) {
+        value = await resolveMemberFlexible(ctx, token);
+        if (value) args.shift();
+      }
+    } else if (def.type === 8) {
+      if (token) {
+        value = await resolveRoleFlexible(ctx, token);
+        if (value) args.shift();
+      }
+    } else if (def.type === 7) {
+      if (token) {
+        value = await resolveChannelFlexible(ctx, token);
+        if (value) args.shift();
+      }
+    } else if (def.type === 11) {
+      value = buildAttachmentFromInput(ctx, token);
+      if (!ctx.message?.attachments?.size && value) args.shift();
+    } else if (def.type === 3) {
+      if (args.length) {
+        if (isLast || slashName === "translate" || slashName === "resume") value = args.splice(0).join(" ");
+        else if (def.name === "dias") value = parseMaybeNumber(token) ?? token;
+        else value = args.shift();
+      }
+    } else if (args.length) {
+      value = args.shift();
+    }
+
+    values[def.name] = value ?? null;
+  }
+
+  const missing = defs.find((def) => def.required && !values[def.name]);
+  if (missing) {
+    await ctx.send(`Falta un parámetro requerido: \`${missing.name}\``);
+    return null;
+  }
+  return values;
+}
 
 function wrapPrefixedCommands() {
+  loadSlashCommandMap();
   const prefixedPath  = path.join(__dirname, "commands", "prefixed");
   const prefixedFiles = fs.readdirSync(prefixedPath).filter(f => f.endsWith(".js"));
 
@@ -116,6 +268,35 @@ function wrapPrefixedCommands() {
             },
           });
         };
+      }
+
+      const prefixedName = command?.data?.name;
+      const inferredGroup = inferGroupFromPrefixedFile(file, prefixedName);
+      const slashKey = PREFIXED_TO_SLASH[prefixedName] ?? (inferredGroup ? `${inferredGroup}/${prefixedName}` : null);
+      const slashName = slashKey?.split("/")[1];
+      const slashCommand = slashKey ? slashCommandMap.get(slashKey) : null;
+
+      if (slashCommand?.code) {
+        try {
+          const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
+          if (!parsedValues) return;
+          const originalGet = ctx.get?.bind(ctx);
+          const hadUser = Object.prototype.hasOwnProperty.call(ctx, "user");
+          const originalUser = ctx.user;
+          ctx.get = (name) => parsedValues[name] ?? null;
+          if (!ctx.user && ctx.author) ctx.user = ctx.author;
+          try {
+            return await slashCommand.code(ctx, ...args);
+          } finally {
+            if (originalGet) ctx.get = originalGet;
+            else delete ctx.get;
+            if (hadUser) ctx.user = originalUser;
+            else delete ctx.user;
+          }
+        } catch (err) {
+          console.error(`[adapter:${slashName}]`, err);
+          return ctx.send("Ocurrió un error ejecutando el comando");
+        }
       }
 
       try {
