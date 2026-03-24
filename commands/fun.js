@@ -51,6 +51,14 @@ async function generateGemmaVision(prompt, imageUrl) {
 });
   return response.text?.trim() ?? null;
 }
+async function generateGeminiFlash(prompt) {
+  const { generateWithFallback } = require("../utils/ai");
+  const response = await generateWithFallback({
+    model: "gemini-3.1-flash-preview",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+  });
+  return response.text?.trim() ?? null;
+}
 
 // ─────────────────────────────────────────────
 //  HELPERS
@@ -109,7 +117,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGemma(
+        const texto = (await generateGeminiFlash(
           `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`
         ))?.slice(0, 4000) ?? "No pude generar una opinión";
 
@@ -147,7 +155,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGemma(
+        const texto = (await generateGeminiFlash(
           `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`
         ))?.slice(0, 4000) ?? "No pude generar una crítica";
 
@@ -168,42 +176,55 @@ const data = {
   })
 
   // ── EXCUSA ────────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "excusa",
-      description: "Genera una excusa ridícula pero creativa",
+.addCommand({
+  data: new CommandBuilder({
+    name: "excusa",
+    description: "Genera una excusa ridícula pero creativa",
+  }),
+
+  params: new ParamsBuilder()
+    .addString({
+      name: "situacion",
+      description: "¿Para qué necesitas la excusa?",
+      required: false,
     }),
-    params: new ParamsBuilder()
-      .addString({
-        name: "situacion",
-        description: "¿Para qué necesitas la excusa?",
-        required: false,
-      }),
 
-    async code(ctx) {
-      const reply     = await prepare(ctx);
-      const situacion = ctx.get("situacion") ?? "cualquier situación";
+  async code(ctx) {
+    const reply = await prepare(ctx);
 
-      try {
-        const texto = (await generateGemma(
-          `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga una narrativa interesante. Máximo 2 párrafos.`
-        ))?.slice(0, 4000) ?? "No pude generar una excusa";
+    // Manejo correcto del parámetro (fix real)
+    const situacion = ctx.get("situacion")?.trim() || "cualquier situación";
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Tu excusa profesional")
-              .setDescription(texto)
-              .setColor(COLOR)
-              .setTimestamp(),
-          ],
-        });
-      } catch (err) {
-        console.error("[fun excusa]", err);
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
-      }
-    },
-  })
+    try {
+      // Prompt adaptativo
+      const prompt =
+        situacion === "cualquier situación"
+          ? `${PERSONA}\nGenera una excusa ridícula, creativa y divertida para cualquier situación. Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`
+          : `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`;
+
+      const texto =
+        (await generateGemma(prompt))?.slice(0, 4000) ||
+        "No pude generar una excusa";
+
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("Tu excusa profesional")
+            .setDescription(texto)
+            .setColor(COLOR)
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      console.error("[fun excusa]", err);
+
+      await reply({
+        content: "Ocurrió un error con la IA, intenta de nuevo",
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  },
+})
 
   // ── TEORIA ────────────────────────────────────
   .addCommand({
