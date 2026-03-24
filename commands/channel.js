@@ -385,9 +385,8 @@ const data = {
         return interaction.update({
           embeds: [
             new EmbedBuilder()
-              .setDescription("Acción cancelada")
-              .setColor(RED)
-              .setTimestamp(),
+              .setDescription("Nuke cancelado")
+              .setColor(RED),
           ],
           components: [],
         });
