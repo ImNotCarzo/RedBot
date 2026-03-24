@@ -52,42 +52,61 @@ const data = {
   })
 
   // ── INFO ──────────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "info",
-      description: "Muestra información de un canal",
+.addCommand({
+  data: new CommandBuilder({
+    name: "info",
+    description: "Muestra información de un canal",
+  }),
+
+  params: new ParamsBuilder()
+    .addChannel({
+      name: "canal",
+      description: "Canal a inspeccionar (opcional, por defecto el actual)",
+      required: false,
     }),
-    params: new ParamsBuilder()
-      .addChannel({
-        name: "canal",
-        description: "Canal a inspeccionar (opcional, por defecto el actual)",
-        required: false,
-      }),
 
-    async code(ctx) {
+  async code(ctx) {
+    try {
       const channel = ctx.get("canal") ?? ctx.channel;
+      const guild = ctx.guild;
 
-      const created = `<t:${Math.floor(channel.createdTimestamp / 1000)}:F>`;
-      const type    = CHANNEL_TYPES[channel.type] ?? "Desconocido";
+      if (!channel) {
+        return ctx.send("No se pudo obtener el canal");
+      }
 
-      const embed = new EmbedBuilder()
+      const createdTs = Math.floor(channel.createdTimestamp / 1000);
+      const type = CHANNEL_TYPES[channel.type] ?? "Desconocido";
+
+      const infoEmbed = new EmbedBuilder()
         .setTitle(`#${channel.name}`)
-        .setColor(BLUE)
+        .setThumbnail(guild?.iconURL({ size: 1024, extension: "png" }))
+        .setColor(RED)
         .addFields(
-          { name: "ID",               value: `\`${channel.id}\``,                             inline: true },
-          { name: "Tipo",             value: type,                                              inline: true },
-          { name: "Posición",         value: `${channel.position ?? "—"}`,                    inline: true },
-          { name: "Fecha de creación",value: created,                                           inline: false },
-          ...(channel.topic ? [{ name: "Tema", value: channel.topic, inline: false }] : []),
-          ...(channel.rateLimitPerUser ? [{ name: "Slowmode", value: formatSlowmode(channel.rateLimitPerUser), inline: true }] : []),
-          ...(channel.nsfw !== undefined ? [{ name: "NSFW", value: channel.nsfw ? "Sí" : "No", inline: true }] : []),
+          {
+            name: "General",
+            value:
+              `> **ID:** \`${channel.id}\`\n` +
+              (channel.topic ? `> **Tema:** ${channel.topic}\n` : "") +
+              `> **Posición:** \`${channel.position ?? "No disponible"}\`\n` +
+              `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
+          },
+          {
+            name: "Configuración",
+            value:
+              `> **Tipo:** \`${type}\`\n` +
+              `> **Slowmode:** \`${formatSlowmode(channel.rateLimitPerUser ?? 0)}\`\n` +
+              `> **NSFW:** \`${channel.nsfw ? "Sí" : "No"}\``,
+          }
         )
         .setTimestamp();
 
-      await ctx.send({ embeds: [embed] });
-    },
-  })
-
+      await ctx.send({ embeds: [infoEmbed] });
+    } catch (err) {
+      console.error("Error en channel info:", err);
+      await ctx.send("No se pudo obtener la información del canal");
+    }
+  },
+})
   // ── RENAME ────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
