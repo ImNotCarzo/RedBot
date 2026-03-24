@@ -35,7 +35,7 @@ async function fetchToBase64(url) {
     throw new Error("Protocolo no permitido");
   }
   const host = parsed.hostname.toLowerCase();
-  if (host === "localhost" || host.startsWith("127.") || host === "::1" || host === "::ffff:127.0.0.1") {
+  if (host === "localhost" || host === "0.0.0.0" || host.startsWith("127.") || host === "::1" || host === "::ffff:127.0.0.1") {
     throw new Error("Host no permitido");
   }
   if (net.isIP(host)) {
@@ -44,7 +44,11 @@ async function fetchToBase64(url) {
       host.startsWith("192.168.") ||
       /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
       host.startsWith("169.254.");
-    const isPrivateV6 = host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
+    const normalizedV6 = host.replace(/^\[|\]$/g, "");
+    const isPrivateV6 =
+      normalizedV6.startsWith("fc") ||
+      normalizedV6.startsWith("fd") ||
+      /^fe[89ab]/i.test(normalizedV6);
     if (isPrivateV4 || isPrivateV6) throw new Error("IP no permitida");
   }
 

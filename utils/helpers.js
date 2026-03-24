@@ -56,7 +56,13 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
 
   const execute = async () => {
     try {
-      const existing = await TempBan.findOne({ guildId, userId }).catch(() => null);
+      let existing = true;
+      try {
+        const doc = await TempBan.findOne({ guildId, userId });
+        existing = !!doc;
+      } catch {
+        existing = true;
+      }
       if (!existing) return;
       const guild = await client.guilds.fetch(guildId).catch(() => null);
       if (!guild) return;
