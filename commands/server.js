@@ -214,10 +214,10 @@ const data = {
             let page = 0;
 
             const buildRolesEmbed = () => new EmbedBuilder()
-              .setTitle(`Roles de ${guild.name}`)
+              .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
               .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
               .setColor(COLOR)
-              .setFooter({ text: `Página ${page + 1}/${pages.length} • ${roles.length} roles en total` })
+              .setFooter({ text: `${roles.length} roles en total` })
               .setTimestamp();
 
             await interaction.update({
@@ -380,11 +380,11 @@ const data = {
         const nextId = `srv_roles_next_${Date.now()}`;
 
         const buildEmbed = () => new EmbedBuilder()
-          .setTitle(`Roles de ${guild.name}`)
-          .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
-          .setColor(COLOR)
-          .setFooter({ text: `Página ${page + 1}/${pages.length} • ${roles.length} roles en total` })
-          .setTimestamp();
+          .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
+              .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
+              .setColor(COLOR)
+              .setFooter({ text: `${roles.length} roles en total` })
+              .setTimestamp();
 
         const reply = await ctx.send({
           embeds: [buildEmbed()],
