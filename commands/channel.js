@@ -1,5 +1,6 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const {
+  ActionRowBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
   MessageFlags,
