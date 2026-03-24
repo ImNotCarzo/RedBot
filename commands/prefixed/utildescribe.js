@@ -35,7 +35,7 @@ async function fetchToBase64(url) {
     throw new Error("Protocolo no permitido");
   }
   const host = parsed.hostname.toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+  if (host === "localhost" || host.startsWith("127.") || host === "::1" || host === "::ffff:127.0.0.1") {
     throw new Error("Host no permitido");
   }
   if (net.isIP(host)) {

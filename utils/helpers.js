@@ -74,7 +74,7 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
   const timeout = setTimeout(() => {
     void execute();
   }, delay);
-  timeout.unref?.();
+  timeout.unref();
 }
 
 module.exports = { generateId, parseDuration, formatDuration, resolveMember, resolveMemberFlexible, scheduleTempUnban };
