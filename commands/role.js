@@ -10,20 +10,10 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const mongoose = require("mongoose");
+const Log = require("../models/Log");
  
 // ─────────────────────────────────────────────
 //  SHARED LOG SCHEMA
-// ─────────────────────────────────────────────
- 
-const logSchema = new mongoose.Schema({
-  guildId:   { type: String, required: true, unique: true },
-  channelId: { type: String, required: true },
-});
-const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
- 
-// ─────────────────────────────────────────────
-//  CONSTANTS
 // ─────────────────────────────────────────────
  
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";

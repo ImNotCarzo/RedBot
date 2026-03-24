@@ -56,6 +56,14 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
 
   const execute = async () => {
     try {
+      let existing = null;
+      try {
+        const doc = await TempBan.findOne({ guildId, userId });
+        existing = !!doc;
+      } catch (err) {
+        console.error("[TempBan] No se pudo verificar registro antes de unban:", err?.message ?? err);
+      }
+      if (existing === false) return;
       const guild = await client.guilds.fetch(guildId).catch(() => null);
       if (!guild) return;
       await guild.members.unban(userId, "Tempban expirado");
@@ -65,8 +73,14 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
     }
   };
 
-  if (delay <= 0) execute();
-  else setTimeout(execute, delay);
+  if (delay <= 0) {
+    void execute();
+    return;
+  }
+  const timeout = setTimeout(() => {
+    void execute();
+  }, delay);
+  timeout.unref();
 }
 
 module.exports = { generateId, parseDuration, formatDuration, resolveMember, resolveMemberFlexible, scheduleTempUnban };

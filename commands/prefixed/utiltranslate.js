@@ -71,9 +71,13 @@ const data = {
 
       let origen     = "desconocido";
       let traduccion = null;
+      const clean = (respuesta ?? "")
+        .trim()
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "");
 
       try {
-        const parsed = JSON.parse(respuesta ?? "");
+        const parsed = JSON.parse(clean);
         origen     = parsed.origen     ?? "desconocido";
         traduccion = parsed.traduccion ?? null;
       } catch {

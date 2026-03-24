@@ -17,7 +17,7 @@ function getAI() {
 
 function rotateKey() {
   currentKey = (currentKey + 1) % GEMINI_KEYS.length;
-  console.log(`[AI] Rotando a key ${currentKey + 1}`);
+  console.log("[AI] Rotando clave de respaldo");
 }
 
 async function generateWithFallback(params) {

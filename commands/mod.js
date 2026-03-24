@@ -304,8 +304,8 @@ const data = {
 
       if (!users.length)
         return send({ content: "Debes seleccionar al menos un usuario", flags: MessageFlags.Ephemeral });
-      if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-        return send({ content: "Necesitas `Administrator` para usar massban", flags: MessageFlags.Ephemeral });
+      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
+        return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
       if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
         return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
