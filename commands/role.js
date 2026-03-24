@@ -1,4 +1,3 @@
-e · JS
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const {
   ActionRowBuilder,
@@ -70,7 +69,6 @@ function buildPagRow(prevId, nextId, page, total) {
   );
 }
  
-// Embed base de info sin permisos
 function buildRoleInfoEmbed(role) {
   const hex = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "Sin color";
   const embed = new EmbedBuilder()
@@ -110,198 +108,200 @@ const data = {
  
   // ── INFO ──────────────────────────────────────
   .addCommand({
-    data: new CommandBuilder({ 
-      name: "info", 
-      description: "Muestra información de un rol" 
-    }),
-    params: new ParamsBuilder()
-      .addRole({ 
-        name: "rol",
-        description: "Rol a inspeccionar",
-        required: true }),
- 
-    async code(ctx) {
-      if (!ctx.guild) return noGuildReply(ctx);
- 
-      const role     = ctx.get("rol");
-      if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
- 
-      const authorId = ctx.user?.id ?? ctx.author?.id;
-      const color    = role.color || DARK;
- 
-      // Opciones del menú de navegación
-      const navOptions = [
-        { label: "Color",    value: "color",       description: "Color del rol" },
-        { label: "Permisos", value: "permissions",  description: "Permisos del rol" },
-        { label: "Usuarios", value: "users",        description: "Usuarios con este rol" },
-        ...(role.icon ? [{ label: "Icono", value: "icon", description: "Icono del rol" }] : []),
-      ];
-      const allNavOptions = [{ label: "Info", value: "info", description: "Información del rol" }, ...navOptions];
- 
-      const navId   = `role_nav_${Date.now()}`;
-      const prevId  = `role_prev_${Date.now()}`;
-      const nextId  = `role_next_${Date.now()}`;
- 
-      const buildNavRow = (includeInfo) =>
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(navId)
-            .setPlaceholder("Navegar...")
-            .addOptions((includeInfo ? allNavOptions : navOptions).map(o =>
-              new StringSelectMenuOptionBuilder().setLabel(o.label).setValue(o.value).setDescription(o.description)
-            ))
-        );
- 
-      const msg = await ctx.send({ embeds: [buildRoleInfoEmbed(role)], components: [buildNavRow(false)] });
- 
-      let subCollector = null;
- 
-      const collector = msg.createMessageComponentCollector({
-        time: 5 * 60 * 1000,
-        filter: i => i.customId === navId || [prevId, nextId].includes(i.customId),
+  data: new CommandBuilder({
+    name: "info",
+    description: "Muestra información de un rol",
+  }),
+
+  params: new ParamsBuilder().addRole({
+    name: "rol",
+    description: "Rol a inspeccionar",
+    required: true,
+  }),
+
+  async code(ctx) {
+    if (!ctx.guild) return noGuildReply(ctx);
+
+    const role = ctx.get("rol");
+    if (!role) {
+      return ctx.send({
+        content: "No encontré ese rol",
+        flags: MessageFlags.Ephemeral,
       });
- 
-      collector.on("collect", async interaction => {
-        const isAuthor = interaction.user.id === authorId;
- 
-        // Paginación de permisos/usuarios
-        if ([prevId, nextId].includes(interaction.customId)) {
-          if (!isAuthor) return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-          return;
-        }
- 
-        const selected = interaction.values?.[0];
-        if (!selected) return;
-        if (subCollector) { subCollector.stop(); subCollector = null; }
- 
-        if (!isAuthor) {
-          // Ephemeral para quien no es el autor
-          if (selected === "info") {
-            return interaction.reply({ embeds: [buildRoleInfoEmbed(role)], flags: MessageFlags.Ephemeral });
-          }
-          if (selected === "icon") {
-            if (!role.icon) return interaction.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral });
-            const url = role.iconURL({ size: 4096, extension: "png" });
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle("Icono del rol").setURL(url).setImage(url).setColor(color).setTimestamp()], flags: MessageFlags.Ephemeral });
-          }
-          if (selected === "color") {
-            if (!role.color) return interaction.reply({ content: "Sin color asignado", flags: MessageFlags.Ephemeral });
-            const hex = `#${role.color.toString(16).padStart(6, "0")}`;
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle(role.name).setDescription(`> **Hex:** \`${hex}\`\n> **Decimal:** \`${role.color}\``).setColor(role.color).setTimestamp()], flags: MessageFlags.Ephemeral });
-          }
-          if (selected === "permissions") {
-            const perms = role.permissions.toArray().sort().map(formatPerm);
-            if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`Permisos de ${role.name}`).setDescription(perms.join("\n")).setColor(color).setTimestamp()], flags: MessageFlags.Ephemeral });
-          }
-          if (selected === "users") {
-            const members = role.members.map((m, i) => `${i + 1}. ${m}`);
-            if (!members.length) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
-            return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`Usuarios con ${role.name}`).setDescription(members.slice(0, 15).join("\n")).setColor(color).setTimestamp()], flags: MessageFlags.Ephemeral });
-          }
-          return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
-        }
- 
-        // Autor
-        if (selected === "info") {
-          return interaction.update({ embeds: [buildRoleInfoEmbed(role)], components: [buildNavRow(false)] });
-        }
- 
-        if (selected === "icon") {
-          if (!role.icon) return interaction.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral });
-          const url = role.iconURL({ size: 4096, extension: "png" });
-          return interaction.update({
-            embeds: [new EmbedBuilder().setAuthor({ name: role.name }).setTitle("Icono del rol").setURL(url).setImage(url).setColor(color).setTimestamp()],
-            components: [buildNavRow(true)],
+    }
+
+    const authorId = ctx.user?.id ?? ctx.author?.id;
+    const color = role.color || DARK;
+
+    function buildEmbed(type = "info", extra = {}) {
+      const embed = new EmbedBuilder().setColor(color).setTimestamp();
+
+      if (type === "info") {
+        const hex = role.color
+          ? `#${role.color.toString(16).padStart(6, "0")}`
+          : "Sin color";
+
+        embed
+          .setTitle(`Información de ${role.name}`)
+          .addFields({
+            name: "Datos",
+            value:
+              `> **ID:** \`${role.id}\`\n` +
+              `> **Color:** \`${hex}\`\n` +
+              `> **Posición:** \`${role.position}\`\n` +
+              `> **Mencionable:** \`${role.mentionable}\`\n` +
+              `> **Gestionado:** \`${role.managed}\`\n` +
+              `> **Separado:** \`${role.hoist}\``,
+          });
+
+        if (role.icon) embed.setThumbnail(role.iconURL({ size: 1024 }));
+      }
+
+      if (type === "color") {
+        const hex = `#${role.color.toString(16).padStart(6, "0")}`;
+        embed
+          .setTitle(`Color de ${role.name}`)
+          .setDescription(`> Hex: \`${hex}\`\n> Decimal: \`${role.color}\``);
+      }
+
+      if (type === "permissions") {
+        embed
+          .setTitle(`Permisos de ${role.name}`)
+          .setDescription(extra.text || "Sin permisos");
+      }
+
+      if (type === "users") {
+        embed
+          .setTitle(`Usuarios con ${role.name}`)
+          .setDescription(extra.text || "Nadie tiene este rol");
+      }
+
+      if (type === "icon") {
+        embed.setTitle(`Icono de ${role.name}`).setImage(extra.url);
+      }
+
+      return embed;
+    }
+
+    const navId = `role_nav_${Date.now()}`;
+
+    const navOptions = [
+      { label: "Info", value: "info" },
+      { label: "Color", value: "color" },
+      { label: "Permisos", value: "permissions" },
+      { label: "Usuarios", value: "users" },
+      ...(role.icon ? [{ label: "Icono", value: "icon" }] : []),
+    ];
+
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(navId)
+        .setPlaceholder("Selecciona una opción")
+        .addOptions(
+          navOptions.map(o =>
+            new StringSelectMenuOptionBuilder()
+              .setLabel(o.label)
+              .setValue(o.value)
+          )
+        )
+    );
+
+    const msg = await ctx.send({
+      embeds: [buildEmbed("info")],
+      components: [row],
+    });
+
+    const collector = msg.createMessageComponentCollector({
+      time: 5 * 60 * 1000,
+      filter: i => i.customId === navId,
+    });
+
+    collector.on("collect", async interaction => {
+      const selected = interaction.values?.[0];
+      const isAuthor = interaction.user.id === authorId;
+
+      if (!isAuthor) {
+        return interaction.reply({
+          content: "No puedes usar este menú",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      if (selected === "info") {
+        return interaction.update({
+          embeds: [buildEmbed("info")],
+          components: [row],
+        });
+      }
+
+      if (selected === "color") {
+        if (!role.color) {
+          return interaction.reply({
+            content: "Este rol no tiene color",
+            flags: MessageFlags.Ephemeral,
           });
         }
- 
-        if (selected === "color") {
-          if (!role.color) return interaction.reply({ content: "Sin color asignado", flags: MessageFlags.Ephemeral });
-          const hex = `#${role.color.toString(16).padStart(6, "0")}`;
-          return interaction.update({
-            embeds: [new EmbedBuilder().setTitle(role.name).setDescription(`> **Hex:** \`${hex}\`\n> **Decimal:** \`${role.color}\``).setColor(role.color).setTimestamp()],
-            components: [buildNavRow(true)],
+
+        return interaction.update({
+          embeds: [buildEmbed("color")],
+          components: [row],
+        });
+      }
+
+      if (selected === "permissions") {
+        const perms = role.permissions.toArray().map(formatPerm);
+
+        if (!perms.length) {
+          return interaction.reply({
+            content: "Sin permisos",
+            flags: MessageFlags.Ephemeral,
           });
         }
- 
-        if (selected === "permissions") {
-          const perms = role.permissions.toArray().sort().map(formatPerm);
-          if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
-          const pages = [];
-          for (let i = 0; i < perms.length; i += 15) pages.push(perms.slice(i, i + 15));
-          let page = 0;
- 
-          const buildPermsEmbed = (pg) => new EmbedBuilder()
-            .setTitle(`Permisos de ${role.name}`)
-            .setDescription(pages[pg].join("\n"))
-            .setColor(color)
-            .setTimestamp();
- 
-          await interaction.update({
-            embeds: [buildPermsEmbed(page)],
-            components: pages.length > 1 ? [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildNavRow(true)],
-          });
- 
-          if (pages.length <= 1) return;
- 
-          subCollector = msg.createMessageComponentCollector({
-            componentType: ComponentType.Button,
-            time: 2 * 60 * 1000,
-            filter: i => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
-          });
-          subCollector.on("collect", async i => {
-            if (i.customId === prevId) page--;
-            if (i.customId === nextId) page++;
-            await i.update({ embeds: [buildPermsEmbed(page)], components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] });
-          });
-          return;
-        }
- 
-        if (selected === "users") {
-          const allMembers = role.members
-            .sort((a, b) => b.joinedTimestamp - a.joinedTimestamp)
-            .map((m, i) => `${i + 1}. ${m}`);
- 
-          if (!allMembers.length) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
- 
-          const pages = [];
-          for (let i = 0; i < allMembers.length; i += 15) pages.push(allMembers.slice(i, i + 15));
-          let page = 0;
- 
-          const buildUsersEmbed = (pg) => new EmbedBuilder()
-            .setTitle(`Usuarios con ${role.name} (${pg + 1}/${pages.length})`)
-            .setDescription(pages[pg].join("\n"))
-            .setColor(color)
-            .setFooter({ text: `${allMembers.length} usuarios en total` })
-            .setTimestamp();
- 
-          await interaction.update({
-            embeds: [buildUsersEmbed(page)],
-            components: pages.length > 1 ? [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildNavRow(true)],
-          });
- 
-          if (pages.length <= 1) return;
- 
-          subCollector = msg.createMessageComponentCollector({
-            componentType: ComponentType.Button,
-            time: 2 * 60 * 1000,
-            filter: i => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
-          });
-          subCollector.on("collect", async i => {
-            if (i.customId === prevId) page--;
-            if (i.customId === nextId) page++;
-            await i.update({ embeds: [buildUsersEmbed(page)], components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] });
+
+        return interaction.update({
+          embeds: [buildEmbed("permissions", { text: perms.join("\n") })],
+          components: [row],
+        });
+      }
+
+      if (selected === "users") {
+        const members = role.members.map((m, i) => `${i + 1}. ${m}`);
+
+        if (!members.length) {
+          return interaction.reply({
+            content: "Nadie tiene este rol",
+            flags: MessageFlags.Ephemeral,
           });
         }
-      });
- 
-      collector.on("end", () => {
-        if (subCollector) subCollector.stop();
-        msg.edit({ components: [] }).catch(() => {});
-      });
-    },
-  })
+
+        return interaction.update({
+          embeds: [buildEmbed("users", { text: members.slice(0, 15).join("\n") })],
+          components: [row],
+        });
+      }
+
+      if (selected === "icon") {
+        if (!role.icon) {
+          return interaction.reply({
+            content: "Este rol no tiene icono",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const url = role.iconURL({ size: 4096 });
+
+        return interaction.update({
+          embeds: [buildEmbed("icon", { url })],
+          components: [row],
+        });
+      }
+    });
+
+    collector.on("end", () => {
+      msg.edit({ components: [] }).catch(() => {});
+    });
+  },
+})
     
   // ── ICON ──────────────────────────────────────
   .addCommand({
