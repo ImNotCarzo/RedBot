@@ -234,7 +234,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     values[def.name] = value ?? null;
   }
 
-  const missing = defs.find((def) => def.required && !values[def.name]);
+  const missing = defs.find((def) => def.required && values[def.name] == null);
   if (missing) {
     return null;
   }
