@@ -55,19 +55,19 @@ const event = {
 
     if (is(err, Errors.MissingRequiredParam)) {
       if (!err.ctx) return;
-        const bot = err.ctx.bot.user;
+      const bot = err.ctx.bot.user;
 
-        const paramerror = new EmbedBuilder()
-          .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
-          .setDescription(
-            `**Usos:**\nHazle una pregunta a la IA` +
-            `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-            `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
-          )
-          .setColor(RED);
+      const paramerror = new EmbedBuilder()
+        .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
+        .setDescription(
+          `**Usos:**\nHazle una pregunta a la IA` +
+          `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
+          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
+        )
+        .setColor(RED);
 
-        return err.ctx.send({ embeds: [paramerror] });
-      }
+      return err.ctx.send({ embeds: [paramerror] });
+    }
 
     if (is(err, Errors.NotNSFW)) {
       return err.ctx?.send("Este comando solo se puede usar en canales NSFW");

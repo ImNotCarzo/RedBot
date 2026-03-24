@@ -161,21 +161,26 @@ console.log(`[Events] ${eventFiles.length} cargados`);
 const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
 
 bot.on("clientReady", async (bot) => {
-const res = await fetch(
-  `https://discord.com/api/v10/applications/${process.env.CLIENT_ID}/role-connections/metadata`,
-  {
-    method: "PUT",
-    headers: {
-      "Authorization": `Bot ${process.env.TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify([
-      { key: "servidores", name: "Servidores", description: "Servidores", type: 2 }
-    ]),
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/applications/${process.env.CLIENT_ID}/role-connections/metadata`,
+      {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bot ${process.env.TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([
+          { key: "servidores", name: "Servidores", description: "Servidores", type: 2 }
+        ]),
+      }
+    );
+    if (!res.ok) {
+      console.error("[Setup] No se pudo actualizar role connections metadata");
+    }
+  } catch {
+    console.error("[Setup] Error al actualizar role connections metadata");
   }
-);
-const data = await res.json();
-console.log("[Setup] Role connections:", data);
   await bot.sync();
   console.log("[Commands] Sincronizados");
 

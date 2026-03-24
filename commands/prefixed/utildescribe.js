@@ -1,5 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
+const net = require("node:net");
 const { generateWithFallback } = require("../../utils/ai");
 
 const COLOR = "#ff383d";
@@ -24,7 +25,31 @@ async function generateVision(prompt, imageUrl) {
 }
 
 async function fetchToBase64(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("URL inválida");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Protocolo no permitido");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    throw new Error("Host no permitido");
+  }
+  if (net.isIP(host)) {
+    const isPrivateV4 =
+      host.startsWith("10.") ||
+      host.startsWith("192.168.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+      host.startsWith("169.254.");
+    const isPrivateV6 = host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
+    if (isPrivateV4 || isPrivateV6) throw new Error("IP no permitida");
+  }
+
   const res = await fetch(url);
+  if (!res.ok) throw new Error("No se pudo descargar la imagen");
   const buf = await res.arrayBuffer();
   return Buffer.from(buf).toString("base64");
 }
