@@ -233,12 +233,6 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
 
     values[def.name] = value ?? null;
   }
-
-  const missing = defs.find((def) => def.required && !values[def.name]);
-  if (missing) {
-    await ctx.send(`Falta un parámetro requerido: \`${missing.name}\``);
-    return null;
-  }
   return values;
 }
 
