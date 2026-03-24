@@ -56,14 +56,14 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
 
   const execute = async () => {
     try {
-      let existing = true;
+      let existing = null;
       try {
         const doc = await TempBan.findOne({ guildId, userId });
         existing = !!doc;
-      } catch {
-        existing = true;
+      } catch (err) {
+        console.error("[TempBan] No se pudo verificar registro antes de unban:", err?.message ?? err);
       }
-      if (!existing) return;
+      if (existing === false) return;
       const guild = await client.guilds.fetch(guildId).catch(() => null);
       if (!guild) return;
       await guild.members.unban(userId, "Tempban expirado");
