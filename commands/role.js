@@ -1,4 +1,3 @@
-e · JS
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
 const {
   ActionRowBuilder,
