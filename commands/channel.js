@@ -481,14 +481,13 @@ const data = {
 
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${channel} fue clonado → ${cloned}`)
-          .setColor(BLUE)
-          .setTimestamp();
+          .setColor(GREEN)
 
         await ctx.send({ embeds: [publicEmbed] });
 
         const logEmbed = new EmbedBuilder()
           .setTitle("Canal clonado")
-          .setColor(BLUE)
+          .setColor(GREEN)
           .addFields(
             { name: "Original",  value: `${channel} (\`${channel.id}\`)`, inline: true },
             { name: "Clon",      value: `${cloned} (\`${cloned.id}\`)`,   inline: true },
@@ -533,7 +532,6 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${member} ahora tiene acceso a ${channel}`)
           .setColor(GREEN)
-          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -584,8 +582,6 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${member} ya no tiene acceso a ${channel}`)
           .setColor(RED)
-          .setTimestamp();
-
         await ctx.send({ embeds: [publicEmbed] });
 
         const logEmbed = new EmbedBuilder()
@@ -632,7 +628,6 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${channel} fue ocultado`)
           .setColor(RED)
-          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
