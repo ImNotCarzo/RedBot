@@ -88,62 +88,170 @@ const data = {
 
   // ── INFO ──────────────────────────────────────
   .addCommand({
-    data: new CommandBuilder({
-      name: "info",
-      description: "Muestra información de un rol",
-    }),
-    params: new ParamsBuilder()
-      .addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
+  data: new CommandBuilder({ name: "role", description: "Información de un rol" }),
+  params: new ParamsBuilder().addRole({ name: "rol", description: "Selecciona un rol", required: true }),
 
-    async code(ctx) {
+  async code(ctx) {
+    try {
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role = ctx.get("rol");
-      if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
+      if (!role) return ctx.send("No pude encontrar el rol");
 
-      const selectRoles = ctx.guild.roles.cache
-        .filter(r => r.id !== ctx.guild.id)
-        .sort((a, b) => b.position - a.position)
-        .first(25);
+      const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
 
-      const selectId = `role_select_${Date.now()}`;
-      const authorId = ctx.user?.id ?? ctx.author?.id;
+      const buildBaseEmbed = () => new EmbedBuilder()
+        .setTitle(role.name)
+        .addFields(
+          { name: "ID", value: role.id, inline: true },
+          { name: "Color", value: role.hexColor, inline: true },
+          { name: "Usuarios", value: `${role.members.size}`, inline: true }
+        )
+        .setColor(role.color || "#2b2d31")
+        .setTimestamp();
 
-      const components = selectRoles.size > 1
-        ? [new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-              .setCustomId(selectId)
-              .setPlaceholder("Seleccionar otro rol...")
-              .addOptions(
-                selectRoles.map(r =>
-                  new StringSelectMenuOptionBuilder()
-                    .setLabel(r.name.slice(0, 100))
-                    .setValue(r.id)
-                )
-              )
-          )]
-        : [];
+      const selectId = `role_nav_${Date.now()}`;
 
-      const msg = await ctx.send({ embeds: [buildRoleEmbed(role)], components });
-      if (!components.length) return;
+      const buildMenu = () => new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(selectId)
+          .setPlaceholder("Navegar...")
+          .addOptions([
+            { label: "Icon", value: "icon" },
+            { label: "Permisos", value: "perms" },
+            { label: "Color", value: "color" },
+            { label: "Usuarios", value: "users" },
+          ])
+      );
 
-      const collector = msg.createMessageComponentCollector({
+      const reply = await ctx.send({
+        embeds: [buildBaseEmbed()],
+        components: [buildMenu()]
+      });
+
+      const collector = reply.createMessageComponentCollector({
         componentType: ComponentType.StringSelect,
-        time: 5 * 60 * 1000,
-        filter: i => i.customId === selectId,
+        time: 2 * 60 * 1000
       });
 
       collector.on("collect", async i => {
-        const newRole = ctx.guild.roles.cache.get(i.values[0]);
-        if (!newRole) return i.reply({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
-        if (i.user.id !== authorId) return i.reply({ embeds: [buildRoleEmbed(newRole)], flags: MessageFlags.Ephemeral });
-        await i.update({ embeds: [buildRoleEmbed(newRole)] });
+        if (i.user.id !== invoker.id) {
+          return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
+        }
+
+        const value = i.values[0];
+
+        // ICON
+        if (value === "icon") {
+          if (!role.icon) return i.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral });
+
+          return i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(`Icono de ${role.name}`)
+                .setImage(role.iconURL({ size: 256 }))
+                .setColor(role.color || "#2b2d31")
+                .setTimestamp()
+            ],
+            components: [buildMenu()]
+          });
+        }
+
+        // COLOR
+        if (value === "color") {
+          return i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(`Color de ${role.name}`)
+                .setDescription(role.hexColor)
+                .setColor(role.color || "#2b2d31")
+                .setTimestamp()
+            ],
+            components: [buildMenu()]
+          });
+        }
+
+        // PERMISOS
+        if (value === "perms") {
+          const perms = role.permissions.toArray().map(p =>
+            `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``
+          );
+
+          return i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(`Permisos de ${role.name}`)
+                .setDescription(perms.join("\n") || "Sin permisos")
+                .setColor(role.color || "#2b2d31")
+                .setTimestamp()
+            ],
+            components: [buildMenu()]
+          });
+        }
+
+        // USERS
+        if (value === "users") {
+          const members = role.members.map(m => `<@${m.id}>`);
+          if (!members.length) {
+            return i.reply({ content: "Este rol no tiene usuarios", flags: MessageFlags.Ephemeral });
+          }
+
+          const pages = [];
+          for (let j = 0; j < members.length; j += 15) {
+            pages.push(members.slice(j, j + 15));
+          }
+
+          let page = 0;
+          const prevId = `role_users_prev_${Date.now()}`;
+          const nextId = `role_users_next_${Date.now()}`;
+
+          const buildEmbed = () => new EmbedBuilder()
+            .setTitle(`Usuarios con ${role.name} (${page + 1}/${pages.length})`)
+            .setDescription(pages[page].map((u, i) => `${i + 1}. ${u}`).join("\n"))
+            .setFooter({ text: `${members.length} usuarios en total` })
+            .setColor(role.color || "#2b2d31")
+            .setTimestamp();
+
+          await i.update({
+            embeds: [buildEmbed()],
+            components: pages.length > 1 ? [buildPaginationRow(prevId, nextId, page, pages.length)] : []
+          });
+
+          if (pages.length <= 1) return;
+
+          const btnCollector = reply.createMessageComponentCollector({
+            componentType: ComponentType.Button,
+            time: 2 * 60 * 1000,
+            filter: x => [prevId, nextId].includes(x.customId)
+          });
+
+          btnCollector.on("collect", async x => {
+            if (x.user.id !== invoker.id) {
+              return x.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
+            }
+
+            if (x.customId === prevId) page--;
+            if (x.customId === nextId) page++;
+
+            await x.update({
+              embeds: [buildEmbed()],
+              components: [buildPaginationRow(prevId, nextId, page, pages.length)]
+            });
+          });
+        }
       });
 
-      collector.on("end", () => msg.edit({ components: [] }).catch(() => {}));
-    },
-  })
+      collector.on("end", () => {
+        reply.edit({ components: [] }).catch(() => {});
+      });
 
+    } catch (err) {
+      console.error("Error en role info:", err);
+      ctx.send("No se pudo obtener la información del rol");
+    }
+  }
+})
+    
   // ── ICON ──────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
@@ -232,10 +340,11 @@ const data = {
       const nextId   = `role_users_next_${Date.now()}`;
 
       const buildEmbed = () => new EmbedBuilder()
-        .setTitle(`Usuarios con ${role.name}`)
-        .setDescription(pages[page].join("\n"))
-        .setColor(role.color || DARK)
-        .setFooter({ text: `Página ${page + 1}/${pages.length} · ${members.length} usuarios en total` })
+        .setTitle(`Usuarios con ${role.name} (${page + 1}/${pages.length})`)
+        .setDescription(
+  pages[page].map((u, i) => `${i + 1}. ${u}`).join("\n")
+)
+        .setFooter({ text: `${members.length} usuarios en total` })
         .setTimestamp();
 
       const msg = await ctx.send({
@@ -1059,6 +1168,85 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       .setTimestamp()
     );
   },
+})
+    
+  .addCommand({
+  data: new CommandBuilder({
+    name: "permissions",
+    description: "Muestra los permisos de un rol",
+    guildOnly: true,
+  }),
+  params: new ParamsBuilder()
+    .addRole({ 
+      name: "rol", 
+      description: "Selecciona un rol", 
+      required: true }),
+
+  async code(ctx) {
+    try {
+      if (!ctx.guild) return noGuildReply(ctx);
+
+      const role = ctx.get("rol");
+      if (!role) return ctx.send("No pude encontrar el rol");
+
+      const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+
+      const perms = role.permissions.toArray().sort().map(p =>
+        `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``
+      );
+
+      if (!perms.length) return ctx.send("Este rol no tiene permisos");
+
+      const pages = [];
+      for (let i = 0; i < perms.length; i += 15) {
+        pages.push(perms.slice(i, i + 15));
+      }
+
+      let page = 0;
+
+      const prevId = `role_perms_prev_${Date.now()}`;
+      const nextId = `role_perms_next_${Date.now()}`;
+
+      const buildEmbed = () => new EmbedBuilder()
+        .setTitle(`Permisos de ${role.name}`)
+        .setDescription(pages[page].join("\n"))
+        .setColor(role.color || "#2b2d31")
+        .setTimestamp();
+
+      const reply = await ctx.send({
+        embeds: [buildEmbed()],
+        components: pages.length > 1 ? [buildPaginationRow(prevId, nextId, page, pages.length)] : [],
+      });
+
+      if (pages.length <= 1) return;
+
+      const collector = reply.createMessageComponentCollector({
+        componentType: ComponentType.Button,
+        time: 2 * 60 * 1000,
+        filter: i => [prevId, nextId].includes(i.customId),
+      });
+
+      collector.on("collect", async i => {
+        if (i.user.id !== invoker.id) {
+          return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
+        }
+
+        if (i.customId === prevId) page--;
+        if (i.customId === nextId) page++;
+
+        await i.update({
+          embeds: [buildEmbed()],
+          components: [buildPaginationRow(prevId, nextId, page, pages.length)]
+        });
+      });
+
+      collector.on("end", () => reply.edit({ components: [] }).catch(() => {}));
+
+    } catch (err) {
+      console.error("Error en role permissions:", err);
+      ctx.send("No se pudieron obtener los permisos del rol");
+    }
+  }
 }),
 };
 
