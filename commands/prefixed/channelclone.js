@@ -1,7 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 const sendLog = require("../../utils/sendLog");
-const { BLUE } = require("../../utils/colors");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
