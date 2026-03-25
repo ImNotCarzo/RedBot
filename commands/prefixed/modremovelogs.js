@@ -1,7 +1,5 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const Log = require("../../models/Log");
-const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -12,28 +10,7 @@ const data = {
     as_slash: false,
   }),
 
-  async code(ctx) {
-    try {
-      const guild = ctx.guild;
-      if (!guild) return ctx.send("Solo se puede usar en servidores");
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return ctx.send("No tienes el permiso `ManageGuild`");
-
-      const result = await Log.findOneAndDelete({ guildId: guild.id });
-      if (!result) return ctx.send("No hay un canal de logs configurado");
-
-      const embed = new EmbedBuilder()
-        .setTitle("Canal de logs removido")
-        .setColor(RED)
-        .setDescription("Ya no se enviarán logs")
-        .setTimestamp();
-
-      await ctx.send({ embeds: [embed] });
-    } catch {
-      await ctx.send("No se pudo eliminar la configuración de logs");
-    }
-  },
+  async code(ctx) {},
 };
 
 module.exports = { data };
