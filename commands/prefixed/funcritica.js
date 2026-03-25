@@ -1,26 +1,7 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
 const { getAI } = require("../../utils/ai");
-
-const COLOR = "#ff383d";
-const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
-
-const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
-Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
-Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!".
-Respuestas concisas, con personalidad, directas al grano.
-RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
-
-async function generateGemma(prompt) {
-  const response = await getAI().models.generateContent({
-    model: "gemma-3-12b-it",
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      temperature: 1.0,
-    },
-  });
-  return response.text?.trim() ?? null;
-}
+const { RED } = require("../../colors");
 
 const data = {
   data: new CommandBuilder({
@@ -32,9 +13,6 @@ const data = {
   }),
 
   async code(ctx) {
-    const tema = ctx.args?.join(" ").trim();
-
-    if (!tema) {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -44,38 +22,9 @@ const data = {
               `\n\n**Aliases:**\n\`criticar\`, \`criticize\`` +
               `\n\n\`\`\`js\n.critica <tema>\nEjemplo: .critica la chochoinflación\`\`\``
             )
-            .setColor(COLOR),
-        ],
-      });
-    }
-
-    try {
-      const thinking = await sendThinkingReply(ctx);
-
-      const prompt = `${PERSONA}
-Haz una crítica directa, ingeniosa y sin piedad de: "${tema}".
-Señala sus puntos débiles con humor y sarcasmo.
-Máximo 3 párrafos, sin introducción genérica.`;
-
-      const texto = (await generateGemma(prompt))?.slice(0, 4000)
-        ?? "No pude generar una crítica";
-
-      await editThinkingReply(thinking, {
-        content: "",
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`Crítica de: ${tema}`)
-            .setDescription(texto)
-            .setColor(COLOR)
-            .setTimestamp(),
-        ], allowedMentions: { repliedUser: false },
-      });
-
-    } catch (err) {
-      console.error("[fun critica prefix]", err);
-      await ctx.send("Ocurrió un error con la IA, intenta de nuevo");
-    }
-  },
-};
+            .setColor(RED),
+          }),
+        },
+}
 
 module.exports = { data };
