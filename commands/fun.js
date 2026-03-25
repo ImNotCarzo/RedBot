@@ -192,18 +192,16 @@ const data = {
   async code(ctx) {
     const reply = await prepare(ctx);
 
-    // Manejo correcto del parámetro (fix real)
     const situacion = ctx.get("situacion")?.trim() || "cualquier situación";
 
     try {
-      // Prompt adaptativo
       const prompt =
         situacion === "cualquier situación"
           ? `${PERSONA}\nGenera una excusa ridícula, creativa y divertida para cualquier situación. Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`
           : `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`;
 
       const texto =
-        (await generateGemma(prompt))?.slice(0, 4000) ||
+        (await generateGeminiFlash(prompt))?.slice(0, 4000) ||
         "No pude generar una excusa";
 
       await reply({
@@ -244,7 +242,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGemma(
+        const texto = (await generateGeminiFlash(
           `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`
         ))?.slice(0, 4000) ?? "No pude generar una teoría";
 
