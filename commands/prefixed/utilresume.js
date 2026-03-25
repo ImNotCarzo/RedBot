@@ -1,26 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback } = require("../../utils/ai");
-
 const COLOR = "#ff383d";
-const { sendThinkingReply, editThinkingReply } = require("../../utils/thinkingReply");
-
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
-
-async function generateGeminiText(prompt) {
-  const response = await generateWithFallback({
-    model: "gemini-3.1-flash-lite-preview",
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-  });
-
-  return response.text?.trim() ?? null;
-}
-
-// ─────────────────────────────────────────────
-//  COMMAND
-// ─────────────────────────────────────────────
 
 const data = {
   data: new CommandBuilder({
@@ -32,9 +12,6 @@ const data = {
   }),
 
   async code(ctx) {
-    const texto = ctx.args?.join(" ").trim();
-
-    if (!texto || texto.length < 100) {
       return ctx.send({
         embeds: [
           new EmbedBuilder()
@@ -47,38 +24,7 @@ const data = {
             .setColor(COLOR),
         ],
       });
-    }
-
-    try {
-      const thinking = await sendThinkingReply(ctx);
-
-      const prompt = `Resume el siguiente texto.
-Solo el resumen, sin frases previas ni comentarios adicionales.
-Debe ser claro, conciso y fiel al contenido original.
-Sin opiniones ni interpretaciones.
-Responde en español.
-
-${texto.slice(0, 8000)}`;
-
-      const resumen = await generateGeminiText(prompt);
-
-      await editThinkingReply(thinking, {
-        content: "",
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Resumen")
-            .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-            .setColor(COLOR)
-            .setFooter({ text: `${texto.length} caracteres → resumido` })
-            .setTimestamp(),
-        ], allowedMentions: { repliedUser: false },
-      });
-
-    } catch (err) {
-      console.error("[resume prefix]", err);
-      await ctx.send("No se pudo resumir el texto");
-    }
-  },
+    },
 };
 
 module.exports = { data };
