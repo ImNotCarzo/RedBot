@@ -1,5 +1,5 @@
 const { CommandBuilder } = require("erine");
-const { ButtonBuilder } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
