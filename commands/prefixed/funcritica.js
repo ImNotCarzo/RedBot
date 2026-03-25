@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
-const { RED } = require("../../colors");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
