@@ -23,7 +23,8 @@ const data = {
               `\n\n\`\`\`js\n.critica <tema>\nEjemplo: .critica la chochoinflación\`\`\``
             )
             .setColor(RED),
-          }),
+          ],
+      }),
         },
 };
 
