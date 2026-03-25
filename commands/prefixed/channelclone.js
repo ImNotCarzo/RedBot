@@ -5,9 +5,9 @@ const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channelclone",
+    name: "clone",
     description: "Clona un canal con su configuración",
-    aliases: ["chclone", "clonechannel"],
+    aliases: ["chclone", "channelclone", "clonechannel"],
     as_prefix: true,
     as_slash: false,
   }),
