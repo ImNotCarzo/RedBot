@@ -25,6 +25,6 @@ const data = {
             .setColor(RED),
           }),
         },
-}
+};
 
 module.exports = { data };
