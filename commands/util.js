@@ -1,4 +1,5 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
+const { getAI } = require("../utils/ai");
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -26,22 +27,41 @@ const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 // ─────────────────────────────────────────────
 //  AI
 // ─────────────────────────────────────────────
-
 async function generateGemma(messages) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemma-3-4b-it:free",
-      messages,
-    }),
+  const msg = messages?.[0];
+  if (!msg) return null;
+
+  let text = "";
+  let imageUrl = null;
+  if (Array.isArray(msg.content)) {
+    for (const part of msg.content) {
+      if (part.type === "text") text += part.text;
+      if (part.type === "image_url") imageUrl = part.image_url.url;
+    }
+  } else {
+    text = msg.content;
+  }
+
+  let parts = [{ text }];
+  if (imageUrl) {
+    const res = await fetch(imageUrl);
+    const buf = await res.arrayBuffer();
+
+    parts.push({
+      inlineData: {
+        mimeType: res.headers.get("content-type") || "image/png",
+        data: Buffer.from(buf).toString("base64"),
+      },
+    });
+  }
+
+  const response = await getAI().models.generateContent({
+    model: "gemma-3-12b-it",
+    contents: [{ role: "user", parts }],
+    config: { temperature: 1.0 },
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error?.message ?? `HTTP ${res.status}`);
-  return data.choices?.[0]?.message?.content?.trim() ?? null;
+
+  return response.text?.trim() ?? null;
 }
 
 async function generateGeminiText(prompt) {
