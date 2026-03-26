@@ -11,6 +11,13 @@ const { MAX_HISTORIAL, setConversacion, getConversacion } = require("./utils/ask
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("./utils/ai");
 const { resolveMemberFlexible } = require("./utils/helpers");
 
+const REQUIRED_ENV = ["TOKEN", "MONGO", "CLIENT_ID"];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    throw new Error(`Falta variable de entorno requerida: ${key}`);
+  }
+}
+
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya.
 Hablas como un amigo que sabe mucho, no como un manual técnico ni un bot genérico.
@@ -341,8 +348,8 @@ function wrapPrefixedCommands() {
 
 bot.load("commands");
 wrapPrefixedCommands();
-bot.login(process.env.TOKEN);
 bot.setMaxListeners(20);
+bot.login(process.env.TOKEN);
 
 // ─────────────────────────────────────────────
 //  EVENTS
@@ -430,8 +437,7 @@ bot.on("messageCreate", async (message) => {
 
     await message.channel.sendTyping().catch(() => {});
 
-    const historial = userData.historial;
-    historial.push({ role: "user", content: pregunta });
+    const historial = [...(userData.historial ?? []), { role: "user", content: pregunta }];
 
     const usarSearch = await needsSearchAI(pregunta);
     const model      = usarSearch ? "gemini-2.5-flash" : "gemini-3.1-flash-lite-preview";
@@ -447,15 +453,16 @@ bot.on("messageCreate", async (message) => {
       config,
     });
 
-    const respuesta = response.text?.trim() ?? "No pude generar una respuesta";
+    const respuesta = response.text?.trim() || "No pude generar una respuesta";
 
-    historial.push({ role: "assistant", content: respuesta });
-    if (historial.length > MAX_HISTORIAL) {
-      historial.splice(0, historial.length - MAX_HISTORIAL);
-    }
+    const historialConRespuesta = [...historial, { role: "assistant", content: respuesta }];
+    const historialFinal = historialConRespuesta.length > MAX_HISTORIAL
+      ? historialConRespuesta.slice(-MAX_HISTORIAL)
+      : historialConRespuesta;
 
-    const texto = respuesta.length > 4000
-      ? respuesta.slice(0, 4000) + "\n*(respuesta recortada)*"
+    const recorte = "\n*(respuesta recortada)*";
+    const texto = respuesta.length > 4096
+      ? respuesta.slice(0, 4096 - recorte.length) + recorte
       : respuesta;
 
     const embed = new EmbedBuilder()
@@ -467,7 +474,7 @@ bot.on("messageCreate", async (message) => {
       .setColor("#ff383d");
 
     const botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
-    setConversacion(message.author.id, historial, botMsg.id);
+    setConversacion(message.author.id, historialFinal, botMsg.id);
 
   } catch (err) {
     console.error("[messageCreate IA]", err);
@@ -478,7 +485,29 @@ bot.on("messageCreate", async (message) => {
 //  UNHANDLED ERRORS
 // ─────────────────────────────────────────────
 
-process.on("SIGTERM", () => console.log("[Process] SIGTERM recibido - Shut"));
-process.on("SIGINT",  () => console.log("[Process] SIGINT recibido"));
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[Process] ${signal} recibido, cerrando...`);
+  const forceExitTimer = setTimeout(() => process.exit(1), 10000);
+  try {
+    if (typeof bot.destroy === "function") {
+      await bot.destroy().catch((err) => console.error("[Shutdown] Error al cerrar bot:", err));
+    }
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close().catch((err) => console.error("[Shutdown] Error al cerrar DB:", err));
+    }
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  } catch (err) {
+    clearTimeout(forceExitTimer);
+    console.error("[Shutdown] Error inesperado:", err);
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("unhandledRejection", (err) => console.error("[UnhandledRejection]", err));
 process.on("uncaughtException",  (err) => console.error("[UncaughtException]",  err));
