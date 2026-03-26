@@ -437,7 +437,10 @@ bot.on("messageCreate", async (message) => {
 
     await message.channel.sendTyping().catch(() => {});
 
-    const historial = [...(userData.historial ?? []), { role: "user", content: pregunta }];
+    const historial = Array.isArray(userData.historial)
+      ? userData.historial.slice(-MAX_HISTORIAL)
+      : [];
+    historial.push({ role: "user", content: pregunta });
 
     const usarSearch = await needsSearchAI(pregunta);
     const model      = usarSearch ? "gemini-2.5-flash" : "gemini-3.1-flash-lite-preview";
@@ -455,14 +458,16 @@ bot.on("messageCreate", async (message) => {
 
     const respuesta = response.text?.trim() || "No pude generar una respuesta";
 
-    const historialConRespuesta = [...historial, { role: "assistant", content: respuesta }];
-    const historialFinal = historialConRespuesta.length > MAX_HISTORIAL
-      ? historialConRespuesta.slice(-MAX_HISTORIAL)
-      : historialConRespuesta;
+    historial.push({ role: "assistant", content: respuesta });
+    const historialFinal = historial.length > MAX_HISTORIAL
+      ? historial.slice(-MAX_HISTORIAL)
+      : historial;
 
+    const MAX_EMBED_DESCRIPTION = 4096;
     const recorte = "\n*(respuesta recortada)*";
-    const texto = respuesta.length > 4096
-      ? respuesta.slice(0, 4096 - recorte.length) + recorte
+    const maxTexto = MAX_EMBED_DESCRIPTION - recorte.length;
+    const texto = respuesta.length > maxTexto
+      ? respuesta.slice(0, maxTexto) + recorte
       : respuesta;
 
     const embed = new EmbedBuilder()
