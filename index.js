@@ -6,10 +6,18 @@ const path = require("path");
 const fs = require("fs");
 const GuildConfig  = require("./models/GuildConfig");
 const prefixCache  = require("./utils/prefixCache");
+const PREFIXED_TO_SLASH_MAP = require("./config/prefixedToSlashMap");
 const { setId }    = require("./utils/commandIds");
 const { MAX_HISTORIAL, setConversacion, getConversacion } = require("./utils/askMemory");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("./utils/ai");
 const { resolveMemberFlexible } = require("./utils/helpers");
+
+const REQUIRED_ENV = ["TOKEN", "MONGO", "CLIENT_ID"];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    throw new Error(`Falta variable de entorno requerida: ${key}`);
+  }
+}
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya.
@@ -92,44 +100,12 @@ function normalizeReplyPayload(payload) {
 const wrappedOriginalCodes = new WeakSet();
 const slashCommandMap = new Map();
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
-
-const PREFIXED_TO_SLASH = {
-  channel: "channel/info",
-  channelclone: "channel/clone",
-  channelunlock: "channel/unlock",
-  role: "role/info",
-  roleadd: "role/add",
-  roleall: "role/all",
-  rolebots: "role/bots",
-  rolehoist: "role/hoist",
-  rolehumans: "role/humans",
-  roleicon: "role/icon",
-  rolejoin: "role/join",
-  rolementionable: "role/mentionable",
-  roleremove: "role/remove",
-  roleremoveall: "role/removeall",
-  rolerename: "role/rename",
-  roleusers: "role/users",
-  roleperms: "role/permissions",
-  server: "server/info",
-  serverbanner: "server/banner",
-  user: "user/info",
-  uroles: "user/roles",
-  userperms: "user/permissions",
-};
-
-function inferGroupFromPrefixedFile(file, prefixedName) {
-  const base = file.replace(/\.js$/, "");
-  if (base.startsWith("channel")) return "channel";
-  if (base.startsWith("fun")) return "fun";
-  if (base.startsWith("mod")) return "mod";
-  if (base.startsWith("role")) return "role";
-  if (base.startsWith("server")) return "server";
-  if (base.startsWith("user")) return "user";
-  if (base.startsWith("util")) return "util";
-  if (prefixedName === "ask") return "ask";
-  return null;
-}
+const KNOWN_LANGUAGE_TOKENS = new Set([
+  "es", "español", "espanol", "en", "inglés", "ingles", "fr", "francés", "frances",
+  "de", "alemán", "aleman", "it", "italiano", "pt", "portugués", "portugues",
+  "ru", "ruso", "ja", "japonés", "japones", "ko", "coreano", "zh", "chino",
+  "ar", "árabe", "arabe", "hi", "hindi",
+]);
 
 function loadSlashCommandMap() {
   if (slashCommandMap.size) return;
@@ -147,9 +123,19 @@ function loadSlashCommandMap() {
   if (ask?.data?.name) slashCommandMap.set(`ask/${ask.data.name}`, ask);
 }
 
-function parseMaybeNumber(value) {
-  if (typeof value !== "string") return null;
-  return /^\d+$/.test(value) ? value : null;
+function resolveSlashKeyForPrefixedName(command, prefixedName) {
+  const explicitGroup = command?.data?.slashGroup;
+  if (explicitGroup) return `${explicitGroup}/${prefixedName}`;
+  const mapped = PREFIXED_TO_SLASH_MAP[prefixedName];
+  if (mapped) return mapped;
+  const candidates = [...slashCommandMap.keys()].filter((key) => key.endsWith(`/${prefixedName}`));
+  if (candidates.length === 1) return candidates[0];
+  return null;
+}
+
+function looksLikeLanguageToken(token) {
+  if (typeof token !== "string") return false;
+  return KNOWN_LANGUAGE_TOKENS.has(token.toLowerCase());
 }
 
 async function resolveRoleFlexible(ctx, input) {
@@ -176,9 +162,7 @@ async function resolveChannelFlexible(ctx, input) {
   return ctx.guild.channels.cache.find((c) => c.name?.toLowerCase?.().includes(lower)) ?? null;
 }
 
-function buildAttachmentFromInput(ctx, input) {
-  const attached = ctx.message?.attachments?.first?.();
-  if (attached) return attached;
+function buildAttachmentFromUrl(input) {
   if (!input || !/^https?:\/\//i.test(input)) return null;
   const name = input.split("/").pop()?.split("?")[0] ?? "archivo";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
@@ -190,6 +174,12 @@ function buildAttachmentFromInput(ctx, input) {
     contentType: imageTypes[ext] ?? audioTypes[ext] ?? null,
     size: 0,
   };
+}
+
+function resolveAttachmentInput(ctx, input) {
+  const attached = ctx.message?.attachments?.first?.();
+  if (attached) return attached;
+  return buildAttachmentFromUrl(input);
 }
 
 async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
@@ -220,12 +210,19 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         if (value) args.shift();
       }
     } else if (def.type === 11) {
-      value = buildAttachmentFromInput(ctx, token);
+      value = resolveAttachmentInput(ctx, token);
       if (!ctx.message?.attachments?.size && value) args.shift();
     } else if (def.type === 3) {
       if (args.length) {
-        if (isLast || slashName === "translate" || slashName === "resume") value = args.splice(0).join(" ");
-        else if (def.name === "dias") value = parseMaybeNumber(token) ?? token;
+        if (
+          slashName === "translate" &&
+          def.name === "texto" &&
+          args.length > 1 &&
+          looksLikeLanguageToken(args[args.length - 1])
+        ) {
+          value = args.slice(0, -1).join(" ");
+          args.splice(0, args.length - 1);
+        } else if (isLast || slashName === "resume") value = args.splice(0).join(" ");
         else value = args.shift();
       }
     } else if (args.length) {
@@ -269,8 +266,7 @@ function wrapPrefixedCommands() {
       }
 
       const prefixedName = command?.data?.name;
-      const inferredGroup = inferGroupFromPrefixedFile(file, prefixedName);
-      const slashKey = PREFIXED_TO_SLASH[prefixedName] ?? (inferredGroup ? `${inferredGroup}/${prefixedName}` : null);
+      const slashKey = resolveSlashKeyForPrefixedName(command, prefixedName);
       const slashName = slashKey?.split("/")[1];
       const slashCommand = slashKey ? slashCommandMap.get(slashKey) : null;
 
@@ -316,10 +312,10 @@ function wrapPrefixedCommands() {
 //  LOADERS
 // ─────────────────────────────────────────────
 
+bot.setMaxListeners(20);
 bot.load("commands");
 wrapPrefixedCommands();
 bot.login(process.env.TOKEN);
-bot.setMaxListeners(20);
 
 // ─────────────────────────────────────────────
 //  EVENTS
@@ -327,14 +323,20 @@ bot.setMaxListeners(20);
 
 const eventsPath = path.join(__dirname, "events");
 const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
+let loadedEvents = 0;
 
 for (const file of eventFiles) {
-  const event = require(path.join(eventsPath, file));
-  if (!event?.data?.name) continue;
-  bot.on(event.data.name, (...args) => event.data.code(bot, ...args));
+  try {
+    const event = require(path.join(eventsPath, file));
+    if (!event?.data?.name || typeof event?.data?.code !== "function") continue;
+    bot.on(event.data.name, (...args) => event.data.code(bot, ...args));
+    loadedEvents += 1;
+  } catch (err) {
+    console.error(`[Events] Error cargando ${file}:`, err);
+  }
 }
 
-console.log(`[Events] ${eventFiles.length} cargados`);
+console.log(`[Events] ${loadedEvents}/${eventFiles.length} cargados`);
 
 // ─────────────────────────────────────────────
 //  READY
@@ -358,10 +360,11 @@ bot.on("clientReady", async (bot) => {
       }
     );
     if (!res.ok) {
-      console.error("[Setup] No se pudo actualizar role connections metadata");
+      const responseBody = await res.text().catch(() => "");
+      console.warn(`[Setup] No se pudo actualizar role connections metadata (${res.status}): ${responseBody || "sin respuesta"}`);
     }
-  } catch {
-    console.error("[Setup] Error al actualizar role connections metadata");
+  } catch (err) {
+    console.error("[Setup] Error al actualizar role connections metadata:", err);
   }
   await bot.sync();
   console.log("[Commands] Sincronizados");
@@ -407,7 +410,9 @@ bot.on("messageCreate", async (message) => {
 
     await message.channel.sendTyping().catch(() => {});
 
-    const historial = userData.historial;
+    const historial = Array.isArray(userData.historial)
+      ? userData.historial.slice(-MAX_HISTORIAL)
+      : [];
     historial.push({ role: "user", content: pregunta });
 
     const usarSearch = await needsSearchAI(pregunta);
@@ -424,15 +429,18 @@ bot.on("messageCreate", async (message) => {
       config,
     });
 
-    const respuesta = response.text?.trim() ?? "No pude generar una respuesta";
+    const respuesta = response.text?.trim() || "No pude generar una respuesta";
 
     historial.push({ role: "assistant", content: respuesta });
-    if (historial.length > MAX_HISTORIAL) {
-      historial.splice(0, historial.length - MAX_HISTORIAL);
-    }
+    const historialFinal = historial.length > MAX_HISTORIAL
+      ? historial.slice(-MAX_HISTORIAL)
+      : historial;
 
-    const texto = respuesta.length > 4000
-      ? respuesta.slice(0, 4000) + "\n*(respuesta recortada)*"
+    const MAX_EMBED_DESCRIPTION = 4096;
+    const recorte = "\n*(respuesta recortada)*";
+    const maxTexto = MAX_EMBED_DESCRIPTION - recorte.length;
+    const texto = respuesta.length > maxTexto
+      ? respuesta.slice(0, maxTexto) + recorte
       : respuesta;
 
     const embed = new EmbedBuilder()
@@ -444,7 +452,7 @@ bot.on("messageCreate", async (message) => {
       .setColor("#ff383d");
 
     const botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
-    setConversacion(message.author.id, historial, botMsg.id);
+    setConversacion(message.author.id, historialFinal, botMsg.id);
 
   } catch (err) {
     console.error("[messageCreate IA]", err);
@@ -455,7 +463,29 @@ bot.on("messageCreate", async (message) => {
 //  UNHANDLED ERRORS
 // ─────────────────────────────────────────────
 
-process.on("SIGTERM", () => console.log("[Process] SIGTERM recibido - Shut"));
-process.on("SIGINT",  () => console.log("[Process] SIGINT recibido"));
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[Process] ${signal} recibido, cerrando...`);
+  const forceExitTimer = setTimeout(() => process.exit(1), 10000);
+  try {
+    if (typeof bot.destroy === "function") {
+      await bot.destroy().catch((err) => console.error("[Shutdown] Error al cerrar bot:", err));
+    }
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close().catch((err) => console.error("[Shutdown] Error al cerrar DB:", err));
+    }
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  } catch (err) {
+    clearTimeout(forceExitTimer);
+    console.error("[Shutdown] Error inesperado:", err);
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("unhandledRejection", (err) => console.error("[UnhandledRejection]", err));
 process.on("uncaughtException",  (err) => console.error("[UncaughtException]",  err));

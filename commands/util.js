@@ -28,40 +28,49 @@ const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 //  AI
 // ─────────────────────────────────────────────
 async function generateGemma(messages) {
-  const msg = messages?.[0];
-  if (!msg) return null;
+  try {
+    const msg = messages?.[0];
+    if (!msg) return null;
 
-  let text = "";
-  let imageUrl = null;
-  if (Array.isArray(msg.content)) {
-    for (const part of msg.content) {
-      if (part.type === "text") text += part.text;
-      if (part.type === "image_url") imageUrl = part.image_url.url;
+    let text = "";
+    let imageUrl = null;
+    if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === "text") text += part.text;
+        if (part.type === "image_url") imageUrl = part.image_url?.url ?? null;
+      }
+    } else {
+      text = msg.content;
     }
-  } else {
-    text = msg.content;
-  }
 
-  let parts = [{ text }];
-  if (imageUrl) {
-    const res = await fetch(imageUrl);
-    const buf = await res.arrayBuffer();
+    if (!text && !imageUrl) throw new Error("Request requires either text or an image");
+    const parts = [{ text: text || "Describe la imagen." }];
+    if (imageUrl) {
+      const res = await fetch(imageUrl);
+      if (!res.ok) {
+        throw new Error(`No se pudo descargar la imagen (${res.status})`);
+      }
+      const buf = await res.arrayBuffer();
 
-    parts.push({
-      inlineData: {
-        mimeType: res.headers.get("content-type") || "image/png",
-        data: Buffer.from(buf).toString("base64"),
-      },
+      parts.push({
+        inlineData: {
+          mimeType: res.headers.get("content-type") || "image/png",
+          data: Buffer.from(buf).toString("base64"),
+        },
+      });
+    }
+
+    const response = await getAI().models.generateContent({
+      model: "gemma-3-12b-it",
+      contents: [{ role: "user", parts }],
+      config: { temperature: 1.0 },
     });
+
+    return response.text?.trim() ?? null;
+  } catch (err) {
+    const msg = err?.message || "AI provider request failed";
+    throw new Error(msg);
   }
-
-  const response = await getAI().models.generateContent({
-    model: "gemma-3-12b-it",
-    contents: [{ role: "user", parts }],
-    config: { temperature: 1.0 },
-  });
-
-  return response.text?.trim() ?? null;
 }
 
 async function generateGeminiText(prompt) {
@@ -376,6 +385,9 @@ const data = {
     async code(ctx) {
       const reply      = await prepare(ctx);
       const attachment = ctx.get("imagen");
+      if (!attachment) {
+        return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
+      }
 
       const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
       if (!validTypes.some(t => attachment.contentType?.startsWith(t))) {
