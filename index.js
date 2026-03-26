@@ -312,9 +312,9 @@ function wrapPrefixedCommands() {
 //  LOADERS
 // ─────────────────────────────────────────────
 
+bot.setMaxListeners(20);
 bot.load("commands");
 wrapPrefixedCommands();
-bot.setMaxListeners(20);
 bot.login(process.env.TOKEN);
 
 // ─────────────────────────────────────────────
