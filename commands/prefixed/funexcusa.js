@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("erine");
 const { EmbedBuilder } = require("discord.js");
-const { getAI } = require("../../utils/ai");
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -11,7 +11,19 @@ const data = {
     as_slash: false,
   }),
 
-  async code(ctx) {},
+  async code(ctx) {
+    const bot = ctx.bot.user;
+    const paramerror = new EmbedBuilder()
+      .setAuthor({ name: "Comando Excusa", iconURL: bot.displayAvatarURL() })
+      .setDescription(
+        `**Usos:**\nGenera una excusa ridícula pero creativa` +
+        `\n\n**Aliases:**\n\`coartada\`, \`excuse\`` +
+        `\n\n\`\`\`js\n.excusa [situacion]\nEjemplo: .excusa llegué tarde\`\`\``
+      )
+      .setColor(RED);
+
+    return ctx.send({ embeds: [paramerror] });
+  },
 };
 
 module.exports = { data };

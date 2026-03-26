@@ -112,8 +112,12 @@ const PREFIXED_TO_SLASH = {
   roleusers: "role/users",
   roleperms: "role/permissions",
   server: "server/info",
+  serverroles: "server/roles",
   serverbanner: "server/banner",
+  sroles: "server/roles",
+  ubanner: "user/banner",
   user: "user/info",
+  userbanner: "user/banner",
   uroles: "user/roles",
   userperms: "user/permissions",
 };
@@ -150,6 +154,18 @@ function loadSlashCommandMap() {
 function parseMaybeNumber(value) {
   if (typeof value !== "string") return null;
   return /^\d+$/.test(value) ? value : null;
+}
+
+function looksLikeLanguageToken(token) {
+  if (typeof token !== "string") return false;
+  const normalized = token.toLowerCase();
+  const known = new Set([
+    "es", "español", "espanol", "en", "inglés", "ingles", "fr", "francés", "frances",
+    "de", "alemán", "aleman", "it", "italiano", "pt", "portugués", "portugues",
+    "ru", "ruso", "ja", "japonés", "japones", "ko", "coreano", "zh", "chino",
+    "ar", "árabe", "arabe", "hi", "hindi",
+  ]);
+  return known.has(normalized);
 }
 
 async function resolveRoleFlexible(ctx, input) {
@@ -224,7 +240,15 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       if (!ctx.message?.attachments?.size && value) args.shift();
     } else if (def.type === 3) {
       if (args.length) {
-        if (isLast || slashName === "translate" || slashName === "resume") value = args.splice(0).join(" ");
+        if (
+          slashName === "translate" &&
+          def.name === "texto" &&
+          args.length > 1 &&
+          looksLikeLanguageToken(args[args.length - 1])
+        ) {
+          value = args.slice(0, -1).join(" ");
+          args.splice(0, args.length - 1);
+        } else if (isLast || slashName === "resume") value = args.splice(0).join(" ");
         else if (def.name === "dias") value = parseMaybeNumber(token) ?? token;
         else value = args.shift();
       }
