@@ -13,7 +13,7 @@ const data = {
 
   async code(ctx) {
     const bot = ctx.bot.user;
-    const paramerror = new EmbedBuilder()
+    const usageEmbed = new EmbedBuilder()
       .setAuthor({ name: "Comando Ubanner", iconURL: bot.displayAvatarURL() })
       .setDescription(
         `**Usos:**\nMuestra el banner de un usuario` +
@@ -22,7 +22,7 @@ const data = {
       )
       .setColor(RED);
 
-    return ctx.send({ embeds: [paramerror] });
+    return ctx.send({ embeds: [usageEmbed] });
   },
 };
 

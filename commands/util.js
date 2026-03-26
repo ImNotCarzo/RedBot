@@ -43,7 +43,8 @@ async function generateGemma(messages) {
       text = msg.content;
     }
 
-    const parts = [{ text: text || "Describe la imagen en español." }];
+    if (!text && !imageUrl) throw new Error("Request requires either text or an image");
+    const parts = [{ text: text || "Describe la imagen." }];
     if (imageUrl) {
       const res = await fetch(imageUrl);
       if (!res.ok) {
@@ -67,7 +68,7 @@ async function generateGemma(messages) {
 
     return response.text?.trim() ?? null;
   } catch (err) {
-    const msg = err?.message || "Provider returned error";
+    const msg = err?.message || "AI provider request failed";
     throw new Error(msg);
   }
 }

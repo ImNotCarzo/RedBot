@@ -13,7 +13,7 @@ const data = {
 
   async code(ctx) {
     const bot = ctx.bot.user;
-    const paramerror = new EmbedBuilder()
+    const usageEmbed = new EmbedBuilder()
       .setAuthor({ name: "Comando Purge", iconURL: bot.displayAvatarURL() })
       .setDescription(
         `**Usos:**\nElimina mensajes del canal` +
@@ -22,7 +22,7 @@ const data = {
       )
       .setColor(RED);
 
-    return ctx.send({ embeds: [paramerror] });
+    return ctx.send({ embeds: [usageEmbed] });
   },
 };
 

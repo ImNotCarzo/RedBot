@@ -92,6 +92,12 @@ function normalizeReplyPayload(payload) {
 const wrappedOriginalCodes = new WeakSet();
 const slashCommandMap = new Map();
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
+const KNOWN_LANGUAGE_TOKENS = new Set([
+  "es", "español", "espanol", "en", "inglés", "ingles", "fr", "francés", "frances",
+  "de", "alemán", "aleman", "it", "italiano", "pt", "portugués", "portugues",
+  "ru", "ruso", "ja", "japonés", "japones", "ko", "coreano", "zh", "chino",
+  "ar", "árabe", "arabe", "hi", "hindi",
+]);
 
 const PREFIXED_TO_SLASH = {
   channel: "channel/info",
@@ -158,14 +164,7 @@ function parseMaybeNumber(value) {
 
 function looksLikeLanguageToken(token) {
   if (typeof token !== "string") return false;
-  const normalized = token.toLowerCase();
-  const known = new Set([
-    "es", "español", "espanol", "en", "inglés", "ingles", "fr", "francés", "frances",
-    "de", "alemán", "aleman", "it", "italiano", "pt", "portugués", "portugues",
-    "ru", "ruso", "ja", "japonés", "japones", "ko", "coreano", "zh", "chino",
-    "ar", "árabe", "arabe", "hi", "hindi",
-  ]);
-  return known.has(normalized);
+  return KNOWN_LANGUAGE_TOKENS.has(token.toLowerCase());
 }
 
 async function resolveRoleFlexible(ctx, input) {
