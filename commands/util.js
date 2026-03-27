@@ -316,7 +316,7 @@ const data = {
     })
     .addString({
       name: "idioma",
-      description: "Idioma destino (ej: es, en, fr, de) — por defecto español",
+      description: "Idioma destino (ej: es, en, fr, de) por defecto español",
       required: false,
     }),
 
