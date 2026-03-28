@@ -1,15 +1,17 @@
+const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ChannelType } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
-const {
-  ButtonBuilder,
-  ButtonStyle,
-  ActionRowBuilder,
-  EmbedBuilder,
-  PermissionFlagsBits,
-  MessageFlags,
-  ChannelType,
-} = require("discord.js");
-const sendLog = require("../utils/sendLog");
 const { RED, GREEN, BLUE } = require("../utils/colors");
+const { sendLog } = require("../utils/sendLog");
+
+function noGuildReply(ctx) {
+  return ctx.send({
+    embeds: [new EmbedBuilder().setDescription("Este comando solo funciona en servidores").setColor(RED)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel("Invítame").setStyle(ButtonStyle.Link).setURL(INVITE_URL)
+    )],
+    flags: MessageFlags.Ephemeral,
+  });
+}
 
 function formatSlowmode(seconds) {
   if (seconds === 0)    return "desactivado";
@@ -72,7 +74,7 @@ const data = {
     try {
       const channel = ctx.get("canal") ?? ctx.channel;
       const guild = ctx.guild;
-
+      if (!guild) return noGuildReply(ctx);
       if (!channel) {
         return ctx.send("No se pudo obtener el canal");
       }
