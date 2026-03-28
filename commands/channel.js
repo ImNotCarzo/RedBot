@@ -123,6 +123,7 @@ const data = {
       .addString({ name: "nombre", description: "Nombre nuevo",       required: true }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const channel  = ctx.get("canal");
       const newName  = ctx.get("nombre").toLowerCase().replace(/\s+/g, "-").slice(0, 100);
       const modTag   = ctx.user?.tag ?? ctx.author?.tag;
@@ -176,6 +177,7 @@ const data = {
       .addChannel({ name: "canal", description: "Canal a bloquear (opcional, por defecto el actual)", required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
 
@@ -222,6 +224,7 @@ const data = {
       .addChannel({ name: "canal", description: "Canal a abrir (opcional, por defecto el actual)", required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
 
@@ -269,6 +272,7 @@ const data = {
       .addChannel({ name: "canal", description: "Canal objetivo (opcional, por defecto el actual)", required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
       const seconds = parseSlowmode(ctx.get("tiempo"));
@@ -333,7 +337,8 @@ const data = {
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
     const authorId = ctx.user?.id ?? ctx.author?.id;
 
-    if (!guild || !channel) {
+    if (!guild) return noGuildReply(ctx);
+    if (!channel) {
       return ctx.send({ content: "No se pudo obtener el canal", flags: MessageFlags.Ephemeral });
     }
 
@@ -469,6 +474,7 @@ const data = {
       .addChannel({ name: "canal", description: "Canal a clonar (opcional, por defecto el actual)", required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
 
@@ -515,6 +521,7 @@ const data = {
       .addChannel({ name: "canal",  description: "Canal objetivo (opcional, por defecto el actual)",    required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -565,6 +572,7 @@ const data = {
       .addChannel({ name: "canal",  description: "Canal objetivo (opcional, por defecto el actual)",    required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -613,6 +621,7 @@ const data = {
       .addChannel({ name: "canal", description: "Canal a ocultar (opcional, por defecto el actual)", required: false }),
 
     async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
 
