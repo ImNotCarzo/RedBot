@@ -1,0 +1,91 @@
+const { EmbedBuilder } = require("discord.js");
+const { setConversacion, getConversacion } = require("../../utils/askMemory");
+const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../services/ai.service");
+const {
+  MAX_HISTORIAL,
+  SYSTEM_PROMPT,
+  MAX_EMBED_DESCRIPTION,
+  AI_MODEL_DEFAULT,
+  AI_MODEL_SEARCH,
+} = require("../config/constants");
+
+const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
+
+/**
+ * Register the `messageCreate` handler that powers AI follow-up conversations.
+ *
+ * The handler activates only when:
+ * - The message is a reply to the bot's last AI response.
+ * - The user has an active conversation session (tracked via askMemory).
+ *
+ * @param {import("erine").Erine} bot
+ * @param {import("../core/logger")} [log]
+ */
+function registerMessageHandler(bot, log) {
+  bot.on("messageCreate", async (message) => {
+    try {
+      if (message.author.bot)            return;
+      if (!message.reference?.messageId) return;
+
+      const userData = getConversacion(message.author.id);
+      if (!userData) return;
+      if (message.reference.messageId !== userData.lastBotMessageId) return;
+
+      const pregunta = message.content.trim();
+      if (!pregunta) return;
+
+      await message.channel.sendTyping().catch(() => {});
+
+      // ── Build history ─────────────────────────────────────────────────
+      const historial = Array.isArray(userData.historial)
+        ? userData.historial.slice(-MAX_HISTORIAL)
+        : [];
+      historial.push({ role: "user", content: pregunta });
+
+      // ── AI generation ─────────────────────────────────────────────────
+      const usarSearch = await needsSearchAI(pregunta);
+      const model      = usarSearch ? AI_MODEL_SEARCH : AI_MODEL_DEFAULT;
+      const config     = usarSearch ? { tools: [{ googleSearch: {} }] } : {};
+
+      const response = await generateWithFallback({
+        model,
+        contents: [
+          { role: "user",  parts: [{ text: SYSTEM_PROMPT }] },
+          { role: "model", parts: [{ text: "Entendido." }] },
+          ...toGeminiHistory(historial),
+        ],
+        config,
+      });
+
+      const respuesta = response.text?.trim() || "No pude generar una respuesta";
+
+      // ── Persist history ────────────────────────────────────────────────
+      historial.push({ role: "assistant", content: respuesta });
+      const historialFinal = historial.length > MAX_HISTORIAL
+        ? historial.slice(-MAX_HISTORIAL)
+        : historial;
+
+      // ── Build embed ────────────────────────────────────────────────────
+      const maxTexto = MAX_EMBED_DESCRIPTION - TRUNCATION_SUFFIX.length;
+      const texto    = respuesta.length > maxTexto
+        ? respuesta.slice(0, maxTexto) + TRUNCATION_SUFFIX
+        : respuesta;
+
+      const embed = new EmbedBuilder()
+        .setAuthor({
+          name:    message.author.username,
+          iconURL: message.author.displayAvatarURL({ size: 128 }),
+        })
+        .setDescription(texto)
+        .setColor("#ff383d");
+
+      const botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+      setConversacion(message.author.id, historialFinal, botMsg.id);
+
+    } catch (err) {
+      log?.error("messageCreate IA", { err: err.message });
+    }
+  });
+}
+
+module.exports = { registerMessageHandler };

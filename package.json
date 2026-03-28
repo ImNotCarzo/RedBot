@@ -1,10 +1,11 @@
 {
   "name": "RedBot",
-  "version": "1.0.0",
-  "description": "erine bot",
-  "main": "index.js",
+  "version": "0.2.0",
+  "description": "Discord bot con IA integrada usando discord.js y erine",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node debug.js",
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development LOG_LEVEL=debug node src/index.js",
     "audit": "npm audit fix"
   },
   "dependencies": {
