@@ -1,32 +1,16 @@
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
-const { getAI } = require("../utils/ai");
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  PermissionFlagsBits,
-  MessageFlags,
-} = require("discord.js");
-const GuildConfig = require("../models/GuildConfig");
-const prefixCache = require("../utils/prefixCache");
 const { deleteConversacion } = require("../utils/askMemory");
+const { GuildConfig } = require("../models/GuildConfig");
 const { generateWithFallback } = require("../utils/ai");
-
-// ─────────────────────────────────────────────
-//  CONSTANTS
-// ─────────────────────────────────────────────
-
-const RED   = "#ff383d";
-const GREEN = "#23a55a";
-const BLUE  = "#5865f2";
+const { RED, GREEN, BLUE } = require("../utils/colors");
+const { prefixCache } = require("../utils/prefixCache");
+const { getAI } = require("../utils/ai");
 
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 
-// ─────────────────────────────────────────────
 //  AI
-// ─────────────────────────────────────────────
 async function generateGemma(messages) {
   try {
     const msg = messages?.[0];
@@ -129,8 +113,7 @@ const data = {
               .setTitle("Pong!")
               .setDescription(
                 `> **Mensaje:** \`${msgPing}ms\`\n` +
-                `> **API:** \`${apiPing}ms\``
-              )
+                `> **API:** \`${apiPing}ms\``)
               .setColor(RED),
           ],
         });
