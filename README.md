@@ -1,21 +1,6 @@
 # RedBot
 
-A Discord bot with integrated AI (Gemini), moderation, role management, and utility commands — built with [discord.js](https://discord.js.org) and [erine](https://github.com/ImNotCarzo/erine).
-
----
-
-## Features
-
-- **AI conversations** powered by Google Gemini (with automatic web-search fallback)
-- **Slash & prefixed commands** — the prefixed adapter delegates to the slash implementation automatically
-- **Moderation** — ban, kick, mute, tempban, warn, purge, and more
-- **Role management** — add, remove, mass-role, hoist, icon, etc.
-- **Channel utilities** — lock, unlock, slowmode, nuke, clone, and more
-- **Server & user info** embeds
-- **Auto-role on join** (`/rolejoin`)
-- **Persistent conversation history** per user (10-turn rolling window)
-- **Centralized logging** with severity levels and ISO timestamps
-- **Graceful shutdown** on `SIGTERM` / `SIGINT`
+A Discord bot built with [discord.js](https://discord.js.org) and [erine](https://erine.js.org/).
 
 ---
 
@@ -136,10 +121,3 @@ RedBot/
 ## Contributing
 
 Pull requests are welcome. Please keep changes focused and follow the existing module structure.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
