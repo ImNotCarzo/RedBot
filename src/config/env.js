@@ -1,9 +1,5 @@
 const REQUIRED_ENV = ["TOKEN", "MONGO", "CLIENT_ID"];
 
-/**
- * Validates required environment variables and returns a typed config object.
- * @returns {{ TOKEN: string, MONGO: string, CLIENT_ID: string, LOG_LEVEL: string, NODE_ENV: string, GOOGLE_API_KEY: string|undefined, GROQ_API_KEY: string|undefined }}
- */
 function validateEnv() {
   for (const key of REQUIRED_ENV) {
     if (!process.env[key]) {
