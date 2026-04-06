@@ -18,7 +18,7 @@ const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
  * - The message is a reply to the bot's last AI response.
  * - The user has an active conversation session (tracked via askMemory).
  *
- * @param {import("erine").Erine} bot
+ * @param {import("gralonium").Gralonium} bot
  * @param {import("../core/logger")} [log]
  */
 function registerMessageHandler(bot, log) {
