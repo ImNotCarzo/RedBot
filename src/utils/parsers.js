@@ -59,7 +59,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       // Attachment
       value = resolveAttachmentInput(ctx, token);
       if (!value) {
-        value = replyMsg?.attachments?.values?.().next?.().value ?? null;
+        value = replyMsg?.attachments?.values()?.next()?.value ?? null;
       }
       if (!ctx.message?.attachments?.size && value) args.shift();
     } else if (def.type === 3) {

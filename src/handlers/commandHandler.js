@@ -1,5 +1,6 @@
 const path   = require("path");
 const fs     = require("fs");
+const { PermissionFlagsBits } = require("discord.js");
 const PREFIXED_TO_SLASH_MAP = require("../../config/prefixedToSlashMap");
 const { setId }             = require("../../utils/commandIds");
 const { normalizeReplyPayload } = require("../utils/normalize");
@@ -100,13 +101,15 @@ function inferPermissionChecks(slashKey, slashCommand) {
 async function handleMissingPermissionsFirst(ctx, inferred) {
   if (!ctx?.guild || !ctx?.member) return false;
   const { userPerms = [], botPerms = [] } = inferred ?? {};
+  const userBits = userPerms.map((name) => PermissionFlagsBits[name]).filter(Boolean);
+  const botBits  = botPerms.map((name) => PermissionFlagsBits[name]).filter(Boolean);
 
-  if (userPerms.length && !ctx.member.permissions.has(userPerms, true)) {
+  if (userBits.length && !ctx.member.permissions.has(userBits, true)) {
     await ctx.send(`No tienes permisos para usar este comando, necesitas: \`${userPerms.join(", ")}\``);
     return true;
   }
 
-  if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms, true)) {
+  if (botBits.length && !ctx.guild.members.me?.permissions?.has(botBits, true)) {
     await ctx.send(`No tengo permisos suficientes, necesito: \`${botPerms.join(", ")}\``);
     return true;
   }
