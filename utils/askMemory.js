@@ -1,4 +1,4 @@
-const MAX_HISTORIAL = 10;
+const { MAX_HISTORIAL } = require("../src/config/constants");
 const conversaciones = new Map();
 
 function setConversacion(userId, historial, lastBotMessageId) {

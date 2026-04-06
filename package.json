@@ -1,7 +1,7 @@
 {
   "name": "RedBot",
   "version": "0.2.0",
-  "description": "erine bot",
+  "description": "gralonium bot",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

@@ -1,10 +1,10 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion } = require("../utils/askMemory");
-const { GuildConfig } = require("../models/GuildConfig");
+const GuildConfig = require("../models/GuildConfig");
 const { generateWithFallback } = require("../utils/ai");
-const { RED, GREEN, BLUE } = require("../utils/colors");
-const { prefixCache } = require("../utils/prefixCache");
+const { RED, GREEN } = require("../utils/colors");
+const prefixCache = require("../utils/prefixCache");
 const { getAI } = require("../utils/ai");
 
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
@@ -140,7 +140,7 @@ const data = {
 
         const { version: djsVersion }   = require("discord.js");
         const { version: botVersion }   = require("../package.json");
-        const { version: erineVersion } = require("../node_modules/erine/package.json");
+        const { version: graloniumVersion } = require("../node_modules/gralonium/package.json");
 
         const formatUptime = (ms) => {
           const s = Math.floor(ms / 1000) % 60;
@@ -169,7 +169,7 @@ const data = {
                 },
                 {
                   name: "Extra",
-                  value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Erine:** \`v${erineVersion}\``,
+                  value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Gralonium:** \`v${graloniumVersion}\``,
                 },
               )
               .setColor(RED)
@@ -219,13 +219,12 @@ const data = {
         required: false,
       }),
 
+    plugins: [Plugins.hasPerms("Administrator")],
+
     async code(ctx) {
       try {
         if (!ctx.guild)
           return ctx.send({ content: "Este comando solo funciona en servidores", flags: MessageFlags.Ephemeral });
-
-        if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-          return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
         const nuevo = ctx.get("nuevo");
 
@@ -280,7 +279,7 @@ const data = {
     async code(ctx) {
       const userId = ctx.user?.id ?? ctx.author?.id;
       deleteConversacion(userId);
-      await ctx.send({ content: "Bite the dust, f" });
+      await ctx.send({ content: "Tu historial de conversación fue reiniciado." });
     },
   })
 

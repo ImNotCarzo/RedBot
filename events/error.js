@@ -11,7 +11,7 @@ function is(err, Type) {
 }
 
 const event = {
-  name: "error",
+  name: "frameworkError",
   async code(client, err) {
 
     if (is(err, Errors.GuildOnly)) {
@@ -102,7 +102,7 @@ const event = {
       return err.ctx?.send("Ocurrió un error desconocido con el comando");
     }
 
-    console.error("[Erine Error]", err);
+    console.error("[Gralonium Error]", err);
   },
 };
 

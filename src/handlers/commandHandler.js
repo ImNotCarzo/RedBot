@@ -1,5 +1,7 @@
 const path   = require("path");
 const fs     = require("fs");
+const { PermissionFlagsBits } = require("discord.js");
+const { Errors } = require("gralonium");
 const PREFIXED_TO_SLASH_MAP = require("../../config/prefixedToSlashMap");
 const { setId }             = require("../../utils/commandIds");
 const { normalizeReplyPayload } = require("../utils/normalize");
@@ -10,6 +12,8 @@ const wrappedOriginalCodes = new WeakSet();
 
 /** Map of "group/name" → slash command module (populated lazily). */
 const slashCommandMap = new Map();
+/** Cache of inferred permission requirements by slash command key. */
+const inferredPermissionsCache = new Map();
 
 /**
  * Populate `slashCommandMap` with every slash command from the `commands/` directory.
@@ -61,6 +65,97 @@ function resolveSlashKeyForPrefixedName(command, prefixedName) {
 }
 
 /**
+ * Infer user/bot permission checks from command source to prioritize
+ * permission errors before parameter-missing fallback in prefixed mode.
+ *
+ * @param {string} slashKey
+ * @param {object|null} slashCommand
+ * @returns {{ userPerms: string[], botPerms: string[] }}
+ */
+function inferPermissionChecks(slashKey, slashCommand) {
+  if (!slashKey || !slashCommand?.code) return { userPerms: [], botPerms: [] };
+  if (inferredPermissionsCache.has(slashKey)) return inferredPermissionsCache.get(slashKey);
+
+  const src = String(slashCommand.code);
+  const userPerms = new Set();
+  const botPerms = new Set();
+
+  let match;
+  const userRegex = /ctx\.member\.permissions\.has\(\s*PermissionFlagsBits\.(\w+)\s*\)/g;
+  while ((match = userRegex.exec(src)) !== null) userPerms.add(match[1]);
+
+  const botRegex = /(?:ctx\.guild|guild)\.members\.me\.permissions\.has\(\s*PermissionFlagsBits\.(\w+)\s*\)/g;
+  while ((match = botRegex.exec(src)) !== null) botPerms.add(match[1]);
+
+  const value = { userPerms: [...userPerms], botPerms: [...botPerms] };
+  inferredPermissionsCache.set(slashKey, value);
+  return value;
+}
+
+/**
+ * If permissions are missing, reply immediately and return true.
+ *
+ * @param {import("gralonium").Context} ctx
+ * @param {{ userPerms: string[], botPerms: string[] }} inferred
+ * @returns {Promise<boolean>}
+ */
+async function handleMissingPermissionsFirst(ctx, inferred) {
+  if (!ctx?.guild || !ctx?.member) return false;
+  const { userPerms = [], botPerms = [] } = inferred ?? {};
+  const userBits = userPerms.map((name) => PermissionFlagsBits[name]).filter(Boolean);
+  const botBits  = botPerms.map((name) => PermissionFlagsBits[name]).filter(Boolean);
+
+  if (userBits.length && !ctx.member.permissions.has(userBits, true)) {
+    await ctx.send(`No tienes permisos para usar este comando, necesitas: \`${userPerms.join(", ")}\``);
+    return true;
+  }
+
+  if (botBits.length && !ctx.guild.members.me?.permissions?.has(botBits, true)) {
+    await ctx.send(`No tengo permisos suficientes, necesito: \`${botPerms.join(", ")}\``);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Validate declarative command permissions (from CommandBuilder) before params.
+ *
+ * @param {import("gralonium").Context} ctx
+ * @param {object|null} slashCommand
+ */
+function assertCommandDataPermissions(ctx, slashCommand) {
+  if (!ctx?.guild || !ctx?.member || !slashCommand?.data) return;
+
+  const userPerms = slashCommand.data.userPermissions ?? [];
+  const botPerms = slashCommand.data.botPermissions ?? [];
+
+  if (userPerms.length && !ctx.member.permissions.has(userPerms, true)) {
+    throw new Errors.MissingPermission(ctx, userPerms);
+  }
+
+  if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms, true)) {
+    throw new Errors.MissingBotPermission(ctx, botPerms);
+  }
+}
+
+/**
+ * Execute command plugins and global plugins in the same way as Gralonium.
+ *
+ * @param {import("gralonium").Context} ctx
+ * @param {object|null} slashCommand
+ */
+async function runCommandPlugins(ctx, slashCommand) {
+  if (!slashCommand) return;
+  const plugins = [...(slashCommand.plugins ?? []), ...(ctx?.bot?.loader?.globalPlugins ?? [])];
+  for (const plugin of plugins) {
+    const result = await plugin(ctx);
+    if (result === false) return false;
+  }
+  return true;
+}
+
+/**
  * Wrap every prefixed command so it:
  * 1. Uses `message.reply()` with `allowedMentions.repliedUser = false`.
  * 2. Delegates to the matching slash command implementation (via arg parsing).
@@ -104,8 +199,25 @@ function wrapPrefixedCommands(log) {
 
       if (slashCommand?.code) {
         try {
+          assertCommandDataPermissions(ctx, slashCommand);
+
+          const hadCommand = Object.prototype.hasOwnProperty.call(ctx, "command");
+          const originalCommand = ctx.command;
+          ctx.command = slashCommand;
+          try {
+            const canRunPlugins = await runCommandPlugins(ctx, slashCommand);
+            if (!canRunPlugins) return;
+          } finally {
+            if (hadCommand) ctx.command = originalCommand; else delete ctx.command;
+          }
+
           const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
           if (!parsedValues) return;
+          if (parsedValues.missingRequired) {
+            const inferred = inferPermissionChecks(slashKey, slashCommand);
+            const blocked = await handleMissingPermissionsFirst(ctx, inferred);
+            if (blocked) return;
+          }
           if (parsedValues.missingRequired) {
             return await originalCode.call(this, ctx, ...args);
           }
@@ -113,19 +225,23 @@ function wrapPrefixedCommands(log) {
           const originalGet = ctx.get?.bind(ctx);
           const hadUser     = Object.prototype.hasOwnProperty.call(ctx, "user");
           const originalUser = ctx.user;
+          const hadCommandForCode = Object.prototype.hasOwnProperty.call(ctx, "command");
+          const originalCommandForCode = ctx.command;
 
           ctx.get = (name) => parsedValues.values[name] ?? null;
           if (!ctx.user && ctx.author) ctx.user = ctx.author;
+          ctx.command = slashCommand;
 
           try {
             return await slashCommand.code(ctx, ...args);
           } finally {
             if (originalGet) ctx.get = originalGet; else delete ctx.get;
             if (hadUser)     ctx.user = originalUser; else delete ctx.user;
+            if (hadCommandForCode) ctx.command = originalCommandForCode; else delete ctx.command;
           }
         } catch (err) {
           log?.error(`[adapter:${slashName}]`, { err: err.message });
-          return ctx.send("Ocurrió un error ejecutando el comando");
+          throw err;
         }
       }
 

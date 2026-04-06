@@ -1,4 +1,4 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -64,6 +64,7 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario a banear",                    required: true })
       .addString({ name: "razon",   description: "Razón del ban",                       required: false })
       .addString({ name: "dias",    description: "Días de mensajes a borrar (0-7)",     required: false }),
+    plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
     async code(ctx) {
       const isSlash = !!ctx.interaction;
@@ -74,11 +75,6 @@ const data = {
       const reason  = ctx.get("razon") ?? "Sin razón";
       const days    = Math.min(7, Math.max(0, parseInt(ctx.get("dias")) || 0));
       const tag     = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "banear a");
       if (hierr) return send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -116,15 +112,12 @@ const data = {
       .addString({ name: "id",    description: "ID del usuario",       required: true })
       .addString({ name: "razon", description: "Razón del desbaneo",   required: false }),
 
+    plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
+
     async code(ctx) {
       const userId = ctx.get("id");
       const reason = ctx.get("razon") ?? "Sin razón";
       const tag    = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return ctx.send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return ctx.send({ content: "No tengo permiso para desbanear", flags: MessageFlags.Ephemeral });
 
       try {
         const ban = await ctx.guild.bans.fetch(userId).catch(() => null);
@@ -162,6 +155,8 @@ const data = {
       .addString({ name: "razon",   description: "Razón",                          required: false })
       .addString({ name: "dias",    description: "Días de mensajes a borrar (1-7)",required: false }),
 
+    plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
+
     async code(ctx) {
       const isSlash = !!ctx.interaction;
       if (isSlash) await ctx.interaction.deferReply();
@@ -171,11 +166,6 @@ const data = {
       const reason = ctx.get("razon") ?? "Sin razón";
       const days   = Math.min(7, Math.max(1, parseInt(ctx.get("dias")) || 7));
       const tag    = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "softbanear a");
       if (hierr) return send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -217,6 +207,8 @@ const data = {
       .addString({ name: "duracion", description: "Duración (ej: 1h, 30m, 2d)", required: true })
       .addString({ name: "razon",    description: "Razón",                        required: false }),
 
+    plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
+
     async code(ctx) {
       const isSlash = !!ctx.interaction;
       if (isSlash) await ctx.interaction.deferReply();
@@ -232,10 +224,6 @@ const data = {
         return send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
       if (duration > 28 * 86_400_000)
         return send({ content: "La duración máxima es 28 días", flags: MessageFlags.Ephemeral });
-      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "banear a");
       if (hierr) return send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -293,6 +281,8 @@ const data = {
       .addMember({ name: "usuario5", description: "Usuario 5", required: false })
       .addString({ name: "razon",    description: "Razón",     required: false }),
 
+    plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
+
     async code(ctx) {
       const isSlash = !!ctx.interaction;
       if (isSlash) await ctx.interaction.deferReply();
@@ -304,10 +294,6 @@ const data = {
 
       if (!users.length)
         return send({ content: "Debes seleccionar al menos un usuario", flags: MessageFlags.Ephemeral });
-      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
       const banned = [];
       const failed = [];
@@ -355,6 +341,8 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario a expulsar", required: true })
       .addString({ name: "razon",   description: "Razón",              required: false }),
 
+    plugins: [Plugins.hasPerms("KickMembers"), Plugins.hasBotPerms("KickMembers")],
+
     async code(ctx) {
       const isSlash = !!ctx.interaction;
       if (isSlash) await ctx.interaction.deferReply();
@@ -363,11 +351,6 @@ const data = {
       const member = ctx.get("usuario");
       const reason = ctx.get("razon") ?? "Sin razón";
       const tag    = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.KickMembers))
-        return send({ content: "No tienes el permiso `KickMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.KickMembers))
-        return send({ content: "No tengo permiso para expulsar", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "expulsar a");
       if (hierr) return send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -405,6 +388,8 @@ const data = {
       .addString({ name: "duracion", description: "Duración (ej: 10m, 1h, 1d)",    required: true })
       .addString({ name: "razon",    description: "Razón",                           required: false }),
 
+    plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
+
     async code(ctx) {
       const member   = ctx.get("usuario");
       const durStr   = ctx.get("duracion");
@@ -416,10 +401,6 @@ const data = {
         return ctx.send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
       if (duration > 28 * 86_400_000)
         return ctx.send({ content: "La duración máxima de timeout es 28 días", flags: MessageFlags.Ephemeral });
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tengo permiso para silenciar", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "silenciar a");
       if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -462,15 +443,12 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario a desmutear", required: true })
       .addString({ name: "razon",   description: "Razón",               required: false }),
 
+    plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
+
     async code(ctx) {
       const member = ctx.get("usuario");
       const reason = ctx.get("razon") ?? "Sin razón";
       const tag    = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tengo permiso para quitar timeouts", flags: MessageFlags.Ephemeral });
       if (!member.communicationDisabledUntil)
         return ctx.send({ content: "Ese usuario no está silenciado", flags: MessageFlags.Ephemeral });
 
@@ -506,6 +484,8 @@ const data = {
       .addString({ name: "cantidad", description: "Mensajes a borrar (1-100)",          required: true })
       .addMember({ name: "usuario",  description: "Filtrar por usuario (opcional)",      required: false }),
 
+    plugins: [Plugins.hasPerms("ManageMessages"), Plugins.hasBotPerms("ManageMessages")],
+
     async code(ctx) {
       const amount = Math.min(100, Math.max(1, parseInt(ctx.get("cantidad")) || 0));
       const target = ctx.get("usuario") ?? null;
@@ -513,10 +493,6 @@ const data = {
 
       if (!amount)
         return ctx.send({ content: "Ingresa un número válido entre 1 y 100", flags: MessageFlags.Ephemeral });
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageMessages))
-        return ctx.send({ content: "No tienes el permiso `ManageMessages`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageMessages))
-        return ctx.send({ content: "No tengo permiso para eliminar mensajes", flags: MessageFlags.Ephemeral });
 
       try {
         const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
@@ -560,13 +536,12 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario a advertir", required: true })
       .addString({ name: "razon",   description: "Razón",              required: true }),
 
+    plugins: [Plugins.hasPerms("ModerateMembers")],
+
     async code(ctx) {
       const member = ctx.get("usuario");
       const reason = ctx.get("razon");
       const tag    = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral });
       if (member.user.bot)
         return ctx.send({ content: "No puedes advertir a un bot", flags: MessageFlags.Ephemeral });
       if (member.roles.highest.position >= ctx.member.roles.highest.position)
@@ -613,11 +588,10 @@ const data = {
     params: new ParamsBuilder()
       .addString({ name: "id", description: "ID de la advertencia", required: true }),
 
+    plugins: [Plugins.hasPerms("ModerateMembers")],
+
     async code(ctx) {
       const warnId = ctx.get("id").toUpperCase();
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral });
 
       try {
         const warn = await Warn.findOneAndDelete({ guildId: ctx.guild.id, warnId });
@@ -645,11 +619,10 @@ const data = {
     params: new ParamsBuilder()
       .addMember({ name: "usuario", description: "Usuario", required: true }),
 
+    plugins: [Plugins.hasPerms("ModerateMembers")],
+
     async code(ctx) {
       const member = ctx.get("usuario");
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral });
 
       try {
         const result = await Warn.deleteMany({ guildId: ctx.guild.id, userId: member.id });
@@ -677,12 +650,11 @@ const data = {
     params: new ParamsBuilder()
       .addMember({ name: "usuario", description: "Usuario", required: true }),
 
+    plugins: [Plugins.hasPerms("ModerateMembers")],
+
     async code(ctx) {
       const member   = ctx.get("usuario");
       const authorId = ctx.user?.id ?? ctx.author?.id;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ModerateMembers))
-        return ctx.send({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral });
 
       try {
         const warns = await Warn.find({ guildId: ctx.guild.id, userId: member.id }).sort({ createdAt: -1 });
@@ -743,9 +715,9 @@ const data = {
     params: new ParamsBuilder()
       .addChannel({ name: "canal", description: "Canal de texto para los logs", required: true }),
 
+    plugins: [Plugins.hasPerms("ManageGuild")],
+
     async code(ctx) {
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return ctx.send({ content: "No tienes el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
 
       const channel = ctx.get("canal");
       if (!channel.isTextBased())
@@ -769,9 +741,9 @@ const data = {
     data: new CommandBuilder({ name: "removelogs", description: "Desactiva los logs de RedBot en el servidor" }),
     params: new ParamsBuilder(),
 
+    plugins: [Plugins.hasPerms("ManageGuild")],
+
     async code(ctx) {
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-        return ctx.send({ content: "No tienes el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
 
       try {
         const result = await Log.findOneAndDelete({ guildId: ctx.guild.id });

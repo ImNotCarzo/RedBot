@@ -25,7 +25,7 @@ function buildAttachmentFromUrl(input) {
  * Return the first attachment from a prefixed command context:
  * the actual Discord attachment if present, otherwise a URL-derived object.
  *
- * @param {import("erine").Context} ctx - Command context.
+ * @param {import("gralonium").Context} ctx - Command context.
  * @param {string|null} input           - Fallback URL token from args.
  * @returns {{ name: string, url: string, contentType: string|null, size: number }|import("discord.js").Attachment|null}
  */
