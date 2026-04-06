@@ -75,7 +75,6 @@ RedBot/
 │   │   ├── readyHandler.js     # clientReady — sync, metadata, contexts
 │   │   └── messageHandler.js   # AI follow-up conversation handler
 │   ├── resolvers/
-│   │   ├── member.resolver.js  # resolveMemberFlexible
 │   │   ├── role.resolver.js    # resolveRoleFlexible
 │   │   ├── channel.resolver.js # resolveChannelFlexible
 │   │   └── attachment.resolver.js # buildAttachmentFromUrl + resolveAttachmentInput

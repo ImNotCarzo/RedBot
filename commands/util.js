@@ -280,7 +280,7 @@ const data = {
     async code(ctx) {
       const userId = ctx.user?.id ?? ctx.author?.id;
       deleteConversacion(userId);
-      await ctx.send({ content: "Bite the dust, f" });
+      await ctx.send({ content: "Tu historial de conversación fue reiniciado." });
     },
   })
 

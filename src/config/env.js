@@ -13,7 +13,7 @@ function validateEnv() {
     CLIENT_ID:      process.env.CLIENT_ID,
     LOG_LEVEL:      process.env.LOG_LEVEL  || "info",
     NODE_ENV:       process.env.NODE_ENV   || "development",
-    GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    GOOGLE_API_KEY: process.env.GEMINI || process.env.GOOGLE_API_KEY,
     GROQ_API_KEY:   process.env.GROQ_API_KEY,
   };
 }
