@@ -21,7 +21,7 @@ RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
 async function generateGemma(prompt) {
   const response = await getAI().models.generateContent({
-    model: "gemma-3-12b-it",
+    model: "gemma-4-31b",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     config: {
       temperature: 1.0,
@@ -37,7 +37,7 @@ async function generateGemmaVision(prompt, imageUrl) {
   const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
 
   const response = await getAI().models.generateContent({
-  model: "gemma-3-12b-it",
+  model: "gemma-4-31b",
   contents: [{
     role: "user",
     parts: [
