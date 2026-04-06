@@ -10,7 +10,7 @@ const { COMMANDS_TO_UPDATE } = require("../config/constants");
  * - Sync slash commands.
  * - Patch integration_types / contexts for specific commands.
  *
- * @param {import("erine").Erine} bot
+ * @param {import("gralonium").Gralonium} bot
  * @param {{ TOKEN: string, CLIENT_ID: string }} config
  * @param {import("../core/logger")} [log]
  */
