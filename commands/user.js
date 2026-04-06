@@ -1,4 +1,4 @@
-const { CommandBuilder, GroupBuilder, ParamsBuilder } = require("erine");
+const { CommandBuilder, GroupBuilder, ParamsBuilder } = require("gralonium");
 const {
   EmbedBuilder,
   ActionRowBuilder,
