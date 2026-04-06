@@ -10,6 +10,8 @@ const wrappedOriginalCodes = new WeakSet();
 
 /** Map of "group/name" → slash command module (populated lazily). */
 const slashCommandMap = new Map();
+/** Cache of inferred permission requirements by slash command key. */
+const inferredPermissionsCache = new Map();
 
 /**
  * Populate `slashCommandMap` with every slash command from the `commands/` directory.
@@ -61,6 +63,58 @@ function resolveSlashKeyForPrefixedName(command, prefixedName) {
 }
 
 /**
+ * Infer user/bot permission checks from command source to prioritize
+ * permission errors before parameter-missing fallback in prefixed mode.
+ *
+ * @param {string} slashKey
+ * @param {object|null} slashCommand
+ * @returns {{ userPerms: string[], botPerms: string[] }}
+ */
+function inferPermissionChecks(slashKey, slashCommand) {
+  if (!slashKey || !slashCommand?.code) return { userPerms: [], botPerms: [] };
+  if (inferredPermissionsCache.has(slashKey)) return inferredPermissionsCache.get(slashKey);
+
+  const src = String(slashCommand.code);
+  const userPerms = new Set();
+  const botPerms = new Set();
+
+  let match;
+  const userRegex = /ctx\.member\.permissions\.has\(PermissionFlagsBits\.(\w+)\)/g;
+  while ((match = userRegex.exec(src)) !== null) userPerms.add(match[1]);
+
+  const botRegex = /(?:ctx|guild)\.members\.me\.permissions\.has\(PermissionFlagsBits\.(\w+)\)/g;
+  while ((match = botRegex.exec(src)) !== null) botPerms.add(match[1]);
+
+  const value = { userPerms: [...userPerms], botPerms: [...botPerms] };
+  inferredPermissionsCache.set(slashKey, value);
+  return value;
+}
+
+/**
+ * If permissions are missing, reply immediately and return true.
+ *
+ * @param {import("gralonium").Context} ctx
+ * @param {{ userPerms: string[], botPerms: string[] }} inferred
+ * @returns {Promise<boolean>}
+ */
+async function handleMissingPermissionsFirst(ctx, inferred) {
+  if (!ctx?.guild || !ctx?.member) return false;
+  const { userPerms = [], botPerms = [] } = inferred ?? {};
+
+  if (userPerms.length && !ctx.member.permissions.has(userPerms)) {
+    await ctx.send(`No tienes permisos para usar este comando, necesitas: \`${userPerms.join(", ")}\``);
+    return true;
+  }
+
+  if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms)) {
+    await ctx.send(`No tengo permisos suficientes, necesito: \`${botPerms.join(", ")}\``);
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Wrap every prefixed command so it:
  * 1. Uses `message.reply()` with `allowedMentions.repliedUser = false`.
  * 2. Delegates to the matching slash command implementation (via arg parsing).
@@ -106,6 +160,11 @@ function wrapPrefixedCommands(log) {
         try {
           const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
           if (!parsedValues) return;
+          if (parsedValues.missingRequired) {
+            const inferred = inferPermissionChecks(slashKey, slashCommand);
+            const blocked = await handleMissingPermissionsFirst(ctx, inferred);
+            if (blocked) return;
+          }
           if (parsedValues.missingRequired) {
             return await originalCode.call(this, ctx, ...args);
           }
