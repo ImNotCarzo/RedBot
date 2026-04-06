@@ -1,5 +1,5 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ChannelType } = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
+const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { RED, GREEN, BLUE } = require("../utils/colors");
 const { sendLog } = require("../utils/sendLog");
 
