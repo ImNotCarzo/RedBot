@@ -1,4 +1,4 @@
-const { CommandBuilder } = require("erine");
+const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder, ChannelType } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
