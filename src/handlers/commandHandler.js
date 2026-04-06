@@ -1,6 +1,7 @@
 const path   = require("path");
 const fs     = require("fs");
 const { PermissionFlagsBits } = require("discord.js");
+const { Errors } = require("gralonium");
 const PREFIXED_TO_SLASH_MAP = require("../../config/prefixedToSlashMap");
 const { setId }             = require("../../utils/commandIds");
 const { normalizeReplyPayload } = require("../utils/normalize");
@@ -118,6 +119,43 @@ async function handleMissingPermissionsFirst(ctx, inferred) {
 }
 
 /**
+ * Validate declarative command permissions (from CommandBuilder) before params.
+ *
+ * @param {import("gralonium").Context} ctx
+ * @param {object|null} slashCommand
+ */
+function assertCommandDataPermissions(ctx, slashCommand) {
+  if (!ctx?.guild || !ctx?.member || !slashCommand?.data) return;
+
+  const userPerms = slashCommand.data.userPermissions ?? [];
+  const botPerms = slashCommand.data.botPermissions ?? [];
+
+  if (userPerms.length && !ctx.member.permissions.has(userPerms, true)) {
+    throw new Errors.MissingPermission(ctx, userPerms);
+  }
+
+  if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms, true)) {
+    throw new Errors.MissingBotPermission(ctx, botPerms);
+  }
+}
+
+/**
+ * Execute command plugins and global plugins in the same way as Gralonium.
+ *
+ * @param {import("gralonium").Context} ctx
+ * @param {object|null} slashCommand
+ */
+async function runCommandPlugins(ctx, slashCommand) {
+  if (!slashCommand) return;
+  const plugins = [...(slashCommand.plugins ?? []), ...(ctx?.bot?.loader?.globalPlugins ?? [])];
+  for (const plugin of plugins) {
+    const result = await plugin(ctx);
+    if (result === false) return false;
+  }
+  return true;
+}
+
+/**
  * Wrap every prefixed command so it:
  * 1. Uses `message.reply()` with `allowedMentions.repliedUser = false`.
  * 2. Delegates to the matching slash command implementation (via arg parsing).
@@ -161,6 +199,18 @@ function wrapPrefixedCommands(log) {
 
       if (slashCommand?.code) {
         try {
+          assertCommandDataPermissions(ctx, slashCommand);
+
+          const hadCommand = Object.prototype.hasOwnProperty.call(ctx, "command");
+          const originalCommand = ctx.command;
+          ctx.command = slashCommand;
+          try {
+            const canRunPlugins = await runCommandPlugins(ctx, slashCommand);
+            if (!canRunPlugins) return;
+          } finally {
+            if (hadCommand) ctx.command = originalCommand; else delete ctx.command;
+          }
+
           const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
           if (!parsedValues) return;
           if (parsedValues.missingRequired) {
@@ -175,19 +225,22 @@ function wrapPrefixedCommands(log) {
           const originalGet = ctx.get?.bind(ctx);
           const hadUser     = Object.prototype.hasOwnProperty.call(ctx, "user");
           const originalUser = ctx.user;
+          const hadCommandForCode = Object.prototype.hasOwnProperty.call(ctx, "command");
+          const originalCommandForCode = ctx.command;
 
           ctx.get = (name) => parsedValues.values[name] ?? null;
           if (!ctx.user && ctx.author) ctx.user = ctx.author;
+          ctx.command = slashCommand;
 
           try {
             return await slashCommand.code(ctx, ...args);
           } finally {
             if (originalGet) ctx.get = originalGet; else delete ctx.get;
             if (hadUser)     ctx.user = originalUser; else delete ctx.user;
+            if (hadCommandForCode) ctx.command = originalCommandForCode; else delete ctx.command;
           }
         } catch (err) {
-          log?.error(`[adapter:${slashName}]`, { err: err.message });
-          return ctx.send("Ocurrió un error ejecutando el comando");
+          throw err;
         }
       }
 

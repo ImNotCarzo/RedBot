@@ -11,7 +11,7 @@ function is(err, Type) {
 }
 
 const event = {
-  name: "error",
+  name: "frameworkError",
   async code(client, err) {
 
     if (is(err, Errors.GuildOnly)) {

@@ -1,4 +1,4 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -417,17 +417,12 @@ const data = {
     params: new ParamsBuilder()
       .addMember({ name: "usuario", description: "Usuario",  required: true })
       .addRole({   name: "rol",     description: "Rol",       required: true }),
+    plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
     async code(ctx) {
       const member = ctx.get("usuario");
       const role   = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tienes el permiso `ManageRoles`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tengo permiso para asignar roles", flags: MessageFlags.Ephemeral });
 
       const hierr = roleHierarchyCheck(ctx, role);
       if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });

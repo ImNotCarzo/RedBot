@@ -1,5 +1,5 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ChannelType } = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { RED, GREEN, BLUE } = require("../utils/colors");
 const { sendLog } = require("../utils/sendLog");
 
@@ -121,18 +121,13 @@ const data = {
     params: new ParamsBuilder()
       .addChannel({ name: "canal",  description: "Canal a renombrar", required: true })
       .addString({ name: "nombre", description: "Nombre nuevo",       required: true }),
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel  = ctx.get("canal");
       const newName  = ctx.get("nombre").toLowerCase().replace(/\s+/g, "-").slice(0, 100);
       const modTag   = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         const oldName = channel.name;

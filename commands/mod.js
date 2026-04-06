@@ -1,4 +1,4 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -64,6 +64,7 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario a banear",                    required: true })
       .addString({ name: "razon",   description: "Razón del ban",                       required: false })
       .addString({ name: "dias",    description: "Días de mensajes a borrar (0-7)",     required: false }),
+    plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
     async code(ctx) {
       const isSlash = !!ctx.interaction;
@@ -74,11 +75,6 @@ const data = {
       const reason  = ctx.get("razon") ?? "Sin razón";
       const days    = Math.min(7, Math.max(0, parseInt(ctx.get("dias")) || 0));
       const tag     = modTag(ctx);
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tienes el permiso `BanMembers`", flags: MessageFlags.Ephemeral });
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-        return send({ content: "No tengo permiso para banear", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "banear a");
       if (hierr) return send({ content: hierr, flags: MessageFlags.Ephemeral });
