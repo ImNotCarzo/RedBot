@@ -2,7 +2,16 @@ const { resolveMemberFlexible } = require("../../utils/helpers");
 const { resolveRoleFlexible }   = require("../resolvers/role.resolver");
 const { resolveChannelFlexible } = require("../resolvers/channel.resolver");
 const { resolveAttachmentInput } = require("../resolvers/attachment.resolver");
-const { looksLikeLanguageToken } = require("./validators");
+
+async function getReferencedMessage(ctx) {
+  const message = ctx?.message;
+  if (!message?.reference?.messageId) return null;
+  try {
+    return await message.fetchReference();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Parse positional args from a prefixed command context and map them to the
@@ -16,6 +25,7 @@ const { looksLikeLanguageToken } = require("./validators");
 async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
   const defs = slashCommand?.params?.params ?? [];
   const args = [...(ctx.args ?? [])];
+  const replyMsg = await getReferencedMessage(ctx);
   const values = {};
   let missingRequired = false;
 
@@ -30,6 +40,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       if (token) {
         value = await resolveMemberFlexible(ctx, token);
         if (value) args.shift();
+      } else if (replyMsg?.author?.id) {
+        value = await resolveMemberFlexible(ctx, replyMsg.author.id);
       }
     } else if (def.type === 8) {
       // Role
@@ -46,23 +58,22 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     } else if (def.type === 11) {
       // Attachment
       value = resolveAttachmentInput(ctx, token);
+      if (!value) {
+        value = replyMsg?.attachments?.first?.() ?? null;
+      }
       if (!ctx.message?.attachments?.size && value) args.shift();
     } else if (def.type === 3) {
       // String
       if (args.length) {
-        if (
-          slashName === "translate" &&
-          def.name  === "texto" &&
-          args.length > 1 &&
-          looksLikeLanguageToken(args[args.length - 1])
-        ) {
-          value = args.slice(0, -1).join(" ");
-          args.splice(0, args.length - 1);
+        if (slashName === "translate" && def.name === "texto") {
+          value = args.splice(0).join(" ");
         } else if (isLast || slashName === "resume") {
           value = args.splice(0).join(" ");
         } else {
           value = args.shift();
         }
+      } else if (def.required && replyMsg?.content?.trim()) {
+        value = replyMsg.content.trim();
       }
     } else if (args.length) {
       value = args.shift();

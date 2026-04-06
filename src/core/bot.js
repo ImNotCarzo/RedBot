@@ -22,14 +22,25 @@ function createBot(config, log) {
       if (!message?.content || message?.author?.bot) return null;
 
       const content = message.content;
+      const guildId = message.guildId;
       const botId   = message.client?.user?.id;
 
       if (botId) {
-        if (content.startsWith(`<@${botId}>`))  return `<@${botId}>`;
-        if (content.startsWith(`<@!${botId}>`)) return `<@!${botId}>`;
+        const mentionA = `<@${botId}>`;
+        const mentionB = `<@!${botId}>`;
+        const onlyMention = content.trim() === mentionA || content.trim() === mentionB;
+        if (onlyMention) {
+          const guildPrefix = guildId ? (prefixCache.get(guildId) ?? (await GuildConfig.findOne({ guildId }))?.prefix ?? ".") : ".";
+          if (guildId && !prefixCache.has(guildId)) prefixCache.set(guildId, guildPrefix);
+          await message.reply({
+            content: `Mi prefijo en este servidor es \`${guildPrefix}\``,
+            allowedMentions: { repliedUser: false },
+          }).catch(() => {});
+          return null;
+        }
+        if (content.startsWith(mentionA)) return mentionA;
+        if (content.startsWith(mentionB)) return mentionB;
       }
-
-      const guildId = message.guildId;
 
       if (!guildId) {
         return content.startsWith(".") ? "." : null;
