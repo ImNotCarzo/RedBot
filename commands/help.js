@@ -1,18 +1,13 @@
-const { CommandBuilder } = require("gralonium");
 const {
-  ContainerBuilder,
-  TextDisplayBuilder,
-  SeparatorBuilder,
+  CommandBuilder,
+  ComponentsV2Builder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  SeparatorSpacingSize,
   MessageFlags,
   ComponentType,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
   EmbedBuilder,
-} = require("discord.js");
+} = require("gralonium");
 const { getId } = require("../utils/commandIds");
 
 const IDS = {
@@ -57,7 +52,7 @@ const getCommands = () => ({
     translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",aliases: ["traducir", "trans"],            description: "Traduce texto a otro idioma." },
     describe:  { short: "describe",  slash: "util describe",  id: IDS.util(), usage: ".describe <url | adjunto>",  aliases: ["describir"],                    description: "Describe el contenido de una imagen." },
     transcribe:{ short: "transcribe",slash: "util transcribe",id: IDS.util(), usage: ".transcribe <url | adjunto>",aliases: ["transcribir"],                  description: "Transcribe un audio o video a texto." },
-    resumir:   { short: "resume",   slash: "util resume",   id: IDS.util(), usage: ".resumie <texto>",           aliases: ["resumir", "summarize"],          description: "Resume un texto largo de 100 caracteres o más." },
+    resumir:   { short: "resume",   slash: "util resume",   id: IDS.util(), usage: ".resume <texto>",           aliases: ["resumir", "summarize"],          description: "Resume un texto largo de 100 caracteres o más." },
   },
   usuario: {
     info:        { short: "user",   slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",   aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
@@ -185,21 +180,6 @@ const data = {
         return rows;
       };
 
-      const buildSelectRow = (category) =>
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId(`help_select_${category}`)
-            .setPlaceholder("Selecciona un comando")
-            .addOptions(
-              Object.entries(COMMANDS[category]).map(([key, cmd]) =>
-                new StringSelectMenuOptionBuilder()
-                  .setLabel(formatSelectLabel(cmd))
-                  .setValue(`${category}${SEP}${key}`)
-                  .setDescription(cmd.description.slice(0, 100))
-              )
-            )
-        );
-
       const buildLinksRow = () =>
         new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -221,34 +201,45 @@ const data = {
         );
 
       const buildContainer = (category) => {
-        const container = new ContainerBuilder();
-        container.addTextDisplayComponents(
-          new TextDisplayBuilder().setContent("## <:redbot:1474109778044260478> RedBot")
-        );
-        for (const row of buildCategoryRows(category)) {
-          container.addActionRowComponents(row);
+        const builder = new ComponentsV2Builder()
+          .addText("## <:redbot:1474109778044260478> RedBot");
+
+        for (const cat of CATEGORIES) {
+          builder.addButton(
+            cat === category ? `• ${CATEGORY_LABELS[cat]}` : CATEGORY_LABELS[cat],
+            `help_cat_${cat}`,
+            cat === category ? "danger" : "secondary"
+          );
         }
-        container.addSeparatorComponents(
-          new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
-        );
-        container.addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(buildCommandList(category))
-        );
-        container.addSeparatorComponents(
-          new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
-        );
-        container.addActionRowComponents(buildSelectRow(category));
-        container.addSeparatorComponents(
-          new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small)
-        );
-        container.addActionRowComponents(buildLinksRow());
-        return container;
+
+        builder
+          .addSeparator("small")
+          .addText(buildCommandList(category))
+          .addSeparator("small");
+
+        const select = builder.addSelectMenu(`help_select_${category}`, "Selecciona un comando");
+        for (const [key, cmd] of Object.entries(COMMANDS[category])) {
+          select.addOption(
+            formatSelectLabel(cmd),
+            `${category}${SEP}${key}`,
+            undefined,
+            cmd.description.slice(0, 100)
+          );
+        }
+        select.end();
+
+        builder
+          .addSeparator("small")
+          .addButton("Invitar", undefined, "link", "https://discord.com/oauth2/authorize?client_id=1020772849906098186&permissions=0&scope=bot")
+          .addButton("Soporte", undefined, "link", "https://discord.gg/b8AKKaNWU6");
+
+        return builder.build()[0];
       };
 
       let currentCategory = "utilidad";
 
       const message = await ctx.send({
-        flags: MessageFlags.IsComponentsV2,
+        flags: ComponentsV2Builder.flags,
         components: [buildContainer(currentCategory), buildDeleteRow()],
         allowedMentions: { repliedUser: false },
       });
@@ -278,7 +269,7 @@ const data = {
         currentCategory = category;
 
         await i.update({
-          flags: MessageFlags.IsComponentsV2,
+          flags: ComponentsV2Builder.flags,
           components: [buildContainer(category), buildDeleteRow()],
         }).catch(() => {});
       });
@@ -311,7 +302,7 @@ const data = {
 
       buttonCollector.on("end", () => {
         message.edit({
-          flags: MessageFlags.IsComponentsV2,
+          flags: ComponentsV2Builder.flags,
           components: [buildContainer(currentCategory)],
         }).catch(() => {});
       });

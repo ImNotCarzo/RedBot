@@ -8,7 +8,7 @@ const { registerReadyHandler } = require("../handlers/readyHandler");
 const { registerMessageHandler } = require("../handlers/messageHandler");
 
 /**
- * Create and fully initialise the Erine bot instance.
+ * Create and fully initialise the Gralonium bot instance.
  *
  * @param {{ TOKEN: string, CLIENT_ID: string }} config - Validated env config.
  * @param {import("./logger")} log - Logger instance.

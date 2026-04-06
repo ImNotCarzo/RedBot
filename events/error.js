@@ -102,7 +102,7 @@ const event = {
       return err.ctx?.send("Ocurrió un error desconocido con el comando");
     }
 
-    console.error("[Erine Error]", err);
+    console.error("[Gralonium Error]", err);
   },
 };
 

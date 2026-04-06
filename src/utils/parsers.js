@@ -8,7 +8,7 @@ const { looksLikeLanguageToken } = require("./validators");
  * Parse positional args from a prefixed command context and map them to the
  * named parameters of the equivalent slash command.
  *
- * @param {import("erine").Context} ctx
+ * @param {import("gralonium").Context} ctx
  * @param {object} slashCommand - The loaded slash command module.
  * @param {string} slashName    - Slash command name (used for special-cases like "translate").
  * @returns {Promise<{ values: Record<string, any>, missingRequired: boolean }>}

@@ -3,7 +3,7 @@ const { DISCORD_ID_PATTERN } = require("../utils/validators");
 /**
  * Resolve a channel from a guild using a mention, snowflake ID, or name fragment.
  *
- * @param {import("erine").Context} ctx   - Erine command context (must have `ctx.guild`).
+ * @param {import("gralonium").Context} ctx   - Gralonium command context (must have `ctx.guild`).
  * @param {string|null} input             - Raw user input.
  * @returns {Promise<import("discord.js").GuildChannel|null>}
  */

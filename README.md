@@ -1,6 +1,6 @@
 # RedBot
 
-A Discord bot built with [discord.js](https://discord.js.org) and [erine](https://erine.js.org/).
+A Discord bot built with [discord.js](https://discord.js.org) and [gralonium](https://www.npmjs.com/package/gralonium).
 
 ---
 
@@ -63,7 +63,7 @@ RedBot/
 │   ├── config/
 │   │   ├── env.js              # Env-var validation & typed config object
 │   │   ├── constants.js        # Global constants (AI models, prompts, limits)
-│   │   ├── bot.config.js       # Erine intents & partials
+│   │   ├── bot.config.js       # Gralonium intents & partials
 │   │   └── db.config.js        # MongoDB connection settings
 │   ├── core/
 │   │   ├── logger.js           # Structured logger (levels + timestamps)
@@ -93,7 +93,7 @@ RedBot/
 │   ├── ask.js
 │   ├── channel.js / fun.js / mod.js / role.js / server.js / user.js / util.js
 │   └── prefixed/               # Prefixed equivalents (auto-wrapped)
-├── events/                     # Erine event handlers
+├── events/                     # Gralonium event handlers
 ├── models/                     # Mongoose models (GuildConfig, Log, Warn, TempBan)
 ├── utils/                      # Shared utilities (ai.js, helpers.js, etc.)
 ├── config/
@@ -106,7 +106,7 @@ RedBot/
 
 ## Adding a new slash command
 
-1. Create (or extend) a file in `commands/` using the existing erine command structure.
+1. Create (or extend) a file in `commands/` using the existing gralonium command structure.
 2. The bot auto-loads all command files via `bot.load("commands")`.
 3. If you need a prefixed alias, add a file in `commands/prefixed/` with the same logic
    (or omit it — the adapter will try to match the slash implementation automatically).

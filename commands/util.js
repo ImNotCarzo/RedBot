@@ -1,10 +1,10 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { deleteConversacion } = require("../utils/askMemory");
-const { GuildConfig } = require("../models/GuildConfig");
+const GuildConfig = require("../models/GuildConfig");
 const { generateWithFallback } = require("../utils/ai");
-const { RED, GREEN, BLUE } = require("../utils/colors");
-const { prefixCache } = require("../utils/prefixCache");
+const { RED, GREEN } = require("../utils/colors");
+const prefixCache = require("../utils/prefixCache");
 const { getAI } = require("../utils/ai");
 
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
@@ -140,7 +140,7 @@ const data = {
 
         const { version: djsVersion }   = require("discord.js");
         const { version: botVersion }   = require("../package.json");
-        const { version: erineVersion } = require("../node_modules/erine/package.json");
+        const { version: graloniumVersion } = require("../node_modules/gralonium/package.json");
 
         const formatUptime = (ms) => {
           const s = Math.floor(ms / 1000) % 60;
@@ -169,7 +169,7 @@ const data = {
                 },
                 {
                   name: "Extra",
-                  value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Erine:** \`v${erineVersion}\``,
+                  value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Gralonium:** \`v${graloniumVersion}\``,
                 },
               )
               .setColor(RED)
@@ -430,7 +430,7 @@ const data = {
 
       try {
         const { default: Groq } = require("groq-sdk");
-        const groq = new Groq({ apiKey: process.env.GROQ });
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
         const fileRes = await fetch(attachment.url);
         const blob    = await fileRes.blob();
