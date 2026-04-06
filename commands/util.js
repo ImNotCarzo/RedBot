@@ -1,5 +1,5 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("erine");
+const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { deleteConversacion } = require("../utils/askMemory");
 const { GuildConfig } = require("../models/GuildConfig");
 const { generateWithFallback } = require("../utils/ai");
