@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { Erine, GatewayIntentBits } = require("erine");
+const { Gralonium, GatewayIntentBits } = require("gralonium");
 const { Partials, REST, Routes, EmbedBuilder } = require("discord.js");
 const mongoose = require("mongoose");
 const path = require("path");
@@ -35,7 +35,7 @@ Mantén el contexto de la conversación.`;
 //  BOT
 // ─────────────────────────────────────────────
 
-const bot = new Erine({
+const bot = new Gralonium({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
