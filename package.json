@@ -14,7 +14,7 @@
     "discord.js": "^14.25.1",
     "dotenv": "^17.3.1",
     "groq-sdk": "^1.1.1",
-    "erine": "^2.7.5",
+    "gralonium": "^0.2.0",
     "mongoose": "^9.2.4"
   },
   "author": "carzo.",
