@@ -1,5 +1,5 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion } = require("../utils/askMemory");
 const GuildConfig = require("../models/GuildConfig");
 const { generateWithFallback } = require("../utils/ai");
@@ -219,13 +219,13 @@ const data = {
         required: false,
       }),
 
+    plugins: [Plugins.hasPerms("Administrator")],
+
+
     async code(ctx) {
       try {
         if (!ctx.guild)
           return ctx.send({ content: "Este comando solo funciona en servidores", flags: MessageFlags.Ephemeral });
-
-        if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-          return ctx.send({ content: "Necesitás el permiso `Administrator`", flags: MessageFlags.Ephemeral });
 
         const nuevo = ctx.get("nuevo");
 
@@ -430,7 +430,7 @@ const data = {
 
       try {
         const { default: Groq } = require("groq-sdk");
-        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        const groq = new Groq({ apiKey: process.env.GROQ });
 
         const fileRes = await fetch(attachment.url);
         const blob    = await fileRes.blob();

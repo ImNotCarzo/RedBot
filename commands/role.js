@@ -468,16 +468,13 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario", required: true })
       .addRole({   name: "rol",     description: "Rol",      required: true }),
 
+    plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
+
+
     async code(ctx) {
       const member = ctx.get("usuario");
       const role   = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tienes el permiso `ManageRoles`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tengo permiso para quitar roles", flags: MessageFlags.Ephemeral });
 
       const hierr = roleHierarchyCheck(ctx, role);
       if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -523,18 +520,15 @@ const data = {
       .addRole({   name: "rol",    description: "Rol a renombrar", required: true })
       .addString({ name: "nombre", description: "Nombre nuevo",    required: true }),
 
+    plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role    = ctx.get("rol");
       const newName = ctx.get("nombre").slice(0, 100);
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tienes el permiso `ManageRoles`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tengo permiso para editar roles", flags: MessageFlags.Ephemeral });
 
       const hierr = roleHierarchyCheck(ctx, role);
       if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -582,17 +576,14 @@ const data = {
     params: new ParamsBuilder()
       .addRole({ name: "rol", description: "Rol", required: true }),
 
+    plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role   = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tienes el permiso `ManageRoles`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tengo permiso para editar roles", flags: MessageFlags.Ephemeral });
 
       const hierr = roleHierarchyCheck(ctx, role);
       if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -637,17 +628,14 @@ const data = {
     params: new ParamsBuilder()
       .addRole({ name: "rol", description: "Rol", required: true }),
 
+    plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role   = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tienes el permiso `ManageRoles`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-        return ctx.send({ content: "No tengo permiso para editar roles", flags: MessageFlags.Ephemeral });
 
       const hierr = roleHierarchyCheck(ctx, role);
       if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -705,16 +693,13 @@ const data = {
       ],
     }),
 
+  plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
+
+
   async code(ctx) {
     const role       = ctx.get("rol");
     const incluirBot = ctx.get("incluir_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
-
-    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
-
-    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
 
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -814,16 +799,13 @@ const data = {
       ],
     }),
 
+  plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
+
+
   async code(ctx) {
     const role       = ctx.get("rol");
     const incluirBot = ctx.get("incluir_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
-
-    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
-
-    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
 
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -923,16 +905,13 @@ const data = {
       ],
     }),
 
+  plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
+
+
   async code(ctx) {
     const role   = ctx.get("rol");
     const accion = ctx.get("accion");
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
-
-    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
-
-    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
 
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -1036,16 +1015,13 @@ const data = {
       ],
     }),
 
+  plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
+
+
   async code(ctx) {
     const role   = ctx.get("rol");
     const accion = ctx.get("accion");
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
-
-    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "Necesitas el permiso `Administrator`", flags: MessageFlags.Ephemeral });
-
-    if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))
-      return ctx.send({ content: "No tengo permiso para gestionar roles", flags: MessageFlags.Ephemeral });
 
     const hierr = roleHierarchyCheck(ctx, role);
     if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
@@ -1147,13 +1123,13 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       ],
     }),
 
+  plugins: [Plugins.hasPerms("ManageGuild")],
+
+
   async code(ctx) {
     const role       = ctx.get("rol");
     const ignoreBots = ctx.get("ignorar_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
-
-    if (!ctx.member.permissions.has(PermissionFlagsBits.ManageGuild))
-      return ctx.send({ content: "Necesitas el permiso `ManageGuild`", flags: MessageFlags.Ephemeral });
 
     const { JoinRole } = require("../events/guildMemberAdd");
 

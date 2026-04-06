@@ -35,7 +35,8 @@ npm start
 | `CLIENT_ID`   | ✅        | Discord application (client) ID                             |
 | `GEMINI`      | ✅*       | Primary Google Gemini API key (`*` needed for `/ask`; read by `utils/ai.js`) |
 | `GEMINI2`     | ❌        | Second Gemini key — rotated automatically on rate-limit      |
-| `GROQ_API_KEY`| ❌        | Groq API key (used by specific commands)                     |
+| `OPENROUTER`  | ❌        | OpenRouter API key                                            |
+| `GROQ`        | ❌        | Groq API key (used by specific commands)                     |
 | `LOG_LEVEL`   | ❌        | `error` \| `warn` \| `info` \| `debug` (default: `info`)    |
 | `NODE_ENV`    | ❌        | `development` \| `production` (default: `development`)      |
 

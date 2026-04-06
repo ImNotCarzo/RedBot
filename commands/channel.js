@@ -171,16 +171,13 @@ const data = {
     params: new ParamsBuilder()
       .addChannel({ name: "canal", description: "Canal a bloquear (opcional, por defecto el actual)", required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         await channel.permissionOverwrites.edit(ctx.guild.roles.everyone, {
@@ -218,16 +215,13 @@ const data = {
     params: new ParamsBuilder()
       .addChannel({ name: "canal", description: "Canal a abrir (opcional, por defecto el actual)", required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         await channel.permissionOverwrites.edit(ctx.guild.roles.everyone, {
@@ -266,6 +260,9 @@ const data = {
       .addString({ name: "tiempo",  description: "Tiempo (ej: 5s, 10m, 1h, 0 para desactivar)", required: true })
       .addChannel({ name: "canal", description: "Canal objetivo (opcional, por defecto el actual)", required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
@@ -274,12 +271,6 @@ const data = {
 
       if (seconds === null)
         return ctx.send({ content: "Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para desactivar. Máximo 6h.", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         await channel.setRateLimitPerUser(seconds, `${modTag}: channel slowmode`);
@@ -326,6 +317,9 @@ const data = {
       required: false,
     }),
 
+  plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageChannels")],
+
+
   async code(ctx) {
     const channel = ctx.get("canal") ?? ctx.channel;
     const guild = ctx.guild;
@@ -336,12 +330,6 @@ const data = {
     if (!channel) {
       return ctx.send({ content: "No se pudo obtener el canal", flags: MessageFlags.Ephemeral });
     }
-
-    if (!ctx.member.permissions.has(PermissionFlagsBits.Administrator))
-      return ctx.send({ content: "No tienes el permiso `Administrator`", flags: MessageFlags.Ephemeral });
-
-    if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-      return ctx.send({ content: "No tengo permiso para gestionar canales", flags: MessageFlags.Ephemeral });
 
     const confirmId = `nuke_confirm_${Date.now()}`;
     const cancelId  = `nuke_cancel_${Date.now()}`;
@@ -468,16 +456,13 @@ const data = {
     params: new ParamsBuilder()
       .addChannel({ name: "canal", description: "Canal a clonar (opcional, por defecto el actual)", required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para gestionar canales", flags: MessageFlags.Ephemeral });
 
       try {
         const cloned = await channel.clone({ reason: `${modTag}: channel clone` });
@@ -515,17 +500,14 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario",                                              required: true })
       .addChannel({ name: "canal",  description: "Canal objetivo (opcional, por defecto el actual)",    required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         await channel.permissionOverwrites.edit(member, {
@@ -566,17 +548,14 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario",                                              required: true })
       .addChannel({ name: "canal",  description: "Canal objetivo (opcional, por defecto el actual)",    required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         await channel.permissionOverwrites.edit(member, {
@@ -615,16 +594,13 @@ const data = {
     params: new ParamsBuilder()
       .addChannel({ name: "canal", description: "Canal a ocultar (opcional, por defecto el actual)", required: false }),
 
+    plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
+
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
-
-      if (!ctx.member.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tienes el permiso `ManageChannels`", flags: MessageFlags.Ephemeral });
-
-      if (!ctx.guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels))
-        return ctx.send({ content: "No tengo permiso para editar canales", flags: MessageFlags.Ephemeral });
 
       try {
         await channel.permissionOverwrites.edit(ctx.guild.roles.everyone, {
