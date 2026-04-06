@@ -1,4 +1,4 @@
-const { Errors } = require("erine");
+const { Errors } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../utils/colors");
 
