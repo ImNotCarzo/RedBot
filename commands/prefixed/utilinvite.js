@@ -1,4 +1,4 @@
-const { CommandBuilder, ParamsBuilder } = require("erine");
+const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 const data = {
