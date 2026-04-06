@@ -79,10 +79,10 @@ function inferPermissionChecks(slashKey, slashCommand) {
   const botPerms = new Set();
 
   let match;
-  const userRegex = /ctx\.member\.permissions\.has\(PermissionFlagsBits\.(\w+)\)/g;
+  const userRegex = /ctx\.member\.permissions\.has\(\s*PermissionFlagsBits\.(\w+)\s*\)/g;
   while ((match = userRegex.exec(src)) !== null) userPerms.add(match[1]);
 
-  const botRegex = /(?:ctx|guild)\.members\.me\.permissions\.has\(PermissionFlagsBits\.(\w+)\)/g;
+  const botRegex = /(?:ctx\.guild|guild)\.members\.me\.permissions\.has\(\s*PermissionFlagsBits\.(\w+)\s*\)/g;
   while ((match = botRegex.exec(src)) !== null) botPerms.add(match[1]);
 
   const value = { userPerms: [...userPerms], botPerms: [...botPerms] };
@@ -101,12 +101,12 @@ async function handleMissingPermissionsFirst(ctx, inferred) {
   if (!ctx?.guild || !ctx?.member) return false;
   const { userPerms = [], botPerms = [] } = inferred ?? {};
 
-  if (userPerms.length && !ctx.member.permissions.has(userPerms)) {
+  if (userPerms.length && !ctx.member.permissions.has(userPerms, true)) {
     await ctx.send(`No tienes permisos para usar este comando, necesitas: \`${userPerms.join(", ")}\``);
     return true;
   }
 
-  if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms)) {
+  if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms, true)) {
     await ctx.send(`No tengo permisos suficientes, necesito: \`${botPerms.join(", ")}\``);
     return true;
   }
