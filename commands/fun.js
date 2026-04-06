@@ -37,7 +37,7 @@ async function generateGemmaVision(prompt, imageUrl) {
   const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
 
   const response = await getAI().models.generateContent({
-  model: "gemma-4-31b",
+  model: "gemma-4-31b-it",
   contents: [{
     role: "user",
     parts: [
