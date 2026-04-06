@@ -10,7 +10,7 @@ let shuttingDown = false;
  * A hard-kill timer is set so the process never hangs more than 10 s.
  *
  * @param {string} signal            - Signal name ("SIGTERM" | "SIGINT").
- * @param {import("erine").Erine} bot - Bot instance to destroy.
+ * @param {import("gralonium").Gralonium} bot - Bot instance to destroy.
  * @param {import("../core/logger")} [log]
  */
 async function gracefulShutdown(signal, bot, log) {
@@ -43,7 +43,7 @@ async function gracefulShutdown(signal, bot, log) {
 /**
  * Register SIGTERM/SIGINT handlers for graceful shutdown.
  *
- * @param {import("erine").Erine} bot
+ * @param {import("gralonium").Gralonium} bot
  * @param {import("../core/logger")} log
  */
 function registerShutdownHandlers(bot, log) {
