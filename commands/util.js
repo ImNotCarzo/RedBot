@@ -45,7 +45,7 @@ async function generateGemma(messages) {
     }
 
     const response = await getAI().models.generateContent({
-      model: "gemma-4-26b-a4b-it",
+      model: "gemma-31b-it",
       contents: [{ role: "user", parts }],
       config: { temperature: 1.0 },
     });
