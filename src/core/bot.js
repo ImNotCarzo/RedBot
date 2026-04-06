@@ -1,4 +1,4 @@
-const { Erine } = require("erine");
+const { Gralonium } = require("gralonium");
 const botConfig = require("../config/bot.config");
 const GuildConfig = require("../../models/GuildConfig");
 const prefixCache = require("../../utils/prefixCache");
@@ -12,10 +12,10 @@ const { registerMessageHandler } = require("../handlers/messageHandler");
  *
  * @param {{ TOKEN: string, CLIENT_ID: string }} config - Validated env config.
  * @param {import("./logger")} log - Logger instance.
- * @returns {import("erine").Erine} The logged-in bot.
+ * @returns {import("gralonium").Gralonium} The logged-in bot.
  */
 function createBot(config, log) {
-  const bot = new Erine({
+  const bot = new Gralonium({
     ...botConfig,
     prefix: async (ctx) => {
       const message = ctx.data;
