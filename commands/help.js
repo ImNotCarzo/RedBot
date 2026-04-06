@@ -9,6 +9,8 @@ const {
   EmbedBuilder,
 } = require("gralonium");
 const { getId } = require("../utils/commandIds");
+const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186&permissions=0&scope=bot";
+const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 
 const IDS = {
   ask:     () => getId("ask"),
@@ -230,8 +232,8 @@ const data = {
 
         builder
           .addSeparator("small")
-          .addButton("Invitar", undefined, "link", "https://discord.com/oauth2/authorize?client_id=1020772849906098186&permissions=0&scope=bot")
-          .addButton("Soporte", undefined, "link", "https://discord.gg/b8AKKaNWU6");
+          .addButton("Invitar", undefined, "link", INVITE_URL)
+          .addButton("Soporte", undefined, "link", SUPPORT_URL);
 
         return builder.build()[0];
       };
