@@ -5,7 +5,7 @@ const fs   = require("fs");
  * Load all event modules from the `events/` directory and register them on
  * the bot instance.
  *
- * @param {import("erine").Erine} bot
+ * @param {import("gralonium").Gralonium} bot
  * @param {import("../core/logger")} [log]
  */
 function loadAndRegisterEvents(bot, log) {
