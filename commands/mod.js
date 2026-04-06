@@ -114,7 +114,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
-
     async code(ctx) {
       const userId = ctx.get("id");
       const reason = ctx.get("razon") ?? "Sin razón";
@@ -157,7 +156,6 @@ const data = {
       .addString({ name: "dias",    description: "Días de mensajes a borrar (1-7)",required: false }),
 
     plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
-
 
     async code(ctx) {
       const isSlash = !!ctx.interaction;
@@ -210,7 +208,6 @@ const data = {
       .addString({ name: "razon",    description: "Razón",                        required: false }),
 
     plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
-
 
     async code(ctx) {
       const isSlash = !!ctx.interaction;
@@ -286,7 +283,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
-
     async code(ctx) {
       const isSlash = !!ctx.interaction;
       if (isSlash) await ctx.interaction.deferReply();
@@ -347,7 +343,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("KickMembers"), Plugins.hasBotPerms("KickMembers")],
 
-
     async code(ctx) {
       const isSlash = !!ctx.interaction;
       if (isSlash) await ctx.interaction.deferReply();
@@ -394,7 +389,6 @@ const data = {
       .addString({ name: "razon",    description: "Razón",                           required: false }),
 
     plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
-
 
     async code(ctx) {
       const member   = ctx.get("usuario");
@@ -451,7 +445,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
-
     async code(ctx) {
       const member = ctx.get("usuario");
       const reason = ctx.get("razon") ?? "Sin razón";
@@ -492,7 +485,6 @@ const data = {
       .addMember({ name: "usuario",  description: "Filtrar por usuario (opcional)",      required: false }),
 
     plugins: [Plugins.hasPerms("ManageMessages"), Plugins.hasBotPerms("ManageMessages")],
-
 
     async code(ctx) {
       const amount = Math.min(100, Math.max(1, parseInt(ctx.get("cantidad")) || 0));
@@ -546,7 +538,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
-
     async code(ctx) {
       const member = ctx.get("usuario");
       const reason = ctx.get("razon");
@@ -599,7 +590,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
-
     async code(ctx) {
       const warnId = ctx.get("id").toUpperCase();
 
@@ -631,7 +621,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
-
     async code(ctx) {
       const member = ctx.get("usuario");
 
@@ -662,7 +651,6 @@ const data = {
       .addMember({ name: "usuario", description: "Usuario", required: true }),
 
     plugins: [Plugins.hasPerms("ModerateMembers")],
-
 
     async code(ctx) {
       const member   = ctx.get("usuario");
@@ -729,7 +717,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ManageGuild")],
 
-
     async code(ctx) {
 
       const channel = ctx.get("canal");
@@ -755,7 +742,6 @@ const data = {
     params: new ParamsBuilder(),
 
     plugins: [Plugins.hasPerms("ManageGuild")],
-
 
     async code(ctx) {
 

@@ -221,7 +221,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("Administrator")],
 
-
     async code(ctx) {
       try {
         if (!ctx.guild)

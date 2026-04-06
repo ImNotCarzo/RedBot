@@ -240,6 +240,7 @@ function wrapPrefixedCommands(log) {
             if (hadCommandForCode) ctx.command = originalCommandForCode; else delete ctx.command;
           }
         } catch (err) {
+          log?.error(`[adapter:${slashName}]`, { err: err.message });
           throw err;
         }
       }

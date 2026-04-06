@@ -470,7 +470,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
-
     async code(ctx) {
       const member = ctx.get("usuario");
       const role   = ctx.get("rol");
@@ -521,7 +520,6 @@ const data = {
       .addString({ name: "nombre", description: "Nombre nuevo",    required: true }),
 
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
-
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
@@ -578,7 +576,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
-
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
 
@@ -629,7 +626,6 @@ const data = {
       .addRole({ name: "rol", description: "Rol", required: true }),
 
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
-
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
@@ -694,7 +690,6 @@ const data = {
     }),
 
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
-
 
   async code(ctx) {
     const role       = ctx.get("rol");
@@ -801,7 +796,6 @@ const data = {
 
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
 
-
   async code(ctx) {
     const role       = ctx.get("rol");
     const incluirBot = ctx.get("incluir_bots") === "true";
@@ -906,7 +900,6 @@ const data = {
     }),
 
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
-
 
   async code(ctx) {
     const role   = ctx.get("rol");
@@ -1017,7 +1010,6 @@ const data = {
 
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
 
-
   async code(ctx) {
     const role   = ctx.get("rol");
     const accion = ctx.get("accion");
@@ -1124,7 +1116,6 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
     }),
 
   plugins: [Plugins.hasPerms("ManageGuild")],
-
 
   async code(ctx) {
     const role       = ctx.get("rol");

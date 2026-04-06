@@ -173,7 +173,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
-
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
@@ -216,7 +215,6 @@ const data = {
       .addChannel({ name: "canal", description: "Canal a abrir (opcional, por defecto el actual)", required: false }),
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
-
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
@@ -261,7 +259,6 @@ const data = {
       .addChannel({ name: "canal", description: "Canal objetivo (opcional, por defecto el actual)", required: false }),
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
-
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
@@ -318,7 +315,6 @@ const data = {
     }),
 
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageChannels")],
-
 
   async code(ctx) {
     const channel = ctx.get("canal") ?? ctx.channel;
@@ -458,7 +454,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
-
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
@@ -501,7 +496,6 @@ const data = {
       .addChannel({ name: "canal",  description: "Canal objetivo (opcional, por defecto el actual)",    required: false }),
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
-
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
@@ -550,7 +544,6 @@ const data = {
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
-
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
@@ -595,7 +588,6 @@ const data = {
       .addChannel({ name: "canal", description: "Canal a ocultar (opcional, por defecto el actual)", required: false }),
 
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
-
 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
