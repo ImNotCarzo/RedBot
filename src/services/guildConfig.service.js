@@ -1,5 +1,5 @@
 const GuildConfig = require("../../models/GuildConfig");
-const prefixCache = require("../../utils/prefixCache");
+const prefixCache = require("../cache/prefix.cache");
 
 const DEFAULT_PREFIX = ".";
 

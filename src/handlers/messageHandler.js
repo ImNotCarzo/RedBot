@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
-const { setConversacion, getConversacion } = require("../../utils/askMemory");
+const { setConversacion, getConversacion } = require("../services/memory.service");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../services/ai.service");
 const { registerBotEvent } = require("./eventRuntime");
 const {

@@ -12,7 +12,7 @@ const {
 } = require("discord.js");
 const { createCommandLogger, clampPage } = require("./_shared/runtime");
 const JoinRole = require("../models/JoinRole");
-const sendLog = require("../utils/sendLog");
+const sendLog = require("../src/services/logging.service");
  
 // ─────────────────────────────────────────────
 //  SHARED LOG SCHEMA

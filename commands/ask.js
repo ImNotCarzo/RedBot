@@ -1,10 +1,10 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../utils/ai");
-const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../utils/askMemory");
+const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../src/services/ai.service");
+const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../src/services/memory.service");
 const { SYSTEM_PROMPT, AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../src/config/constants");
 const { RED } = require("../utils/colors");
-const { sendThinkingReply, editThinkingReply } = require("../utils/thinkingReply");
+const { sendThinkingReply, editThinkingReply } = require("../commands/_shared/thinking");
 const { createCommandLogger } = require("./_shared/runtime");
 
 const log = createCommandLogger("CMD_ASK");

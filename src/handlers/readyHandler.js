@@ -1,5 +1,5 @@
 const { REST, Routes } = require("discord.js");
-const { setId }        = require("../../utils/commandIds");
+const { setId }        = require("../state/commandIds.store");
 const { COMMANDS_TO_UPDATE } = require("../config/constants");
 const { registerBotEvent } = require("./eventRuntime");
 const ROLE_CONNECTION_TIMEOUT_MS = 10_000;

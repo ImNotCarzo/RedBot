@@ -3,7 +3,7 @@ const fs     = require("fs");
 const { PermissionFlagsBits } = require("discord.js");
 const { Errors } = require("gralonium");
 const PREFIXED_TO_SLASH_MAP = require("../../config/prefixedToSlashMap");
-const { setId }             = require("../../utils/commandIds");
+const { setId }             = require("../state/commandIds.store");
 const { normalizeReplyPayload } = require("../utils/normalize");
 const { parsePrefixedArgsForSlash } = require("../utils/parsers");
 

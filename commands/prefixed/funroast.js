@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { getAI } = require("../../utils/ai");
+const { getAI } = require("../../src/services/ai.service");
 
 const data = {
   data: new CommandBuilder({

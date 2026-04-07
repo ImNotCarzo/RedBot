@@ -1,7 +1,7 @@
 const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ChannelType } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { RED, GREEN, BLUE } = require("../utils/colors");
-const { sendLog } = require("../utils/sendLog");
+const sendLog = require("../src/services/logging.service");
 const { createCommandLogger } = require("./_shared/runtime");
 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";

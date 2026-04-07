@@ -11,8 +11,8 @@ const {
 const { clampPage } = require("./_shared/runtime");
 
 const { RED, YELLOW, GREEN } = require("../utils/colors");
-const { generateId, parseDuration, formatDuration } = require("../utils/helpers");
-const sendLog = require("../utils/sendLog");
+const { generateId, parseDuration, formatDuration } = require("../src/utils/moderation");
+const sendLog = require("../src/services/logging.service");
 const {
   addWarn,
   removeWarnById,

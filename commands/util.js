@@ -1,10 +1,10 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { deleteConversacion } = require("../utils/askMemory");
-const { generateWithFallback } = require("../utils/ai");
+const { deleteConversacion } = require("../src/services/memory.service");
+const { generateWithFallback } = require("../src/services/ai.service");
 const { RED, GREEN } = require("../utils/colors");
 const { getPrefix, setPrefix } = require("../src/services/guildConfig.service");
-const { getAI } = require("../utils/ai");
+const { getAI } = require("../src/services/ai.service");
 const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
 
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
