@@ -1,7 +1,5 @@
 const JoinRole = require("../models/JoinRole");
 const Logger = require("../src/core/logger");
-const { sanitizeError } = require("../src/handlers/eventRuntime");
-
 const log = new Logger("EVENT_GUILD_MEMBER_ADD", process.env.LOG_LEVEL);
 
 const event = {
@@ -13,15 +11,7 @@ const event = {
     const guildId = member.guild.id;
     const userId = member.user.id;
 
-    const config = await JoinRole.findOne({ guildId }).lean().catch((err) => {
-      log.error("Error consultando configuración de rol automático", {
-        event: "guildMemberAdd",
-        guildId,
-        userId,
-        err: sanitizeError(err),
-      });
-      throw err;
-    });
+    const config = await JoinRole.findOne({ guildId }).lean();
     if (!config) return;
 
     if (config.ignoreBots && member.user.bot) return;
@@ -33,7 +23,7 @@ const event = {
           event: "guildMemberAdd",
           guildId,
           roleId: config.roleId,
-          err: sanitizeError(err),
+          err: err?.message ?? String(err),
         });
       });
       return;
@@ -55,7 +45,7 @@ const event = {
         guildId,
         userId,
         roleId: role.id,
-        err: sanitizeError(err),
+        err: err?.message ?? String(err),
       });
     });
   },
