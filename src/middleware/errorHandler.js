@@ -1,8 +1,9 @@
-const mongoose = require("mongoose");
 const { closeDatabase } = require("../core/database");
 const { registerProcessErrorHandlers } = require("../handlers/eventRuntime");
 
 let shuttingDown = false;
+let shutdownHandlersRegistered = false;
+const SHUTDOWN_TIMEOUT_MS = Number.parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? "15000", 10);
 
 /**
  * Perform an orderly shutdown: destroy the Discord bot, close the DB
@@ -23,7 +24,8 @@ async function gracefulShutdown(signal, bot, log) {
   const forceExitTimer = setTimeout(() => {
     log?.error("Cierre forzado tras timeout");
     process.exit(1);
-  }, 10_000);
+  }, Number.isFinite(SHUTDOWN_TIMEOUT_MS) ? SHUTDOWN_TIMEOUT_MS : 15000);
+  forceExitTimer.unref?.();
 
   try {
     if (typeof bot?.destroy === "function") {
@@ -48,8 +50,11 @@ async function gracefulShutdown(signal, bot, log) {
  * @param {import("../core/logger")} log
  */
 function registerShutdownHandlers(bot, log) {
+  if (shutdownHandlersRegistered) return;
+  shutdownHandlersRegistered = true;
+
   ["SIGTERM", "SIGINT"].forEach((sig) => {
-    process.on(sig, () => gracefulShutdown(sig, bot, log));
+    process.once(sig, () => gracefulShutdown(sig, bot, log));
   });
 }
 

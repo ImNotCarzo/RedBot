@@ -3,7 +3,6 @@ const fs     = require("fs");
 const { PermissionFlagsBits } = require("discord.js");
 const { Errors } = require("gralonium");
 const PREFIXED_TO_SLASH_MAP = require("../../config/prefixedToSlashMap");
-const { setId }             = require("../state/commandIds.store");
 const { normalizeReplyPayload } = require("../utils/normalize");
 const { parsePrefixedArgsForSlash } = require("../utils/parsers");
 
@@ -19,24 +18,40 @@ const inferredPermissionsCache = new Map();
  * Populate `slashCommandMap` with every slash command from the `commands/` directory.
  * No-op if already loaded.
  */
-function loadSlashCommandMap() {
+function loadSlashCommandMap(log) {
   if (slashCommandMap.size) return;
 
-  const slashFiles = ["channel", "fun", "mod", "role", "server", "user", "util"];
+  const commandsDir = path.join(__dirname, "../../commands");
+  const entries = fs.readdirSync(commandsDir, { withFileTypes: true });
 
-  for (const file of slashFiles) {
-    const mod      = require(path.join(__dirname, "../../commands", `${file}.js`));
-    const group    = mod?.data?.data;
-    const commands = group?.commands ?? [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith(".js")) continue;
+    if (entry.name.startsWith("_")) continue;
 
-    for (const cmd of commands) {
-      const name = cmd?.data?.name;
-      if (name) slashCommandMap.set(`${file}/${name}`, cmd);
+    const file = entry.name.slice(0, -3);
+
+    try {
+      const mod = require(path.join(commandsDir, entry.name));
+      const exported = mod?.data;
+      const rootData = exported?.data;
+
+      if (Array.isArray(rootData?.commands)) {
+        const groupName = rootData?.name ?? file;
+        for (const cmd of rootData.commands) {
+          const name = cmd?.data?.name;
+          if (name) slashCommandMap.set(`${groupName}/${name}`, cmd);
+        }
+        continue;
+      }
+
+      if (rootData?.name && typeof exported?.code === "function") {
+        slashCommandMap.set(`${rootData.name}/${rootData.name}`, exported);
+      }
+    } catch (err) {
+      log?.warn(`No se pudo cargar comando slash desde ${entry.name}`, { err: err?.message ?? String(err) });
     }
   }
-
-  const ask = require(path.join(__dirname, "../../commands", "ask.js"))?.data;
-  if (ask?.data?.name) slashCommandMap.set(`ask/${ask.data.name}`, ask);
 }
 
 /**
@@ -164,7 +179,7 @@ async function runCommandPlugins(ctx, slashCommand) {
  * @param {import("../core/logger")} [log]
  */
 function wrapPrefixedCommands(log) {
-  loadSlashCommandMap();
+  loadSlashCommandMap(log);
 
   const prefixedPath  = path.join(__dirname, "../../commands", "prefixed");
   const prefixedFiles = fs.readdirSync(prefixedPath).filter((f) => f.endsWith(".js"));
@@ -259,4 +274,4 @@ function wrapPrefixedCommands(log) {
   }
 }
 
-module.exports = { wrapPrefixedCommands, loadSlashCommandMap, slashCommandMap, setId };
+module.exports = { wrapPrefixedCommands, loadSlashCommandMap, slashCommandMap };
