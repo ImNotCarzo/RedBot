@@ -1,10 +1,9 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion } = require("../utils/askMemory");
-const GuildConfig = require("../models/GuildConfig");
 const { generateWithFallback } = require("../utils/ai");
 const { RED, GREEN } = require("../utils/colors");
-const prefixCache = require("../utils/prefixCache");
+const { getPrefix, setPrefix } = require("../src/services/guildConfig.service");
 const { getAI } = require("../utils/ai");
 const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
 
@@ -222,8 +221,7 @@ const data = {
         const nuevo = ctx.get("nuevo");
 
         if (!nuevo) {
-          const config = await GuildConfig.findOne({ guildId: ctx.guild.id });
-          const prefix = config?.prefix ?? ".";
+          const prefix = await getPrefix(ctx.guild.id);
           return ctx.send({
             embeds: [
               new EmbedBuilder()
@@ -237,13 +235,7 @@ const data = {
         if (nuevo.length > 3)
           return ctx.send({ content: "El prefix no puede tener más de 3 caracteres", flags: MessageFlags.Ephemeral });
 
-        await GuildConfig.findOneAndUpdate(
-          { guildId: ctx.guild.id },
-          { prefix: nuevo },
-          { upsert: true }
-        );
-
-        prefixCache.set(ctx.guild.id, nuevo);
+        await setPrefix(ctx.guild.id, nuevo);
 
         await ctx.send({
           embeds: [

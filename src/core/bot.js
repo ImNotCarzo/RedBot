@@ -1,7 +1,6 @@
 const { Gralonium } = require("gralonium");
 const botConfig = require("../config/bot.config");
-const GuildConfig = require("../../models/GuildConfig");
-const prefixCache = require("../../utils/prefixCache");
+const { getPrefix, DEFAULT_PREFIX } = require("../services/guildConfig.service");
 const { loadAndRegisterEvents } = require("../handlers/eventHandler");
 const { wrapPrefixedCommands } = require("../handlers/commandHandler");
 const { registerReadyHandler } = require("../handlers/readyHandler");
@@ -30,8 +29,7 @@ function createBot(config, log) {
         const mentionB = `<@!${botId}>`;
         const onlyMention = content.trim() === mentionA || content.trim() === mentionB;
         if (onlyMention) {
-          const guildPrefix = guildId ? (prefixCache.get(guildId) ?? (await GuildConfig.findOne({ guildId }))?.prefix ?? ".") : ".";
-          if (guildId && !prefixCache.has(guildId)) prefixCache.set(guildId, guildPrefix);
+          const guildPrefix = guildId ? await getPrefix(guildId) : DEFAULT_PREFIX;
           await message.reply({
             content: `Mi prefijo en este servidor es \`${guildPrefix}\``,
             allowedMentions: { repliedUser: false },
@@ -43,18 +41,10 @@ function createBot(config, log) {
       }
 
       if (!guildId) {
-        return content.startsWith(".") ? "." : null;
+        return content.startsWith(DEFAULT_PREFIX) ? DEFAULT_PREFIX : null;
       }
 
-      let prefix = ".";
-      if (prefixCache.has(guildId)) {
-        prefix = prefixCache.get(guildId);
-      } else {
-        const guildCfg = await GuildConfig.findOne({ guildId });
-        prefix = guildCfg?.prefix ?? ".";
-        prefixCache.set(guildId, prefix);
-      }
-
+      const prefix = await getPrefix(guildId);
       return content.startsWith(prefix) ? prefix : null;
     },
   });

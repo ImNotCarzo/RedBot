@@ -1,17 +1,24 @@
-const Log = require("../models/Log");
+const Logger = require("../src/core/logger");
+const { getLogChannelId, cleanupBrokenLogChannel } = require("../src/services/guildLog.service");
+
+const log = new Logger("SEND_LOG", process.env.LOG_LEVEL);
 
 async function sendLog(guild, embed) {
   try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
+    if (!guild?.id || !embed) return;
+    const channelId = await getLogChannelId(guild.id);
+    if (!channelId) return;
+    const ch = guild.channels.cache.get(channelId);
     if (!ch) {
-      await Log.deleteOne({ guildId: guild.id }).catch(() => {});
+      await cleanupBrokenLogChannel(guild.id).catch(() => {});
       return;
     }
     if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
   } catch (err) {
-    console.error("[sendLog] Error:", err?.message ?? err);
+    log.error("Error enviando log de moderación", {
+      guildId: guild?.id,
+      err: err?.message ?? String(err),
+    });
   }
 }
 

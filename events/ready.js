@@ -1,6 +1,5 @@
 const { ActivityType } = require("discord.js");
-const TempBan = require("../models/TempBan");
-const { scheduleTempUnban } = require("../utils/helpers");
+const { scheduleTempUnban, listPendingTempBans } = require("../src/services/moderation.service");
 const Logger = require("../src/core/logger");
 const { sanitizeError } = require("../src/handlers/eventRuntime");
 
@@ -10,7 +9,7 @@ const presenceIntervals = new WeakMap();
 async function restoreTempBans(client) {
   try {
     if (!client?.guilds) return;
-    const pending = await TempBan.find({});
+    const pending = await listPendingTempBans();
     if (!pending.length) return;
 
     log.info(`Restaurando ${pending.length} tempban(s)...`);

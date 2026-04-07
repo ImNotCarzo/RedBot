@@ -11,8 +11,8 @@ const {
   MessageFlags,
 } = require("discord.js");
 const { createCommandLogger, clampPage } = require("./_shared/runtime");
-const Log = require("../models/Log");
 const JoinRole = require("../models/JoinRole");
+const sendLog = require("../utils/sendLog");
  
 // ─────────────────────────────────────────────
 //  SHARED LOG SCHEMA
@@ -44,15 +44,6 @@ function roleHierarchyCheck(ctx, role) {
   if (role.position >= ctx.guild.members.me.roles.highest.position)
     return "No puedo actuar sobre ese rol porque está por encima del mío";
   return null;
-}
- 
-async function sendLog(guild, embed) {
-  try {
-    const doc = await Log.findOne({ guildId: guild.id });
-    if (!doc) return;
-    const ch = guild.channels.cache.get(doc.channelId);
-    if (ch?.isTextBased()) await ch.send({ embeds: [embed] });
-  } catch {}
 }
  
 function buildPagRow(prevId, nextId, page, total) {
