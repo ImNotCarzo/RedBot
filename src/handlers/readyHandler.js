@@ -2,6 +2,7 @@ const { REST, Routes } = require("discord.js");
 const { setId }        = require("../../utils/commandIds");
 const { COMMANDS_TO_UPDATE } = require("../config/constants");
 const { registerBotEvent } = require("./eventRuntime");
+const ROLE_CONNECTION_TIMEOUT_MS = 10_000;
 
 /**
  * Register the `clientReady` handler on the bot.
@@ -36,7 +37,7 @@ function registerReadyHandler(bot, config, log) {
           body: JSON.stringify([
             { key: "servidores", name: "Servidores", description: "Servidores", type: 2 },
           ]),
-          signal: AbortSignal.timeout(10_000),
+          signal: AbortSignal.timeout(ROLE_CONNECTION_TIMEOUT_MS),
         }
       );
 

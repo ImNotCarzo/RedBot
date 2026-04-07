@@ -20,7 +20,7 @@ const event = {
         userId,
         err: sanitizeError(err),
       });
-      return null;
+      throw err;
     });
     if (!config) return;
 

@@ -5,7 +5,7 @@ const Logger = require("../src/core/logger");
 const { sanitizeError } = require("../src/handlers/eventRuntime");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
-const PRESENCE_INTERVAL = Symbol.for("redbot.readyPresenceInterval");
+const presenceIntervals = new WeakMap();
 
 async function restoreTempBans(client) {
   try {
@@ -54,10 +54,11 @@ const event = {
       "/help",
     ];
 
-    if (client[PRESENCE_INTERVAL]) clearInterval(client[PRESENCE_INTERVAL]);
+    const existingInterval = presenceIntervals.get(client);
+    if (existingInterval) clearInterval(existingInterval);
 
     let i = 0;
-    client[PRESENCE_INTERVAL] = setInterval(() => {
+    const interval = setInterval(() => {
       try {
         const activities = getActivities();
         client.user.setPresence({
@@ -67,15 +68,18 @@ const event = {
         i = (i + 1) % activities.length;
       } catch (err) {
         log.error("Error al actualizar presencia", { err: sanitizeError(err) });
-        clearInterval(client[PRESENCE_INTERVAL]);
-        client[PRESENCE_INTERVAL] = null;
+        const current = presenceIntervals.get(client);
+        if (current) clearInterval(current);
+        presenceIntervals.delete(client);
       }
     }, 10000);
+    presenceIntervals.set(client, interval);
 
     client.once("invalidated", () => {
-      if (!client[PRESENCE_INTERVAL]) return;
-      clearInterval(client[PRESENCE_INTERVAL]);
-      client[PRESENCE_INTERVAL] = null;
+      const current = presenceIntervals.get(client);
+      if (!current) return;
+      clearInterval(current);
+      presenceIntervals.delete(client);
       log.warn("Presencia detenida por invalidación de sesión");
     });
   },
