@@ -1,5 +1,6 @@
 const path = require("path");
 const fs   = require("fs");
+const { registerBotEvent } = require("./eventRuntime");
 
 /**
  * Load all event modules from the `events/` directory and register them on
@@ -17,8 +18,12 @@ function loadAndRegisterEvents(bot, log) {
     try {
       const event = require(path.join(eventsPath, file));
       if (!event?.data?.name || typeof event?.data?.code !== "function") continue;
-      bot.on(event.data.name, (...args) => event.data.code(bot, ...args));
-      loaded += 1;
+      const registered = registerBotEvent(
+        bot,
+        { ...event.data, source: `events/${file}` },
+        log
+      );
+      if (registered) loaded += 1;
     } catch (err) {
       log?.error(`Error cargando evento: ${file}`, { err: err.message });
     }

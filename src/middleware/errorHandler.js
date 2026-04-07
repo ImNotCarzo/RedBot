@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { closeDatabase } = require("../core/database");
+const { registerProcessErrorHandlers } = require("../handlers/eventRuntime");
 
 let shuttingDown = false;
 
@@ -52,4 +53,4 @@ function registerShutdownHandlers(bot, log) {
   });
 }
 
-module.exports = { gracefulShutdown, registerShutdownHandlers };
+module.exports = { gracefulShutdown, registerShutdownHandlers, registerProcessErrorHandlers };

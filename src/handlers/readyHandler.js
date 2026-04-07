@@ -1,6 +1,7 @@
 const { REST, Routes } = require("discord.js");
 const { setId }        = require("../../utils/commandIds");
 const { COMMANDS_TO_UPDATE } = require("../config/constants");
+const { registerBotEvent } = require("./eventRuntime");
 
 /**
  * Register the `clientReady` handler on the bot.
@@ -15,7 +16,13 @@ const { COMMANDS_TO_UPDATE } = require("../config/constants");
  * @param {import("../core/logger")} [log]
  */
 function registerReadyHandler(bot, config, log) {
-  bot.on("clientReady", async (readyBot) => {
+  registerBotEvent(bot, {
+    name: "clientReady",
+    once: true,
+    source: "handlers/readyHandler",
+    async code(_bot, readyBot) {
+    const client = readyBot ?? _bot;
+
     // ── Role-connections metadata ─────────────────────────────────────────
     try {
       const res = await fetch(
@@ -43,7 +50,7 @@ function registerReadyHandler(bot, config, log) {
 
     // ── Sync slash commands ───────────────────────────────────────────────
     try {
-      await readyBot.sync();
+      await client.sync();
       log?.info("Comandos slash sincronizados");
     } catch (err) {
       log?.error("Error al sincronizar comandos slash", { err: err.message });
@@ -76,7 +83,8 @@ function registerReadyHandler(bot, config, log) {
     } catch (err) {
       log?.error("Error al actualizar contextos", { err: err.message });
     }
-  });
+    },
+  }, log);
 }
 
 module.exports = { registerReadyHandler };

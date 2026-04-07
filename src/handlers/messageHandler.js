@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require("discord.js");
 const { setConversacion, getConversacion } = require("../../utils/askMemory");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../services/ai.service");
+const { registerBotEvent } = require("./eventRuntime");
 const {
   MAX_HISTORIAL,
   SYSTEM_PROMPT,
@@ -22,7 +23,10 @@ const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
  * @param {import("../core/logger")} [log]
  */
 function registerMessageHandler(bot, log) {
-  bot.on("messageCreate", async (message) => {
+  registerBotEvent(bot, {
+    name: "messageCreate",
+    source: "handlers/messageHandler",
+    async code(_bot, message) {
     try {
       if (message.author.bot)            return;
       if (!message.reference?.messageId) return;
@@ -94,7 +98,8 @@ function registerMessageHandler(bot, log) {
         log?.error("messageCreate IA", { err: err.message });
       }
     }
-  });
+    },
+  }, log);
 }
 
 module.exports = { registerMessageHandler };

@@ -12,6 +12,7 @@ const {
 } = require("discord.js");
 const { createCommandLogger, clampPage } = require("./_shared/runtime");
 const Log = require("../models/Log");
+const JoinRole = require("../models/JoinRole");
  
 // ─────────────────────────────────────────────
 //  SHARED LOG SCHEMA
@@ -1126,8 +1127,6 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
     const role       = ctx.get("rol");
     const ignoreBots = ctx.get("ignorar_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
-
-    const { JoinRole } = require("../events/guildMemberAdd");
 
     if (!role) {
       const deleted = await JoinRole.findOneAndDelete({ guildId: ctx.guild.id });
