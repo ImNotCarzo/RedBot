@@ -1,48 +1,86 @@
 const { ActivityType } = require("discord.js");
-const TempBan = require("../models/TempBan");
-const { scheduleTempUnban } = require("../utils/helpers");
+const { scheduleTempUnban, listPendingTempBans } = require("../src/services/moderation.service");
+const Logger = require("../src/core/logger");
+const { sanitizeError } = require("../src/handlers/eventRuntime");
+
+const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
+const presenceIntervals = new WeakMap();
 
 async function restoreTempBans(client) {
   try {
-    const pending = await TempBan.find({});
+    if (!client?.guilds) return;
+    const pending = await listPendingTempBans();
     if (!pending.length) return;
 
-    console.log(`[TempBan] Restaurando ${pending.length} tempban(s)...`);
+    log.info(`Restaurando ${pending.length} tempban(s)...`);
     for (const entry of pending) {
-      scheduleTempUnban(client, entry.guildId, entry.userId, entry.unbanAt);
+      try {
+        if (!entry?.guildId || !entry?.userId || !entry?.unbanAt) continue;
+        scheduleTempUnban(client, entry.guildId, entry.userId, entry.unbanAt);
+      } catch (err) {
+        log.warn("Tempban inválido omitido", {
+          guildId: entry?.guildId,
+          userId: entry?.userId,
+          err: sanitizeError(err),
+        });
+      }
     }
-    console.log("[TempBan] Tempbans restaurados.");
+    log.info("Tempbans restaurados.");
   } catch (err) {
-    console.error("[TempBan] Error al restaurar tempbans:", err);
+    log.error("Error al restaurar tempbans", { err: sanitizeError(err) });
   }
 }
 
-let presenceInterval = null;
-
 const event = {
   name: "clientReady",
-  async code(bot) {
-    console.log(`${bot.user.username} ready`);
+  once: true,
+  async code(bot, readyBot) {
+    const client = readyBot ?? bot;
+    if (!client?.user) {
+      log.warn("clientReady sin usuario inicializado");
+      return;
+    }
 
-    await restoreTempBans(bot);
+    log.info(`${client.user.username} ready`, {
+      guilds: client.guilds?.cache?.size ?? 0,
+    });
+
+    await restoreTempBans(client);
 
     const getActivities = () => [
-      `${bot.guilds.cache.size} servidores`,
-      `${bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0)} usuarios`,
+      `${client.guilds.cache.size} servidores`,
+      `${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)} usuarios`,
       "/help",
     ];
 
-    if (presenceInterval) clearInterval(presenceInterval);
+    const existingInterval = presenceIntervals.get(client);
+    if (existingInterval) clearInterval(existingInterval);
 
     let i = 0;
-    presenceInterval = setInterval(() => {
-      const activities = getActivities();
-      bot.user.setPresence({
-        activities: [{ name: activities[i], type: ActivityType.Watching }],
-        status: "dnd",
-      });
-      i = (i + 1) % activities.length;
+    const interval = setInterval(() => {
+      try {
+        const activities = getActivities();
+        client.user.setPresence({
+          activities: [{ name: activities[i], type: ActivityType.Watching }],
+          status: "dnd",
+        });
+        i = (i + 1) % activities.length;
+      } catch (err) {
+        log.error("Error al actualizar presencia", { err: sanitizeError(err) });
+        const current = presenceIntervals.get(client);
+        if (current) clearInterval(current);
+        presenceIntervals.delete(client);
+      }
     }, 10000);
+    presenceIntervals.set(client, interval);
+
+    client.once("invalidated", () => {
+      const current = presenceIntervals.get(client);
+      if (!current) return;
+      clearInterval(current);
+      presenceIntervals.delete(client);
+      log.warn("Presencia detenida por invalidación de sesión");
+    });
   },
 };
 

@@ -9,8 +9,11 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
+const { createCommandLogger, clampPage } = require("./_shared/runtime");
+const { resolveMemberFlexible } = require("../src/resolvers/member.resolver");
 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
+const log = createCommandLogger("CMD_USER");
 
 function noGuildReply(ctx) {
   return ctx.send({
@@ -23,22 +26,7 @@ function noGuildReply(ctx) {
 }
 
 async function resolveMember(ctx, input) {
-  if (!input) return ctx.member ?? null;
-  if (typeof input === "object") return input;
-  if (ctx.message?.mentions?.members?.size) return ctx.message.mentions.members.first();
-  if (/^\d{17,20}$/.test(input)) {
-    const byId = await ctx.guild.members.fetch(input).catch(() => null);
-    if (byId) return byId;
-  }
-  const results = await ctx.guild.members.fetch({ query: input, limit: 1 }).catch(() => null);
-  if (results?.size) return results.first();
-  const lower = input.toLowerCase();
-  return ctx.guild.members.cache.find(m => {
-    const username   = m.user.username?.toLowerCase() ?? "";
-    const globalName = m.user.globalName?.toLowerCase() ?? "";
-    const nickname   = m.nickname?.toLowerCase() ?? "";
-    return username.includes(lower) || globalName.includes(lower) || nickname.includes(lower);
-  }) ?? null;
+  return resolveMemberFlexible(ctx, input);
 }
 
 async function resolveUser(ctx, input) {
@@ -320,6 +308,7 @@ const data = {
             rolesCollector.on("collect", async i => {
               if (i.customId === prevId) page--;
               if (i.customId === nextId) page++;
+              page = clampPage(page, pages.length);
               await i.update({ embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)], components: [buildSelectRow(true), buildPaginationRow(prevId, nextId, page, pages.length)] });
             });
             rolesCollector.on("end", async () => reply.edit({ components: [buildSelectRow(true)] }).catch(() => {}));
@@ -355,6 +344,7 @@ const data = {
             permsCollector.on("collect", async i => {
               if (i.customId === pPrevId) page--;
               if (i.customId === pNextId) page++;
+              page = clampPage(page, pages.length);
               await i.update({ embeds: [buildPermsEmbed(page)], components: [buildSelectRow(true), buildPaginationRow(pPrevId, pNextId, page, pages.length)] });
             });
             permsCollector.on("end", async () => reply.edit({ components: [buildSelectRow(true)] }).catch(() => {}));
@@ -367,7 +357,7 @@ const data = {
         });
 
       } catch (err) {
-        console.error("Error en user info:", err);
+        log.error("Error en user info", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener la información del usuario");
       }
     },
@@ -425,7 +415,7 @@ const data = {
         });
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
-        console.error("Error en user avatar:", err);
+        log.error("Error en user avatar", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener el avatar");
       }
     },
@@ -482,7 +472,7 @@ const data = {
         });
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
-        console.error("Error en user banner:", err);
+        log.error("Error en user banner", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener el banner");
       }
     },
@@ -528,11 +518,12 @@ const data = {
           if (i.user.id !== invoker.id) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await i.update({ embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)], components: [buildPaginationRow(prevId, nextId, page, pages.length)] });
         });
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
-        console.error("Error en user roles:", err);
+        log.error("Error en user roles", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener los roles");
       }
     },
@@ -585,11 +576,12 @@ const data = {
           if (i.user.id !== invoker.id) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await i.update({ embeds: [buildEmbed(page)], components: [buildPaginationRow(prevId, nextId, page, pages.length)] });
         });
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
-        console.error("Error en user permissions:", err);
+        log.error("Error en user permissions", { err: err?.message ?? String(err) });
         await ctx.send("No se pudieron obtener los permisos del usuario");
       }
     },

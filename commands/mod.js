@@ -8,14 +8,20 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-
-const Log     = require("../models/Log");
-const Warn    = require("../models/Warn");
-const TempBan = require("../models/TempBan");
+const { clampPage } = require("./_shared/runtime");
 
 const { RED, YELLOW, GREEN } = require("../utils/colors");
-const { generateId, parseDuration, formatDuration, scheduleTempUnban } = require("../utils/helpers");
-const sendLog = require("../utils/sendLog");
+const { generateId, parseDuration, formatDuration } = require("../src/utils/moderation");
+const sendLog = require("../src/services/logging.service");
+const {
+  addWarn,
+  removeWarnById,
+  clearWarnsForUser,
+  listWarnsForUser,
+  upsertTempBan,
+  scheduleTempUnban,
+} = require("../src/services/moderation.service");
+const { setLogChannel, clearLogChannel } = require("../src/services/guildLog.service");
 
 // ─────────────────────────────────────────────
 //  HELPERS
@@ -243,11 +249,7 @@ const data = {
 
         await member.ban({ reason: `[TEMPBAN ${formatDuration(duration)}] ${tag}: ${reason}` });
 
-        await TempBan.findOneAndUpdate(
-          { guildId: ctx.guild.id, userId: member.id },
-          { unbanAt },
-          { upsert: true }
-        );
+        await upsertTempBan({ guildId: ctx.guild.id, userId: member.id, unbanAt });
         scheduleTempUnban(ctx.guild.client, ctx.guild.id, member.id, unbanAt);
 
         await send({ embeds: [new EmbedBuilder()
@@ -549,8 +551,13 @@ const data = {
 
       try {
         const warnId  = generateId();
-        await Warn.create({ guildId: ctx.guild.id, userId: member.id, moderator: ctx.user?.id ?? ctx.author?.id, reason, warnId });
-        const total    = await Warn.countDocuments({ guildId: ctx.guild.id, userId: member.id });
+        const { total } = await addWarn({
+          guildId: ctx.guild.id,
+          userId: member.id,
+          moderatorId: ctx.user?.id ?? ctx.author?.id,
+          reason,
+          warnId,
+        });
         const username = member.user.globalName || member.user.username;
 
         await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue advertido`).setColor(YELLOW)] });
@@ -594,7 +601,7 @@ const data = {
       const warnId = ctx.get("id").toUpperCase();
 
       try {
-        const warn = await Warn.findOneAndDelete({ guildId: ctx.guild.id, warnId });
+        const warn = await removeWarnById({ guildId: ctx.guild.id, warnId });
         if (!warn)
           return ctx.send({ content: `No encontré la advertencia con ID \`${warnId}\``, flags: MessageFlags.Ephemeral });
 
@@ -625,11 +632,11 @@ const data = {
       const member = ctx.get("usuario");
 
       try {
-        const result = await Warn.deleteMany({ guildId: ctx.guild.id, userId: member.id });
-        if (!result.deletedCount)
+        const deletedCount = await clearWarnsForUser({ guildId: ctx.guild.id, userId: member.id });
+        if (!deletedCount)
           return ctx.send({ content: `${member.user.tag} no tiene advertencias`, flags: MessageFlags.Ephemeral });
 
-        const count    = result.deletedCount;
+        const count    = deletedCount;
         const username = member.user.globalName || member.user.username;
 
         const embed = new EmbedBuilder()
@@ -657,7 +664,7 @@ const data = {
       const authorId = ctx.user?.id ?? ctx.author?.id;
 
       try {
-        const warns = await Warn.find({ guildId: ctx.guild.id, userId: member.id }).sort({ createdAt: -1 });
+        const warns = await listWarnsForUser({ guildId: ctx.guild.id, userId: member.id });
         if (!warns.length)
           return ctx.send({ content: `${member.user.tag} no tiene advertencias`, flags: MessageFlags.Ephemeral });
 
@@ -699,6 +706,7 @@ const data = {
           if (i.user.id !== authorId) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await i.update({ embeds: [buildEmbed()], components: [buildPagRow(prevId, nextId, page, pages.length)] });
         });
 
@@ -724,7 +732,7 @@ const data = {
         return ctx.send({ content: "El canal debe ser de texto", flags: MessageFlags.Ephemeral });
 
       try {
-        await Log.findOneAndUpdate({ guildId: ctx.guild.id }, { channelId: channel.id }, { upsert: true, new: true });
+        await setLogChannel(ctx.guild.id, channel.id);
 
         await ctx.send({ embeds: [new EmbedBuilder()
           .setTitle("Canal de logs establecido")
@@ -746,8 +754,8 @@ const data = {
     async code(ctx) {
 
       try {
-        const result = await Log.findOneAndDelete({ guildId: ctx.guild.id });
-        if (!result)
+        const removed = await clearLogChannel(ctx.guild.id);
+        if (!removed)
           return ctx.send({ content: "No hay un canal de logs configurado", flags: MessageFlags.Ephemeral });
 
         await ctx.send({ embeds: [new EmbedBuilder()

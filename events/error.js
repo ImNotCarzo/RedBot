@@ -1,6 +1,10 @@
 const { Errors } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../utils/colors");
+const Logger = require("../src/core/logger");
+const { sanitizeError } = require("../src/handlers/eventRuntime");
+
+const log = new Logger("EVENT_FRAMEWORK_ERROR", process.env.LOG_LEVEL);
 
 function is(err, Type) {
   try {
@@ -12,13 +16,24 @@ function is(err, Type) {
 
 const event = {
   name: "frameworkError",
-  async code(client, err) {
+  once: false,
+  async code(_client, err) {
+    const guildId = err?.ctx?.guild?.id ?? err?.ctx?.data?.guildId;
+    const userId = err?.ctx?.user?.id ?? err?.ctx?.author?.id;
+    const commandName = err?.ctx?.command?.data?.name;
+
+    const safeSend = async (payload) => {
+      if (typeof err?.ctx?.send !== "function") return;
+      try {
+        await err.ctx.send(payload);
+      } catch {}
+    };
 
     if (is(err, Errors.GuildOnly)) {
       if (err.ctx) {
         const isDM = !err.ctx.data?.guildId;
         if (isDM) return;
-        return err.ctx.send("Este comando solo se puede usar en servidores");
+        return safeSend("Este comando solo se puede usar en servidores");
       }
       return;
     }
@@ -26,31 +41,31 @@ const event = {
     if (is(err, Errors.CommandNotFound)) return;
 
     if (is(err, Errors.NotOwner)) {
-      return err.ctx?.send("Only owner lol");
+      return safeSend("Only owner lol");
     }
 
     if (is(err, Errors.MissingPermission)) {
       const permisos = err.permissions?.join(", ") || "los requeridos";
-      return err.ctx?.send(`No tienes permisos para usar este comando, necesitas: \`${permisos}\``);
+      return safeSend(`No tienes permisos para usar este comando, necesitas: \`${permisos}\``);
     }
 
     if (is(err, Errors.MissingBotPermission)) {
       const permisos = err.permissions?.join(", ") || "los requeridos";
-      return err.ctx?.send(`No tengo permisos suficientes, necesito: \`${permisos}\``);
+      return safeSend(`No tengo permisos suficientes, necesito: \`${permisos}\``);
     }
 
     if (is(err, Errors.MissingBotChannelPermission)) {
       const permisos = err.permissions?.join(", ") || "los requeridos";
-      return err.ctx?.send(`No tengo permisos en este canal, necesito: \`${permisos}\``);
+      return safeSend(`No tengo permisos en este canal, necesito: \`${permisos}\``);
     }
 
     if (is(err, Errors.MissingChannelPermission)) {
       const permisos = err.permissions?.join(", ") || "los requeridos";
-      return err.ctx?.send(`No tienes permisos en este canal, necesitas: \`${permisos}\``);
+      return safeSend(`No tienes permisos en este canal, necesitas: \`${permisos}\``);
     }
 
     if (is(err, Errors.OnlyForIDs)) {
-      return err.ctx?.send("Este comando solo lo pueden usar usuarios específicos");
+      return safeSend("Este comando solo lo pueden usar usuarios específicos");
     }
 
     if (is(err, Errors.MissingRequiredParam)) {
@@ -66,27 +81,27 @@ const event = {
         )
         .setColor(RED);
 
-      return err.ctx.send({ embeds: [paramerror] });
+      return safeSend({ embeds: [paramerror] });
     }
 
     if (is(err, Errors.NotNSFW)) {
-      return err.ctx?.send("Este comando solo se puede usar en canales NSFW");
+      return safeSend("Este comando solo se puede usar en canales NSFW");
     }
 
     if (is(err, Errors.NotInChannelType)) {
-      return err.ctx?.send("No puedes usar este comando en este tipo de canal");
+      return safeSend("No puedes usar este comando en este tipo de canal");
     }
 
     if (is(err, Errors.InvalidParamMember)) {
-      return err.ctx?.send("No encontré ese usuario en el servidor");
+      return safeSend("No encontré ese usuario en el servidor");
     }
 
     if (is(err, Errors.InvalidParamChannel)) {
-      return err.ctx?.send("No encontré ese canal");
+      return safeSend("No encontré ese canal");
     }
 
     if (is(err, Errors.InvalidParamRole)) {
-      return err.ctx?.send("No encontré ese rol");
+      return safeSend("No encontré ese rol");
     }
 
     if (
@@ -95,14 +110,21 @@ const event = {
       is(err, Errors.InvalidParamChoice) ||
       is(err, Errors.InvalidChannelType)
     ) {
-      return err.ctx?.send(`Parámetro inválido: \`${err.message ?? "valor incorrecto"}\``);
+      return safeSend(`Parámetro inválido: \`${err.message ?? "valor incorrecto"}\``);
     }
 
     if (is(err, Errors.UnknownCommandError)) {
-      return err.ctx?.send("Ocurrió un error desconocido con el comando");
+      return safeSend("Ocurrió un error desconocido con el comando");
     }
 
-    console.error("[Gralonium Error]", err);
+    log.error("FrameworkError no categorizado", {
+      event: "frameworkError",
+      guildId,
+      userId,
+      commandName,
+      err: sanitizeError(err),
+    });
+    return safeSend("Ocurrió un error interno al ejecutar el comando.");
   },
 };
 

@@ -8,9 +8,11 @@ const {
   ComponentType,
   EmbedBuilder,
 } = require("gralonium");
-const { getId } = require("../utils/commandIds");
+const { getId } = require("../src/state/commandIds.store");
+const { createCommandLogger } = require("./_shared/runtime");
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186&permissions=0&scope=bot";
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
+const log = createCommandLogger("CMD_HELP");
 
 const IDS = {
   ask:     () => getId("ask"),
@@ -151,7 +153,7 @@ const data = {
       const isSlash  = Boolean(ctx.interaction);
       const authorId = ctx.user?.id ?? ctx.author?.id;
 
-      const prefixCache = require("../utils/prefixCache");
+      const prefixCache = require("../src/cache/prefix.cache");
       const prefix = (ctx.guild?.id && prefixCache.get(ctx.guild.id)) || ".";
 
       const COMMANDS = getCommands();
@@ -310,7 +312,7 @@ const data = {
       });
 
     } catch (err) {
-      console.error("[help]", err);
+      log.error("[help]", { err: err?.message ?? String(err) });
       await ctx.send("Error al mostrar el help");
     }
   },

@@ -33,7 +33,7 @@ npm start
 | `TOKEN`       | ✅        | Discord bot token                                            |
 | `MONGO`       | ✅        | MongoDB connection URI                                       |
 | `CLIENT_ID`   | ✅        | Discord application (client) ID                             |
-| `GEMINI`      | ✅*       | Primary Google Gemini API key (`*` needed for `/ask`; read by `utils/ai.js`) |
+| `GEMINI`      | ✅*       | Primary Google Gemini API key (`*` needed for `/ask`; read by `src/services/ai.service.js`) |
 | `GEMINI2`     | ❌        | Second Gemini key — rotated automatically on rate-limit      |
 | `OPENROUTER`  | ❌        | OpenRouter API key                                            |
 | `GROQ`        | ❌        | Groq API key (used by specific commands)                     |
@@ -78,13 +78,21 @@ RedBot/
 │   ├── resolvers/
 │   │   ├── role.resolver.js    # resolveRoleFlexible
 │   │   ├── channel.resolver.js # resolveChannelFlexible
-│   │   └── attachment.resolver.js # buildAttachmentFromUrl + resolveAttachmentInput
+│   │   ├── attachment.resolver.js # buildAttachmentFromUrl + resolveAttachmentInput
+│   │   └── member.resolver.js  # resolveMemberFlexible
+│   ├── cache/
+│   │   └── prefix.cache.js     # Prefix cache with TTL + LRU-style eviction
+│   ├── state/
+│   │   └── commandIds.store.js # Runtime slash-command ID registry
 │   ├── utils/
 │   │   ├── normalize.js        # normalizeReplyPayload
 │   │   ├── parsers.js          # parsePrefixedArgsForSlash
-│   │   └── validators.js       # DISCORD_ID_PATTERN, language tokens
+│   │   ├── validators.js       # DISCORD_ID_PATTERN, language tokens
+│   │   └── moderation.js       # generateId + parse/formatDuration
 │   ├── services/
-│   │   └── ai.service.js       # Gemini API wrapper (re-exports utils/ai.js)
+│   │   ├── ai.service.js       # Gemini generation with timeout/retry/rotation
+│   │   ├── memory.service.js   # Conversational memory lifecycle (TTL)
+│   │   └── logging.service.js  # Guild moderation log sender
 │   ├── middleware/
 │   │   └── errorHandler.js     # Graceful shutdown, SIGTERM/SIGINT
 │   └── index.js                # Entry point (~30 lines)
@@ -92,10 +100,11 @@ RedBot/
 ├── commands/                   # Slash command groups & standalone commands
 │   ├── ask.js
 │   ├── channel.js / fun.js / mod.js / role.js / server.js / user.js / util.js
+│   ├── _shared/thinking.js     # Shared "thinking..." reply helpers
 │   └── prefixed/               # Prefixed equivalents (auto-wrapped)
 ├── events/                     # Gralonium event handlers
 ├── models/                     # Mongoose models (GuildConfig, Log, Warn, TempBan)
-├── utils/                      # Shared utilities (ai.js, helpers.js, etc.)
+├── utils/                      # Pure shared constants/helpers (colors)
 ├── config/
 │   └── prefixedToSlashMap.js   # Static prefixed→slash name mapping
 ├── .env.example

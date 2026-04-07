@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { resolveMemberFlexible } = require("../../utils/helpers");
+const { resolveMemberFlexible } = require("../../src/resolvers/member.resolver");
 
 const data = {
   data: new CommandBuilder({

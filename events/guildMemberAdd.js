@@ -1,35 +1,54 @@
-const mongoose = require("mongoose");
-
-const joinRoleSchema = new mongoose.Schema({
-  guildId:    { type: String,  required: true, unique: true },
-  roleId:     { type: String,  required: true },
-  ignoreBots: { type: Boolean, default: false },
-});
-
-const JoinRole = mongoose.models.JoinRole || mongoose.model("JoinRole", joinRoleSchema);
+const JoinRole = require("../models/JoinRole");
+const Logger = require("../src/core/logger");
+const log = new Logger("EVENT_GUILD_MEMBER_ADD", process.env.LOG_LEVEL);
 
 const event = {
   name: "guildMemberAdd",
-  async code(bot, member) {
-    try {
-      const config = await JoinRole.findOne({ guildId: member.guild.id });
-      if (!config) return;
+  once: false,
+  async code(_bot, member) {
+    if (!member?.guild?.id || !member?.user) return;
 
-      if (config.ignoreBots && member.user.bot) return;
+    const guildId = member.guild.id;
+    const userId = member.user.id;
 
-      const role = member.guild.roles.cache.get(config.roleId);
-      if (!role) {
-        await JoinRole.deleteOne({ guildId: member.guild.id });
-        return;
-      }
+    const config = await JoinRole.findOne({ guildId }).lean();
+    if (!config) return;
 
-      if (role.position >= member.guild.members.me.roles.highest.position) return;
+    if (config.ignoreBots && member.user.bot) return;
 
-      await member.roles.add(role, "Rol automático al unirse");
-    } catch (err) {
-      console.error("[guildMemberAdd]", err);
+    const role = member.guild.roles.cache.get(config.roleId);
+    if (!role) {
+      await JoinRole.deleteOne({ guildId }).catch((err) => {
+        log.warn("No se pudo limpiar configuración de rol automático inválida", {
+          event: "guildMemberAdd",
+          guildId,
+          roleId: config.roleId,
+          err: err?.message ?? String(err),
+        });
+      });
+      return;
     }
+
+    const me = member.guild.members.me;
+    if (!me?.permissions?.has("ManageRoles")) {
+      log.warn("Sin permisos para asignar rol automático", { event: "guildMemberAdd", guildId, userId, roleId: role.id });
+      return;
+    }
+    if (role.position >= me.roles.highest.position) {
+      log.warn("Rol automático por encima de la jerarquía del bot", { event: "guildMemberAdd", guildId, userId, roleId: role.id });
+      return;
+    }
+
+    await member.roles.add(role, "Rol automático al unirse").catch((err) => {
+      log.error("Error al asignar rol automático", {
+        event: "guildMemberAdd",
+        guildId,
+        userId,
+        roleId: role.id,
+        err: err?.message ?? String(err),
+      });
+    });
   },
 };
 
-module.exports = { data: event, JoinRole };
+module.exports = { data: event };

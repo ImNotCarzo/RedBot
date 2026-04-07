@@ -1,10 +1,13 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../utils/ai");
-const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../utils/askMemory");
+const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../src/services/ai.service");
+const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../src/services/memory.service");
 const { SYSTEM_PROMPT, AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../src/config/constants");
 const { RED } = require("../utils/colors");
-const { sendThinkingReply, editThinkingReply } = require("../utils/thinkingReply");
+const { sendThinkingReply, editThinkingReply } = require("../commands/_shared/thinking");
+const { createCommandLogger } = require("./_shared/runtime");
+
+const log = createCommandLogger("CMD_ASK");
 
 const data = {
   data: new CommandBuilder({
@@ -94,7 +97,7 @@ const data = {
       }
 
     } catch (err) {
-      console.error("Error en ask:", err);
+      log.error("Error en ask", { err: err?.message ?? String(err) });
       if (ctx.interaction) {
         await ctx.interaction.editReply("Algo salió mal, intenta de nuevo").catch(() => {});
       } else {

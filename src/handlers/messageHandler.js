@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require("discord.js");
-const { setConversacion, getConversacion } = require("../../utils/askMemory");
+const { setConversacion, getConversacion } = require("../services/memory.service");
 const { generateWithFallback, needsSearchAI, toGeminiHistory } = require("../services/ai.service");
+const { registerBotEvent } = require("./eventRuntime");
 const {
   MAX_HISTORIAL,
   SYSTEM_PROMPT,
@@ -22,7 +23,10 @@ const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
  * @param {import("../core/logger")} [log]
  */
 function registerMessageHandler(bot, log) {
-  bot.on("messageCreate", async (message) => {
+  registerBotEvent(bot, {
+    name: "messageCreate",
+    source: "handlers/messageHandler",
+    async code(_bot, message) {
     try {
       if (message.author.bot)            return;
       if (!message.reference?.messageId) return;
@@ -83,9 +87,19 @@ function registerMessageHandler(bot, log) {
       setConversacion(message.author.id, historialFinal, botMsg.id);
 
     } catch (err) {
-      log?.error("messageCreate IA", { err: err.message });
+      const isRateLimit = err?.status === 429 || err?.message?.includes("429");
+      if (isRateLimit) {
+        log?.warn("messageCreate IA: límite de tasa alcanzado", { err: err.message });
+        await message.reply({
+          content: "⚠️ El servicio de IA está temporalmente sobrecargado. Por favor intenta de nuevo en unos segundos.",
+          allowedMentions: { repliedUser: false },
+        }).catch(() => {});
+      } else {
+        log?.error("messageCreate IA", { err: err.message });
+      }
     }
-  });
+    },
+  }, log);
 }
 
 module.exports = { registerMessageHandler };

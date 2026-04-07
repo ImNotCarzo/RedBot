@@ -1,4 +1,4 @@
-const { resolveMemberFlexible } = require("../../utils/helpers");
+const { resolveMemberFlexible } = require("../resolvers/member.resolver");
 const { resolveRoleFlexible }   = require("../resolvers/role.resolver");
 const { resolveChannelFlexible } = require("../resolvers/channel.resolver");
 const { resolveAttachmentInput } = require("../resolvers/attachment.resolver");
