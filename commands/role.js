@@ -10,6 +10,7 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
+const { createCommandLogger, clampPage } = require("./_shared/runtime");
 const Log = require("../models/Log");
  
 // ─────────────────────────────────────────────
@@ -20,6 +21,7 @@ const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906
 const RED   = "#ff383d";
 const GREEN = "#23a55a";
 const DARK  = "#2b2d31";
+const log = createCommandLogger("CMD_ROLE");
  
 // ─────────────────────────────────────────────
 //  HELPERS
@@ -235,6 +237,7 @@ const data = {
         subCollector.on("collect", async i => {
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await i.update({ embeds: [buildPermsEmbed(page)], components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] });
         });
         return;
@@ -276,6 +279,7 @@ const data = {
         subCollector.on("collect", async i => {
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await i.update({ embeds: [buildUsersEmbed(page)], components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] });
         });
       }
@@ -400,6 +404,7 @@ const data = {
         if (i.user.id !== authorId) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
         if (i.customId === prevId) page--;
         if (i.customId === nextId) page++;
+        page = clampPage(page, pages.length);
         await i.update({ embeds: [buildEmbed()], components: [buildPagRow(prevId, nextId, page, pages.length)] });
       });
 
@@ -1231,6 +1236,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
         if (i.customId === prevId) page--;
         if (i.customId === nextId) page++;
+        page = clampPage(page, pages.length);
 
         await i.update({
           embeds: [buildEmbed()],
@@ -1241,7 +1247,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       collector.on("end", () => reply.edit({ components: [] }).catch(() => {}));
 
     } catch (err) {
-      console.error("Error en role permissions:", err);
+      log.error("Error en role permissions", { err: err?.message ?? String(err) });
       ctx.send("No se pudieron obtener los permisos del rol");
     }
   }

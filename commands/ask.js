@@ -5,6 +5,9 @@ const { MAX_HISTORIAL, setConversacion, getConversacion } = require("../utils/as
 const { SYSTEM_PROMPT, AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../src/config/constants");
 const { RED } = require("../utils/colors");
 const { sendThinkingReply, editThinkingReply } = require("../utils/thinkingReply");
+const { createCommandLogger } = require("./_shared/runtime");
+
+const log = createCommandLogger("CMD_ASK");
 
 const data = {
   data: new CommandBuilder({
@@ -94,7 +97,7 @@ const data = {
       }
 
     } catch (err) {
-      console.error("Error en ask:", err);
+      log.error("Error en ask", { err: err?.message ?? String(err) });
       if (ctx.interaction) {
         await ctx.interaction.editReply("Algo salió mal, intenta de nuevo").catch(() => {});
       } else {

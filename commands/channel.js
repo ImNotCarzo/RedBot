@@ -2,6 +2,10 @@ const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, PermissionFl
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { RED, GREEN, BLUE } = require("../utils/colors");
 const { sendLog } = require("../utils/sendLog");
+const { createCommandLogger } = require("./_shared/runtime");
+
+const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
+const log = createCommandLogger("CMD_CHANNEL");
 
 function noGuildReply(ctx) {
   return ctx.send({
@@ -107,7 +111,7 @@ const data = {
 
       await ctx.send({ embeds: [infoEmbed] });
     } catch (err) {
-      console.error("Error en channel info:", err);
+      log.error("Error en channel info", { err: err?.message ?? String(err) });
       await ctx.send("No se pudo obtener la información del canal");
     }
   },
@@ -422,7 +426,7 @@ const data = {
           });
 
         } catch (err) {
-          console.error("Error en nuke:", err);
+          log.error("Error en nuke", { err: err?.message ?? String(err) });
 
           await interaction.update({
             embeds: [

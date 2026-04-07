@@ -6,9 +6,11 @@ const { generateWithFallback } = require("../utils/ai");
 const { RED, GREEN } = require("../utils/colors");
 const prefixCache = require("../utils/prefixCache");
 const { getAI } = require("../utils/ai");
+const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
 
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
+const log = createCommandLogger("CMD_UTIL");
 
 //  AI
 async function generateGemma(messages) {
@@ -30,7 +32,7 @@ async function generateGemma(messages) {
     if (!text && !imageUrl) throw new Error("Request requires either text or an image");
     const parts = [{ text: text || "Describe la imagen." }];
     if (imageUrl) {
-      const res = await fetch(imageUrl);
+      const res = await fetchWithTimeout(imageUrl, {}, 10_000);
       if (!res.ok) {
         throw new Error(`No se pudo descargar la imagen (${res.status})`);
       }
@@ -68,15 +70,6 @@ async function generateGeminiText(prompt) {
 // ─────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────
-
-async function prepare(ctx) {
-  const isSlash = !!ctx.interaction;
-  if (isSlash) {
-    await ctx.interaction.deferReply();
-    return (payload) => ctx.interaction.editReply(payload);
-  }
-  return (payload) => ctx.send(payload);
-}
 
 // ─────────────────────────────────────────────
 //  DATA
@@ -118,7 +111,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[util ping]", err);
+        log.error("[util ping]", { err: err?.message ?? String(err) });
         await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
       }
     },
@@ -177,7 +170,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[util botinfo]", err);
+        log.error("[util botinfo]", { err: err?.message ?? String(err) });
         await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
       }
     },
@@ -200,7 +193,7 @@ const data = {
         );
         await ctx.send({ content: INVITE_URL, components: [row] });
       } catch (err) {
-        console.error("[util invite]", err);
+        log.error("[util invite]", { err: err?.message ?? String(err) });
         await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
       }
     },
@@ -261,7 +254,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[util setprefix]", err);
+        log.error("[util setprefix]", { err: err?.message ?? String(err) });
         await ctx.send({ content: "No se pudo cambiar el prefix", flags: MessageFlags.Ephemeral });
       }
     },
@@ -303,7 +296,7 @@ const data = {
     }),
 
   async code(ctx) {
-    const reply  = await prepare(ctx);
+    const reply  = await prepareReply(ctx);
     const texto  = ctx.get("texto");
     const idioma = ctx.get("idioma") ?? "es";
 
@@ -331,7 +324,7 @@ const data = {
         ],
       });
     } catch (err) {
-      console.error("[util translate]", err);
+      log.error("[util translate]", { err: err?.message ?? String(err) });
       if (err.name === "TooManyRequestsError")
         return reply({ content: "Google Translate está saturado, intenta en unos segundos", flags: MessageFlags.Ephemeral });
       await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
@@ -353,7 +346,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply      = await prepare(ctx);
+      const reply      = await prepareReply(ctx);
       const attachment = ctx.get("imagen");
       if (!attachment) {
         return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
@@ -394,7 +387,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[util describe]", err);
+        log.error("[util describe]", { err: err?.message ?? String(err) });
         await reply({ content: "No se pudo procesar la imagen", flags: MessageFlags.Ephemeral });
       }
     },
@@ -414,7 +407,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply      = await prepare(ctx);
+      const reply      = await prepareReply(ctx);
       const attachment = ctx.get("archivo");
 
       const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac)$/i;
@@ -431,7 +424,8 @@ const data = {
         const { default: Groq } = require("groq-sdk");
         const groq = new Groq({ apiKey: process.env.GROQ });
 
-        const fileRes = await fetch(attachment.url);
+        const fileRes = await fetchWithTimeout(attachment.url, {}, 10_000);
+        if (!fileRes.ok) throw new Error(`No se pudo descargar archivo (${fileRes.status})`);
         const blob    = await fileRes.blob();
         const file    = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
 
@@ -461,7 +455,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[util transcribe]", err);
+        log.error("[util transcribe]", { err: err?.message ?? String(err) });
         await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
       }
     },
@@ -482,7 +476,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepare(ctx);
+      const reply = await prepareReply(ctx);
       const texto = ctx.get("texto");
 
       if (texto.length < 100) {
@@ -504,7 +498,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[util resume]", err);
+        log.error("[util resume]", { err: err?.message ?? String(err) });
         await reply({ content: "No se pudo resumir el texto", flags: MessageFlags.Ephemeral });
       }
     },

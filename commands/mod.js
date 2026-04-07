@@ -8,6 +8,7 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
+const { clampPage } = require("./_shared/runtime");
 
 const Log     = require("../models/Log");
 const Warn    = require("../models/Warn");
@@ -699,6 +700,7 @@ const data = {
           if (i.user.id !== authorId) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           if (i.customId === prevId) page--;
           if (i.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await i.update({ embeds: [buildEmbed()], components: [buildPagRow(prevId, nextId, page, pages.length)] });
         });
 

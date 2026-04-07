@@ -9,9 +9,11 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
+const { createCommandLogger, clampPage } = require("./_shared/runtime");
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
 const COLOR = "#ff383d";
+const log = createCommandLogger("CMD_SERVER");
 
 // helper para reutilizar en todos los subcomandos
 function noGuildReply(ctx) {
@@ -236,6 +238,7 @@ const data = {
             rolesPageCollector.on("collect", async (i) => {
               if (i.customId === prevId) page--;
               if (i.customId === nextId) page++;
+              page = clampPage(page, pages.length);
               await i.update({
                 embeds: [buildRolesEmbed()],
                 components: [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)],
@@ -254,7 +257,7 @@ const data = {
         });
 
       } catch (err) {
-        console.error("Error en server info:", err);
+        log.error("Error en server info", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener la información del servidor");
       }
     },
@@ -284,7 +287,7 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
       } catch (err) {
-        console.error("Error en server logo:", err);
+        log.error("Error en server logo", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener el logo");
       }
     },
@@ -314,7 +317,7 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
       } catch (err) {
-        console.error("Error en server banner:", err);
+        log.error("Error en server banner", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener el banner");
       }
     },
@@ -344,7 +347,7 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
       } catch (err) {
-        console.error("Error en server emojis:", err);
+        log.error("Error en server emojis", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener los emojis");
       }
     },
@@ -405,6 +408,7 @@ const data = {
           }
           if (interaction.customId === prevId) page--;
           if (interaction.customId === nextId) page++;
+          page = clampPage(page, pages.length);
           await interaction.update({ embeds: [buildEmbed()], components: [buildPagRow(prevId, nextId, page, pages.length)] });
         });
 
@@ -413,7 +417,7 @@ const data = {
         });
 
       } catch (err) {
-        console.error("Error en server roles:", err);
+        log.error("Error en server roles", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener los roles");
       }
     },

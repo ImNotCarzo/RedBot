@@ -219,7 +219,9 @@ function wrapPrefixedCommands(log) {
             if (blocked) return;
           }
           if (parsedValues.missingRequired) {
-            return await originalCode.call(this, ctx, ...args);
+            const fallbackResult = await originalCode.call(this, ctx, ...args);
+            if (fallbackResult !== undefined) return fallbackResult;
+            return ctx.send("Faltan parámetros requeridos para ejecutar este comando.");
           }
 
           const originalGet = ctx.get?.bind(ctx);

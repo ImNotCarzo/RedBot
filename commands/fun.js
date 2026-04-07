@@ -1,12 +1,14 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const { getAI } = require("../utils/ai");
+const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
 // ─────────────────────────────────────────────
 
 const COLOR = "#ff383d";
+const log = createCommandLogger("CMD_FUN");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -31,7 +33,8 @@ async function generateGemma(prompt) {
 }
 
 async function generateGemmaVision(prompt, imageUrl) {
-  const imgRes    = await fetch(imageUrl);
+  const imgRes    = await fetchWithTimeout(imageUrl, {}, 10_000);
+  if (!imgRes.ok) throw new Error(`No se pudo descargar imagen (${imgRes.status})`);
   const imgBuf    = await imgRes.arrayBuffer();
   const imgBase64 = Buffer.from(imgBuf).toString("base64");
   const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
@@ -63,15 +66,6 @@ async function generateGeminiFlash(prompt) {
 // ─────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────
-
-async function prepare(ctx) {
-  const isSlash = !!ctx.interaction;
-  if (isSlash) {
-    await ctx.interaction.deferReply();
-    return (payload) => ctx.interaction.editReply(payload);
-  }
-  return (payload) => ctx.send(payload);
-}
 
 function msATexto(ms) {
   const min  = Math.floor(ms / 60000);
@@ -113,7 +107,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepare(ctx);
+      const reply = await prepareReply(ctx);
       const tema  = ctx.get("tema");
 
       try {
@@ -131,7 +125,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[fun opinion]", err);
+        log.error("[fun opinion]", { err: err?.message ?? String(err) });
         await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
@@ -151,7 +145,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepare(ctx);
+      const reply = await prepareReply(ctx);
       const tema  = ctx.get("tema");
 
       try {
@@ -169,7 +163,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[fun critica]", err);
+        log.error("[fun critica]", { err: err?.message ?? String(err) });
         await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
@@ -190,7 +184,7 @@ const data = {
     }),
 
   async code(ctx) {
-    const reply = await prepare(ctx);
+    const reply = await prepareReply(ctx);
 
     const situacion = ctx.get("situacion")?.trim() || "cualquier situación";
 
@@ -214,7 +208,7 @@ const data = {
         ],
       });
     } catch (err) {
-      console.error("[fun excusa]", err);
+      log.error("[fun excusa]", { err: err?.message ?? String(err) });
 
       await reply({
         content: "Ocurrió un error con la IA, intenta de nuevo",
@@ -238,7 +232,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepare(ctx);
+      const reply = await prepareReply(ctx);
       const tema  = ctx.get("tema");
 
       try {
@@ -257,7 +251,7 @@ const data = {
           ],
         });
       } catch (err) {
-        console.error("[fun teoria]", err);
+        log.error("[fun teoria]", { err: err?.message ?? String(err) });
         await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
@@ -284,7 +278,7 @@ const data = {
         });
       }
 
-      const reply = await prepare(ctx);
+      const reply = await prepareReply(ctx);
 
       try {
         const target = ctx.get("usuario") ?? ctx.member;
@@ -350,7 +344,7 @@ ${datosUsuario}`;
           ],
         });
       } catch (err) {
-        console.error("[fun roast]", err);
+        log.error("[fun roast]", { err: err?.message ?? String(err) });
         await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
       }
     },
