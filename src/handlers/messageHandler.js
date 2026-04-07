@@ -83,7 +83,16 @@ function registerMessageHandler(bot, log) {
       setConversacion(message.author.id, historialFinal, botMsg.id);
 
     } catch (err) {
-      log?.error("messageCreate IA", { err: err.message });
+      const isRateLimit = err?.status === 429 || err?.message?.includes("429");
+      if (isRateLimit) {
+        log?.warn("messageCreate IA: límite de tasa alcanzado", { err: err.message });
+        await message.reply({
+          content: "⚠️ El servicio de IA está temporalmente sobrecargado. Por favor intenta de nuevo en unos segundos.",
+          allowedMentions: { repliedUser: false },
+        }).catch(() => {});
+      } else {
+        log?.error("messageCreate IA", { err: err.message });
+      }
     }
   });
 }

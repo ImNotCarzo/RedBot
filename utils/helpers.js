@@ -1,3 +1,8 @@
+const TempBan = require("../models/TempBan");
+const Logger = require("../src/core/logger");
+
+const log = new Logger("TEMPBAN");
+
 function generateId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
@@ -49,8 +54,6 @@ async function resolveMemberFlexible(ctx, input) {
   }) ?? null;
 }
 
-const TempBan = require("../models/TempBan");
-
 function scheduleTempUnban(client, guildId, userId, unbanAt) {
   const delay = unbanAt.getTime() - Date.now();
 
@@ -61,24 +64,25 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
         const doc = await TempBan.findOne({ guildId, userId });
         existing = !!doc;
       } catch (err) {
-        console.error("[TempBan] No se pudo verificar registro antes de unban:", err?.message ?? err);
+        log.error("No se pudo verificar registro antes de unban", { err: err?.message ?? String(err) });
       }
       if (existing === false) return;
       const guild = await client.guilds.fetch(guildId).catch(() => null);
       if (!guild) return;
       await guild.members.unban(userId, "Tempban expirado");
       await TempBan.deleteOne({ guildId, userId });
-    } catch {
+    } catch (err) {
+      log.error("Error al ejecutar unban", { guildId, userId, err: err?.message ?? String(err) });
       await TempBan.deleteOne({ guildId, userId }).catch(() => {});
     }
   };
 
   if (delay <= 0) {
-    void execute();
+    execute().catch((err) => log.error("Error inesperado en execute (inmediato)", { err: err?.message ?? String(err) }));
     return;
   }
   const timeout = setTimeout(() => {
-    void execute();
+    execute().catch((err) => log.error("Error inesperado en execute (timeout)", { err: err?.message ?? String(err) }));
   }, delay);
   timeout.unref();
 }

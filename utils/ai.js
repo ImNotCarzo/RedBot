@@ -1,4 +1,7 @@
 const { GoogleGenAI } = require("@google/genai");
+const Logger = require("../src/core/logger");
+
+const log = new Logger("AI");
 
 const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
 let currentKey = 0;
@@ -17,7 +20,7 @@ function getAI() {
 
 function rotateKey() {
   currentKey = (currentKey + 1) % GEMINI_KEYS.length;
-  console.log("[AI] Rotando clave de respaldo");
+  log.warn("Rotando clave de respaldo");
 }
 
 async function generateWithFallback(params) {
@@ -26,7 +29,12 @@ async function generateWithFallback(params) {
   } catch (err) {
     if (err.status === 429 && GEMINI_KEYS.length > 1) {
       rotateKey();
-      return await getAI().models.generateContent(params);
+      try {
+        return await getAI().models.generateContent(params);
+      } catch (retryErr) {
+        log.error("Error tras rotación de clave", { err: retryErr?.message ?? String(retryErr) });
+        throw retryErr;
+      }
     }
     throw err;
   }

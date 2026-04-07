@@ -29,6 +29,7 @@ function registerReadyHandler(bot, config, log) {
           body: JSON.stringify([
             { key: "servidores", name: "Servidores", description: "Servidores", type: 2 },
           ]),
+          signal: AbortSignal.timeout(10_000),
         }
       );
 
