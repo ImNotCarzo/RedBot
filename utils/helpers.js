@@ -3,9 +3,10 @@ const { scheduleTempUnban: scheduleTempUnbanService } = require("../src/services
 
 function generateId() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = crypto.randomBytes(6);
   let id = "";
-  for (const byte of bytes) id += alphabet[byte % alphabet.length];
+  for (let i = 0; i < 6; i += 1) {
+    id += alphabet[crypto.randomInt(0, alphabet.length)];
+  }
   return id;
 }
 
