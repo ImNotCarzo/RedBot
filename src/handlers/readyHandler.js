@@ -41,8 +41,12 @@ function registerReadyHandler(bot, config, log) {
     }
 
     // ── Sync slash commands ───────────────────────────────────────────────
-    await readyBot.sync();
-    log?.info("Comandos slash sincronizados");
+    try {
+      await readyBot.sync();
+      log?.info("Comandos slash sincronizados");
+    } catch (err) {
+      log?.error("Error al sincronizar comandos slash", { err: err.message });
+    }
 
     // ── Patch integration_types / contexts ────────────────────────────────
     try {
@@ -54,14 +58,17 @@ function registerReadyHandler(bot, config, log) {
 
         if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
 
-        await rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
-          body: {
-            integration_types: [0, 1],
-            contexts:          [0, 1, 2],
-          },
-        });
-
-        log?.info(`Contextos actualizados: ${cmd.name}`);
+        try {
+          await rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
+            body: {
+              integration_types: [0, 1],
+              contexts:          [0, 1, 2],
+            },
+          });
+          log?.info(`Contextos actualizados: ${cmd.name}`);
+        } catch (patchErr) {
+          log?.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
+        }
       }
 
       log?.info("Todos los contextos actualizados");
