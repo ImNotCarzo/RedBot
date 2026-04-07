@@ -1,7 +1,12 @@
+const crypto = require("node:crypto");
 const { scheduleTempUnban: scheduleTempUnbanService } = require("../src/services/moderation.service");
 
 function generateId() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(6);
+  let id = "";
+  for (const byte of bytes) id += alphabet[byte % alphabet.length];
+  return id;
 }
 
 function parseDuration(str) {
