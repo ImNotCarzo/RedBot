@@ -35,7 +35,7 @@ function setConversacion(userId, historial, lastBotMessageId) {
     if (session) clearSessionTimeout(session);
     sessions.delete(userId);
   }, SESSION_TTL_MS);
-  timeout.unref?.();
+  timeout.unref();
 
   const normalizedHistory = Array.isArray(historial) ? historial.slice(-MAX_HISTORIAL) : [];
   sessions.set(userId, {

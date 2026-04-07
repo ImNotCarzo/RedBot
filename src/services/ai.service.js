@@ -50,7 +50,7 @@ async function withTimeout(promise, timeoutMs) {
       promise,
       new Promise((_, reject) => {
         timeout = setTimeout(() => reject(new Error(`AI timeout (${timeoutMs}ms)`)), timeoutMs);
-        timeout.unref?.();
+        timeout.unref();
       }),
     ]);
   } finally {

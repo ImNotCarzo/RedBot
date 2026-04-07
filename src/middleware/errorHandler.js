@@ -25,7 +25,7 @@ async function gracefulShutdown(signal, bot, log) {
     log?.error("Cierre forzado tras timeout");
     process.exit(1);
   }, Number.isFinite(SHUTDOWN_TIMEOUT_MS) ? SHUTDOWN_TIMEOUT_MS : 15000);
-  forceExitTimer.unref?.();
+  forceExitTimer.unref();
 
   try {
     if (typeof bot?.destroy === "function") {
