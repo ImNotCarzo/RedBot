@@ -5,6 +5,7 @@ const { pathToFileURL } = require("url");
 
 const ROOT = process.cwd();
 const NPM_BIN = process.env.NPM_BIN || "/usr/local/bin/npm";
+const SELF_PATH = path.resolve(__filename);
 
 function log(message, meta = null) {
   const ts = new Date().toISOString();
@@ -37,6 +38,12 @@ function splitPackages(raw) {
 
 function exists(relPath) {
   return fs.existsSync(path.resolve(ROOT, relPath));
+}
+
+function isSelfEntry(entry) {
+  if (!entry) return false;
+  const absolute = path.resolve(ROOT, entry);
+  return absolute === SELF_PATH;
 }
 
 function run(cmd, args, options = {}) {
@@ -190,12 +197,18 @@ function resolveEntryPoint() {
     process.env.APP_FILE,
     process.env.MAIN_FILE
   );
-  if (explicit && explicit !== "package.json") return explicit;
+  if (explicit && explicit !== "package.json") {
+    if (!isSelfEntry(explicit)) return explicit;
+    log("Se ignora MAIN_FILE/APP_ENTRY porque apunta al bootstrap", { explicit });
+  }
 
   if (exists("package.json")) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.resolve(ROOT, "package.json"), "utf8"));
-      if (typeof pkg.main === "string" && pkg.main.trim()) return pkg.main.trim();
+      if (typeof pkg.main === "string" && pkg.main.trim()) {
+        if (!isSelfEntry(pkg.main.trim())) return pkg.main.trim();
+        log("Se ignora package.json main porque apunta al bootstrap", { main: pkg.main.trim() });
+      }
     } catch {
       // noop
     }
@@ -227,6 +240,9 @@ async function startApp() {
 
   if (!fs.existsSync(absolute)) {
     throw new Error(`No existe el archivo de inicio: ${entry}`);
+  }
+  if (absolute === SELF_PATH) {
+    throw new Error(`El archivo de inicio no puede ser el bootstrap: ${entry}`);
   }
 
   log("Iniciando aplicación", { entry });
