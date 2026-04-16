@@ -55,11 +55,20 @@ function run(cmd, args, options = {}) {
   });
 }
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value ?? String(fallback), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleepMs(ms) {
+  const delay = Number.isFinite(ms) && ms > 0 ? ms : 0;
+  if (delay === 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+}
+
 function runWithRetry(cmd, args, options = {}) {
-  const attempts = Number.parseInt(process.env.BOOTSTRAP_RETRIES ?? "3", 10);
-  const maxAttempts = Number.isFinite(attempts) && attempts > 0 ? attempts : 3;
-  const baseDelayMs = Number.parseInt(process.env.BOOTSTRAP_RETRY_DELAY_MS ?? "1500", 10);
-  const delayBase = Number.isFinite(baseDelayMs) && baseDelayMs >= 0 ? baseDelayMs : 1500;
+  const maxAttempts = parsePositiveInt(process.env.BOOTSTRAP_RETRIES, 3);
+  const delayBase = parsePositiveInt(process.env.BOOTSTRAP_RETRY_DELAY_MS, 1500);
 
   let lastError;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -76,11 +85,7 @@ function runWithRetry(cmd, args, options = {}) {
         maxAttempts,
         delay,
       });
-      execFileSync("/bin/sh", ["-lc", `sleep ${Math.max(delay / 1000, 0)}`], {
-        stdio: "ignore",
-        cwd: ROOT,
-        env: process.env,
-      });
+      sleepMs(delay);
     }
   }
 
@@ -147,8 +152,11 @@ function gitSync() {
 
   if (!fs.existsSync(gitDir)) {
     runWithRetry("git", ["init"]);
-    runWithRetry("git", ["remote", "remove", "origin"], { stdio: "ignore" });
-    runWithRetry("git", ["remote", "add", "origin", repo]);
+    try {
+      runWithRetry("git", ["remote", "set-url", "origin", repo]);
+    } catch {
+      runWithRetry("git", ["remote", "add", "origin", repo]);
+    }
     runWithRetry("git", [...authArgs, "fetch", "--depth", "1", "origin", branch]);
     runWithRetry("git", ["checkout", "-B", branch, `origin/${branch}`]);
   } else {
@@ -266,7 +274,7 @@ async function startApp() {
     npmSync();
     await startApp();
   } catch (error) {
-    console.error(error);
+    console.error("[PULL] Bootstrap failed:", error);
     process.exit(1);
   }
 })();
