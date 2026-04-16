@@ -70,7 +70,7 @@ function runWithRetry(cmd, args, options = {}) {
       lastError = error;
       if (attempt === maxAttempts) break;
       const delay = delayBase * (2 ** (attempt - 1));
-      log("Comando falló, reintentando", {
+      log("Command failed, retrying", {
         cmd,
         attempt,
         maxAttempts,
@@ -126,13 +126,13 @@ function gitHttpAuthArgs(repo, token, username) {
 
 function gitSync() {
   if (isTrue(process.env.USER_UPLOADED_FILES, false)) {
-    log("Se omite git sync por USER_UPLOADED_FILES=1");
+    log("Skipping git sync because USER_UPLOADED_FILES=1");
     return;
   }
 
   const { repo, token, username } = resolveGitRepoAndAuth();
   if (!repo) {
-    log("No se configuró repositorio remoto, se omite git sync");
+    log("No remote repository configured, skipping git sync");
     return;
   }
 
@@ -140,7 +140,7 @@ function gitSync() {
   const gitDir = path.join(ROOT, ".git");
   const authArgs = gitHttpAuthArgs(repo, token, username);
 
-  log("Iniciando sincronización git", {
+  log("Starting git synchronization", {
     branch,
     auth: token ? "token" : "none",
   });
@@ -158,19 +158,19 @@ function gitSync() {
     runWithRetry("git", ["clean", "-fdx"]);
   }
 
-  log("Sincronización git completada", { branch });
+  log("Git synchronization completed", { branch });
 }
 
 function npmInstallBase() {
   if (!exists("package.json")) {
-    log("No existe package.json, se omite npm sync");
+    log("package.json not found, skipping npm sync");
     return;
   }
 
   const useCi = isTrue(process.env.NPM_USE_CI, true) && exists("package-lock.json");
   const npmArgs = useCi ? ["ci", "--no-audit"] : ["install", "--no-audit"];
 
-  log("Instalando dependencias base", { mode: useCi ? "ci" : "install" });
+  log("Installing base dependencies", { mode: useCi ? "ci" : "install" });
   runWithRetry(NPM_BIN, npmArgs);
 }
 
@@ -179,13 +179,13 @@ function npmSync() {
 
   const add = splitPackages(firstNonEmpty(process.env.NODE_PACKAGES));
   if (add.length) {
-    log("Instalando paquetes adicionales", { count: add.length });
+    log("Installing additional packages", { count: add.length });
     runWithRetry(NPM_BIN, ["install", ...add]);
   }
 
   const remove = splitPackages(firstNonEmpty(process.env.UNNODE_PACKAGES));
   if (remove.length) {
-    log("Desinstalando paquetes solicitados", { count: remove.length });
+    log("Uninstalling requested packages", { count: remove.length });
     runWithRetry(NPM_BIN, ["uninstall", ...remove]);
   }
 }
@@ -199,7 +199,7 @@ function resolveEntryPoint() {
   );
   if (explicit && explicit !== "package.json") {
     if (!isSelfEntry(explicit)) return explicit;
-    log("Se ignora MAIN_FILE/APP_ENTRY porque apunta al bootstrap", { explicit });
+    log("Ignoring MAIN_FILE/APP_ENTRY because it points to bootstrap", { explicit });
   }
 
   if (exists("package.json")) {
@@ -207,7 +207,7 @@ function resolveEntryPoint() {
       const pkg = JSON.parse(fs.readFileSync(path.resolve(ROOT, "package.json"), "utf8"));
       if (typeof pkg.main === "string" && pkg.main.trim()) {
         if (!isSelfEntry(pkg.main.trim())) return pkg.main.trim();
-        log("Se ignora package.json main porque apunta al bootstrap", { main: pkg.main.trim() });
+        log("Ignoring package.json main because it points to bootstrap", { main: pkg.main.trim() });
       }
     } catch {
       // noop
@@ -239,13 +239,13 @@ async function startApp() {
   const absolute = path.resolve(ROOT, entry);
 
   if (!fs.existsSync(absolute)) {
-    throw new Error(`No existe el archivo de inicio: ${entry}`);
+    throw new Error(`Startup file does not exist: ${entry}`);
   }
   if (absolute === SELF_PATH) {
-    throw new Error(`El archivo de inicio no puede ser el bootstrap: ${entry}`);
+    throw new Error(`Startup file cannot be the bootstrap script: ${entry}`);
   }
 
-  log("Iniciando aplicación", { entry });
+  log("Starting application", { entry });
 
   if (entry.endsWith(".mjs")) {
     await import(pathToFileURL(absolute).href);
