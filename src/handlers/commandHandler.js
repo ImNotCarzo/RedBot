@@ -1,5 +1,6 @@
 const path   = require("path");
 const fs     = require("fs");
+const { isPromise } = require("util/types");
 const { PermissionFlagsBits } = require("discord.js");
 const { Errors } = require("gralonium");
 const PREFIXED_TO_SLASH_MAP = require("../../config/prefixedToSlashMap");
@@ -164,8 +165,12 @@ async function runCommandPlugins(ctx, slashCommand) {
   if (!slashCommand) return;
   const plugins = [...(slashCommand.plugins ?? []), ...(ctx?.bot?.loader?.globalPlugins ?? [])];
   for (const plugin of plugins) {
-    const result = await plugin(ctx);
-    if (result === false) return false;
+    if (isPromise(plugin)) {
+      const resolved = await plugin;
+      if (!(await resolved(ctx))) return false;
+      continue;
+    }
+    if (!(await plugin(ctx))) return false;
   }
   return true;
 }
@@ -257,7 +262,10 @@ function wrapPrefixedCommands(log) {
             if (hadCommandForCode) ctx.command = originalCommandForCode; else delete ctx.command;
           }
         } catch (err) {
-          log?.error(`[adapter:${slashName}]`, { err: err.message });
+          if (err && typeof err === "object" && !err.ctx) err.ctx = ctx;
+          log?.error(`[adapter:${slashName ?? prefixedName ?? "unknown"}]`, {
+            err: err?.stack || err?.message || String(err),
+          });
           throw err;
         }
       }

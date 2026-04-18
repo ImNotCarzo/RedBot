@@ -11,4 +11,5 @@ module.exports = {
   ],
   partials: [Partials.Channel, Partials.Message],
   guildOnly: false,
+  bindProcessHandlers: false,
 };

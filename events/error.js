@@ -17,15 +17,18 @@ function is(err, Type) {
 const event = {
   name: "frameworkError",
   once: false,
-  async code(_client, err) {
-    const guildId = err?.ctx?.guild?.id ?? err?.ctx?.data?.guildId;
-    const userId = err?.ctx?.user?.id ?? err?.ctx?.author?.id;
-    const commandName = err?.ctx?.command?.data?.name;
+  async code(_client, err, emittedCtx) {
+    const ctx = err?.ctx ?? emittedCtx ?? null;
+    if (err && typeof err === "object" && !err.ctx && ctx) err.ctx = ctx;
+
+    const guildId = ctx?.guild?.id ?? ctx?.data?.guildId;
+    const userId = ctx?.user?.id ?? ctx?.author?.id;
+    const commandName = ctx?.command?.data?.name;
 
     const safeSend = async (payload) => {
-      if (typeof err?.ctx?.send !== "function") return;
+      if (typeof ctx?.send !== "function") return;
       try {
-        await err.ctx.send(payload);
+        await ctx.send(payload);
       } catch {}
     };
 
