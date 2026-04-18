@@ -1,4 +1,4 @@
-const { CommandBuilder, Plugins } = require("erine");
+const { CommandBuilder, Plugins } = require("gralonium");
 const Logger = require("../../src/core/logger");
 const log = new Logger("CMD_ADMIN", process.env.LOG_LEVEL);
 
