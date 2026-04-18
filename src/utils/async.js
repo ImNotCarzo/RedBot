@@ -1,10 +1,10 @@
-async function withTimeout(promise, timeoutMs, label = "Operación") {
+async function withTimeout(promise, timeoutMs, label = "Operation") {
   let timer;
   try {
     return await Promise.race([
       promise,
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} excedió el tiempo límite (${timeoutMs}ms)`)), timeoutMs);
+        timer = setTimeout(() => reject(new Error(`${label} timed out (${timeoutMs}ms)`)), timeoutMs);
         timer.unref();
       }),
     ]);

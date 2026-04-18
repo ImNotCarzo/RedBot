@@ -25,7 +25,7 @@ async function getPrefix(guildId) {
   const cached = prefixCache.get(guildId);
   if (cached !== undefined) return cached;
   try {
-    const doc = await withTimeout(GuildConfig.findOne({ guildId }).lean(), PREFIX_QUERY_TIMEOUT_MS, "Lectura de prefijo de servidor");
+    const doc = await withTimeout(GuildConfig.findOne({ guildId }).lean(), PREFIX_QUERY_TIMEOUT_MS, "Guild prefix read");
     const prefix = doc?.prefix ?? DEFAULT_PREFIX;
     prefixCache.set(guildId, prefix);
     return prefix;
@@ -45,7 +45,7 @@ async function setPrefix(guildId, prefix) {
       { upsert: true, setDefaultsOnInsert: true }
     ),
     PREFIX_QUERY_TIMEOUT_MS,
-    "Actualización de prefijo de servidor"
+    "Guild prefix update"
   );
   prefixCache.set(guildId, normalized);
   return normalized;
