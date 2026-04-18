@@ -9,7 +9,7 @@ function parsePositiveInt(value, fallback) {
 
 const PREFIX_QUERY_TIMEOUT_MS = parsePositiveInt(process.env.PREFIX_QUERY_TIMEOUT_MS, 2500);
 
-function timeoutError(operation, timeoutMs) {
+function createTimeoutError(operation, timeoutMs) {
   return new Error(`${operation} excedió el tiempo límite (${timeoutMs}ms)`);
 }
 
@@ -19,7 +19,7 @@ async function withTimeout(promise, operation, timeoutMs = PREFIX_QUERY_TIMEOUT_
     return await Promise.race([
       promise,
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(timeoutError(operation, timeoutMs)), timeoutMs);
+        timer = setTimeout(() => reject(createTimeoutError(operation, timeoutMs)), timeoutMs);
         timer.unref();
       }),
     ]);

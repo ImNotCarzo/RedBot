@@ -11,6 +11,7 @@ function parsePositiveInt(value, fallback) {
 const ROLE_CONNECTION_TIMEOUT_MS = parsePositiveInt(process.env.ROLE_CONNECTION_TIMEOUT_MS, 15000);
 const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
 const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);
+const READY_RETRY_MAX_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_MAX_DELAY_MS, 30000);
 const READY_API_TIMEOUT_MS = parsePositiveInt(process.env.READY_API_TIMEOUT_MS, 45000);
 const READY_SYNC_INITIAL_DELAY_MS = parsePositiveInt(process.env.READY_SYNC_INITIAL_DELAY_MS, 5000);
 const READY_SYNC_INTERVAL_MS = parsePositiveInt(process.env.READY_SYNC_INTERVAL_MS, 900000);
@@ -21,11 +22,11 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withTimeout(task, timeoutMs, taskName) {
+async function withTimeout(promise, timeoutMs, taskName) {
   let timer;
   try {
     return await Promise.race([
-      task(),
+      promise,
       new Promise((_, reject) => {
         timer = setTimeout(() => {
           reject(new Error(`${taskName} excedió el tiempo límite (${timeoutMs}ms)`));
@@ -46,7 +47,10 @@ async function runWithRetry(task, log, taskName) {
     } catch (err) {
       lastError = err;
       if (attempt >= READY_RETRY_ATTEMPTS) break;
-      const backoff = READY_RETRY_BASE_DELAY_MS * (2 ** (attempt - 1));
+      const backoff = Math.min(
+        READY_RETRY_BASE_DELAY_MS * (2 ** (attempt - 1)),
+        READY_RETRY_MAX_DELAY_MS
+      );
       log?.warn(`${taskName} falló (intento ${attempt}/${READY_RETRY_ATTEMPTS}), reintentando`, {
         err: err?.message ?? String(err),
         backoff,
@@ -60,7 +64,7 @@ async function runWithRetry(task, log, taskName) {
 async function syncSlashAndContexts(client, config, log) {
   await runWithRetry(
     () => withTimeout(
-      () => client.sync(),
+      client.sync(),
       READY_API_TIMEOUT_MS,
       "Sincronización de comandos slash"
     ),
@@ -72,7 +76,7 @@ async function syncSlashAndContexts(client, config, log) {
   const rest = new REST().setToken(config.TOKEN);
   const commands = await runWithRetry(
     () => withTimeout(
-      () => rest.get(Routes.applicationCommands(config.CLIENT_ID)),
+      rest.get(Routes.applicationCommands(config.CLIENT_ID)),
       READY_API_TIMEOUT_MS,
       "Lectura de comandos de aplicación"
     ),
@@ -90,7 +94,7 @@ async function syncSlashAndContexts(client, config, log) {
     try {
       await runWithRetry(
         () => withTimeout(
-          () => rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
+          rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
             body: {
               integration_types: [0, 1],
               contexts: [0, 1, 2],

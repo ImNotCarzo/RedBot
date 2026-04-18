@@ -13,6 +13,8 @@ function parsePositiveInt(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+// If Discord gateway/session does not recover within this grace window, the
+// process exits so external supervisors (Pterodactyl/PM2/systemd) can restart it.
 const GATEWAY_RECOVERY_GRACE_MS = parsePositiveInt(process.env.GATEWAY_RECOVERY_GRACE_MS, 120000);
 
 async function restoreTempBans(client) {
@@ -150,7 +152,6 @@ const event = {
         clearPresenceInterval(client);
       }
     }, 10000);
-    interval.unref();
     presenceIntervals.set(client, interval);
   },
 };

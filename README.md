@@ -42,6 +42,7 @@ npm start
 | `READY_API_TIMEOUT_MS` | ❌ | Timeout (ms) for slash sync/context REST calls (default: `45000`) |
 | `READY_RETRY_ATTEMPTS` | ❌ | Retry attempts for startup sync operations (default: `5`) |
 | `READY_RETRY_BASE_DELAY_MS` | ❌ | Base exponential backoff delay for sync retries (default: `1500`) |
+| `READY_RETRY_MAX_DELAY_MS` | ❌ | Maximum delay cap (ms) for sync retry backoff (default: `30000`) |
 | `READY_SYNC_INITIAL_DELAY_MS` | ❌ | Delay before first sync cycle after ready (default: `5000`) |
 | `READY_SYNC_INTERVAL_MS` | ❌ | Periodic background re-sync interval (default: `900000`) |
 | `ROLE_CONNECTION_TIMEOUT_MS` | ❌ | Timeout (ms) for role-connections metadata update (default: `15000`) |
