@@ -4,9 +4,27 @@ const { COMMANDS_TO_UPDATE } = require("../config/constants");
 const { registerBotEvent } = require("./eventRuntime");
 const ROLE_CONNECTION_TIMEOUT_MS = 10_000;
 const READY_RETRY_ATTEMPTS = 3;
+const READY_API_TIMEOUT_MS = 15_000;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withTimeout(task, timeoutMs, taskName) {
+  let timer;
+  try {
+    return await Promise.race([
+      task(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${taskName} excedió el tiempo límite (${timeoutMs}ms)`));
+        }, timeoutMs);
+        timer.unref();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function runWithRetry(task, log, taskName) {
@@ -77,7 +95,11 @@ function registerReadyHandler(bot, config, log) {
 
     // ── Sync slash commands ───────────────────────────────────────────────
     try {
-      await client.sync();
+      await withTimeout(
+        () => client.sync(),
+        READY_API_TIMEOUT_MS,
+        "Sincronización de comandos slash"
+      );
       log?.info("Comandos slash sincronizados");
     } catch (err) {
       log?.error("Error al sincronizar comandos slash", { err: err.message });
@@ -86,7 +108,15 @@ function registerReadyHandler(bot, config, log) {
     // ── Patch integration_types / contexts ────────────────────────────────
     try {
       const rest     = new REST().setToken(config.TOKEN);
-      const commands = await rest.get(Routes.applicationCommands(config.CLIENT_ID));
+      const commands = await runWithRetry(
+        () => withTimeout(
+          () => rest.get(Routes.applicationCommands(config.CLIENT_ID)),
+          READY_API_TIMEOUT_MS,
+          "Lectura de comandos de aplicación"
+        ),
+        log,
+        "Lectura de comandos de aplicación"
+      );
 
       for (const cmd of commands) {
         setId(cmd.name, cmd.id);
@@ -94,12 +124,20 @@ function registerReadyHandler(bot, config, log) {
         if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
 
         try {
-          await runWithRetry(() => rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
-            body: {
-              integration_types: [0, 1],
-              contexts:          [0, 1, 2],
-            },
-          }), log, `Patch de contextos para ${cmd.name}`);
+          await runWithRetry(
+            () => withTimeout(
+              () => rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
+                body: {
+                  integration_types: [0, 1],
+                  contexts:          [0, 1, 2],
+                },
+              }),
+              READY_API_TIMEOUT_MS,
+              `Patch de contextos para ${cmd.name}`
+            ),
+            log,
+            `Patch de contextos para ${cmd.name}`
+          );
           log?.info(`Contextos actualizados: ${cmd.name}`);
         } catch (patchErr) {
           log?.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
