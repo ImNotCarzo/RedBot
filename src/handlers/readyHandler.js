@@ -1,10 +1,21 @@
 const { REST, Routes } = require("discord.js");
-const { setId }        = require("../state/commandIds.store");
+const { setId } = require("../state/commandIds.store");
 const { COMMANDS_TO_UPDATE } = require("../config/constants");
 const { registerBotEvent } = require("./eventRuntime");
-const ROLE_CONNECTION_TIMEOUT_MS = 10_000;
-const READY_RETRY_ATTEMPTS = 3;
-const READY_API_TIMEOUT_MS = 15_000;
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const ROLE_CONNECTION_TIMEOUT_MS = parsePositiveInt(process.env.ROLE_CONNECTION_TIMEOUT_MS, 15000);
+const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
+const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);
+const READY_API_TIMEOUT_MS = parsePositiveInt(process.env.READY_API_TIMEOUT_MS, 45000);
+const READY_SYNC_INITIAL_DELAY_MS = parsePositiveInt(process.env.READY_SYNC_INITIAL_DELAY_MS, 5000);
+const READY_SYNC_INTERVAL_MS = parsePositiveInt(process.env.READY_SYNC_INTERVAL_MS, 900000);
+
+const readySyncState = new WeakMap();
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,7 +46,7 @@ async function runWithRetry(task, log, taskName) {
     } catch (err) {
       lastError = err;
       if (attempt >= READY_RETRY_ATTEMPTS) break;
-      const backoff = 800 * (2 ** (attempt - 1));
+      const backoff = READY_RETRY_BASE_DELAY_MS * (2 ** (attempt - 1));
       log?.warn(`${taskName} falló (intento ${attempt}/${READY_RETRY_ATTEMPTS}), reintentando`, {
         err: err?.message ?? String(err),
         backoff,
@@ -44,6 +55,105 @@ async function runWithRetry(task, log, taskName) {
     }
   }
   throw lastError;
+}
+
+async function syncSlashAndContexts(client, config, log) {
+  await runWithRetry(
+    () => withTimeout(
+      () => client.sync(),
+      READY_API_TIMEOUT_MS,
+      "Sincronización de comandos slash"
+    ),
+    log,
+    "Sincronización de comandos slash"
+  );
+  log?.info("Comandos slash sincronizados");
+
+  const rest = new REST().setToken(config.TOKEN);
+  const commands = await runWithRetry(
+    () => withTimeout(
+      () => rest.get(Routes.applicationCommands(config.CLIENT_ID)),
+      READY_API_TIMEOUT_MS,
+      "Lectura de comandos de aplicación"
+    ),
+    log,
+    "Lectura de comandos de aplicación"
+  );
+
+  for (const cmd of commands) {
+    setId(cmd.name, cmd.id);
+  }
+
+  for (const cmd of commands) {
+    if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
+
+    try {
+      await runWithRetry(
+        () => withTimeout(
+          () => rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
+            body: {
+              integration_types: [0, 1],
+              contexts: [0, 1, 2],
+            },
+          }),
+          READY_API_TIMEOUT_MS,
+          `Patch de contextos para ${cmd.name}`
+        ),
+        log,
+        `Patch de contextos para ${cmd.name}`
+      );
+      log?.info(`Contextos actualizados: ${cmd.name}`);
+    } catch (patchErr) {
+      log?.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
+    }
+  }
+
+  log?.info("Todos los contextos actualizados");
+}
+
+async function runReadySyncCycle(client, config, log, state) {
+  if (state.running) return;
+  state.running = true;
+
+  try {
+    // ── Role-connections metadata ─────────────────────────────────────────
+    if (!state.roleMetadataUpdated) {
+      try {
+        await runWithRetry(async () => {
+          const res = await fetch(
+            `https://discord.com/api/v10/applications/${config.CLIENT_ID}/role-connections/metadata`,
+            {
+              method: "PUT",
+              headers: {
+                Authorization: `Bot ${config.TOKEN}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify([
+                { key: "servidores", name: "Servidores", description: "Servidores", type: 2 },
+              ]),
+              signal: AbortSignal.timeout(ROLE_CONNECTION_TIMEOUT_MS),
+            }
+          );
+
+          if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            throw new Error(`HTTP ${res.status} ${body}`.trim());
+          }
+        }, log, "Actualización de role connections metadata");
+        state.roleMetadataUpdated = true;
+      } catch (err) {
+        log?.error("Error al actualizar role connections metadata", { err: err.message });
+      }
+    }
+
+    // ── Sync slash commands + contexts ────────────────────────────────────
+    await syncSlashAndContexts(client, config, log);
+    state.lastSyncAt = Date.now();
+  } catch (err) {
+    log?.error("Fallo en ciclo de sincronización de aplicación", { err: err?.message ?? String(err) });
+  } finally {
+    state.running = false;
+  }
 }
 
 /**
@@ -65,89 +175,46 @@ function registerReadyHandler(bot, config, log) {
     source: "handlers/readyHandler",
     async code(_bot, readyBot) {
     const client = readyBot ?? _bot;
+    const state = readySyncState.get(client) ?? {
+      running: false,
+      roleMetadataUpdated: false,
+      lastSyncAt: 0,
+      interval: null,
+    };
 
-    // ── Role-connections metadata ─────────────────────────────────────────
-    try {
-      await runWithRetry(async () => {
-        const res = await fetch(
-          `https://discord.com/api/v10/applications/${config.CLIENT_ID}/role-connections/metadata`,
-          {
-            method:  "PUT",
-            headers: {
-              Authorization:  `Bot ${config.TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify([
-              { key: "servidores", name: "Servidores", description: "Servidores", type: 2 },
-            ]),
-            signal: AbortSignal.timeout(ROLE_CONNECTION_TIMEOUT_MS),
-          }
-        );
+    const delay = READY_SYNC_INITIAL_DELAY_MS;
+    setTimeout(() => {
+      runReadySyncCycle(client, config, log, state).catch((err) => {
+        log?.error("Error inesperado en ciclo inicial de sincronización", { err: err?.message ?? String(err) });
+      });
+    }, delay).unref();
 
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          throw new Error(`HTTP ${res.status} ${body}`.trim());
-        }
-      }, log, "Actualización de role connections metadata");
-    } catch (err) {
-      log?.error("Error al actualizar role connections metadata", { err: err.message });
+    const syncInterval = READY_SYNC_INTERVAL_MS;
+    if (syncInterval > 0) {
+      if (state.interval) clearInterval(state.interval);
+      state.interval = setInterval(() => {
+        runReadySyncCycle(client, config, log, state).catch((err) => {
+          log?.error("Error inesperado en ciclo periódico de sincronización", { err: err?.message ?? String(err) });
+        });
+      }, syncInterval);
+      state.interval.unref();
+      log?.info("Scheduler de sincronización de comandos iniciado", {
+        initialDelayMs: delay,
+        intervalMs: syncInterval,
+      });
+    } else {
+      log?.warn("Scheduler de sincronización periódica deshabilitado por configuración", {
+        READY_SYNC_INTERVAL_MS: syncInterval,
+      });
     }
 
-    // ── Sync slash commands ───────────────────────────────────────────────
-    try {
-      await withTimeout(
-        () => client.sync(),
-        READY_API_TIMEOUT_MS,
-        "Sincronización de comandos slash"
-      );
-      log?.info("Comandos slash sincronizados");
-    } catch (err) {
-      log?.error("Error al sincronizar comandos slash", { err: err.message });
-    }
+    client.once("invalidated", () => {
+      const currentState = readySyncState.get(client);
+      if (currentState?.interval) clearInterval(currentState.interval);
+      readySyncState.delete(client);
+    });
 
-    // ── Patch integration_types / contexts ────────────────────────────────
-    try {
-      const rest     = new REST().setToken(config.TOKEN);
-      const commands = await runWithRetry(
-        () => withTimeout(
-          () => rest.get(Routes.applicationCommands(config.CLIENT_ID)),
-          READY_API_TIMEOUT_MS,
-          "Lectura de comandos de aplicación"
-        ),
-        log,
-        "Lectura de comandos de aplicación"
-      );
-
-      for (const cmd of commands) {
-        setId(cmd.name, cmd.id);
-
-        if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
-
-        try {
-          await runWithRetry(
-            () => withTimeout(
-              () => rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
-                body: {
-                  integration_types: [0, 1],
-                  contexts:          [0, 1, 2],
-                },
-              }),
-              READY_API_TIMEOUT_MS,
-              `Patch de contextos para ${cmd.name}`
-            ),
-            log,
-            `Patch de contextos para ${cmd.name}`
-          );
-          log?.info(`Contextos actualizados: ${cmd.name}`);
-        } catch (patchErr) {
-          log?.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
-        }
-      }
-
-      log?.info("Todos los contextos actualizados");
-    } catch (err) {
-      log?.error("Error al actualizar contextos", { err: err.message });
-    }
+    readySyncState.set(client, state);
     },
   }, log);
 }

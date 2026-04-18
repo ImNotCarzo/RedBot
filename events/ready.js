@@ -5,6 +5,15 @@ const { sanitizeError } = require("../src/handlers/eventRuntime");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
 const presenceIntervals = new WeakMap();
+const recoveryTimers = new WeakMap();
+const lifecycleBound = new WeakSet();
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const GATEWAY_RECOVERY_GRACE_MS = parsePositiveInt(process.env.GATEWAY_RECOVERY_GRACE_MS, 120000);
 
 async function restoreTempBans(client) {
   try {
@@ -31,6 +40,76 @@ async function restoreTempBans(client) {
   }
 }
 
+function clearRecoveryTimer(client) {
+  const timer = recoveryTimers.get(client);
+  if (!timer) return;
+  clearTimeout(timer);
+  recoveryTimers.delete(client);
+}
+
+function clearPresenceInterval(client) {
+  const current = presenceIntervals.get(client);
+  if (current) clearInterval(current);
+  presenceIntervals.delete(client);
+}
+
+function scheduleRecoveryExit(client, reason, meta = {}) {
+  if (recoveryTimers.has(client)) return;
+  const timeoutMs = GATEWAY_RECOVERY_GRACE_MS;
+  log.warn("Gateway degradado, programando reinicio del proceso", { reason, timeoutMs, ...meta });
+
+  const timer = setTimeout(() => {
+    log.error("Reinicio forzado por sesión inestable de Discord", { reason, ...meta });
+    process.exit(1);
+  }, timeoutMs);
+  timer.unref();
+  recoveryTimers.set(client, timer);
+}
+
+function bindGatewayLifecycle(client) {
+  if (lifecycleBound.has(client)) return;
+  lifecycleBound.add(client);
+
+  client.on("shardDisconnect", (event, shardId) => {
+    log.warn("Shard desconectado", {
+      shardId,
+      code: event?.code ?? null,
+      reason: event?.reason ?? "unknown",
+    });
+    scheduleRecoveryExit(client, "shardDisconnect", {
+      shardId,
+      code: event?.code ?? null,
+    });
+  });
+
+  client.on("shardError", (error, shardId) => {
+    log.error("Error de shard", {
+      shardId,
+      err: sanitizeError(error),
+    });
+  });
+
+  client.on("shardReconnecting", (shardId) => {
+    log.warn("Shard reconectando", { shardId });
+  });
+
+  client.on("shardResume", (_replayedEvents, shardId) => {
+    log.info("Shard reanudado", { shardId });
+    clearRecoveryTimer(client);
+  });
+
+  client.on("shardReady", (shardId) => {
+    log.info("Shard listo", { shardId });
+    clearRecoveryTimer(client);
+  });
+
+  client.once("invalidated", () => {
+    clearPresenceInterval(client);
+    scheduleRecoveryExit(client, "invalidated");
+    log.warn("Sesión invalidada detectada");
+  });
+}
+
 const event = {
   name: "clientReady",
   once: true,
@@ -53,8 +132,9 @@ const event = {
       "/help",
     ];
 
-    const existingInterval = presenceIntervals.get(client);
-    if (existingInterval) clearInterval(existingInterval);
+    clearPresenceInterval(client);
+    clearRecoveryTimer(client);
+    bindGatewayLifecycle(client);
 
     let i = 0;
     const interval = setInterval(() => {
@@ -67,20 +147,11 @@ const event = {
         i = (i + 1) % activities.length;
       } catch (err) {
         log.error("Error al actualizar presencia", { err: sanitizeError(err) });
-        const current = presenceIntervals.get(client);
-        if (current) clearInterval(current);
-        presenceIntervals.delete(client);
+        clearPresenceInterval(client);
       }
     }, 10000);
+    interval.unref();
     presenceIntervals.set(client, interval);
-
-    client.once("invalidated", () => {
-      const current = presenceIntervals.get(client);
-      if (!current) return;
-      clearInterval(current);
-      presenceIntervals.delete(client);
-      log.warn("Presencia detenida por invalidación de sesión");
-    });
   },
 };
 

@@ -39,6 +39,14 @@ npm start
 | `GROQ`        | ❌        | Groq API key (used by specific commands)                     |
 | `LOG_LEVEL`   | ❌        | `error` \| `warn` \| `info` \| `debug` (default: `info`)    |
 | `NODE_ENV`    | ❌        | `development` \| `production` (default: `development`)      |
+| `READY_API_TIMEOUT_MS` | ❌ | Timeout (ms) for slash sync/context REST calls (default: `45000`) |
+| `READY_RETRY_ATTEMPTS` | ❌ | Retry attempts for startup sync operations (default: `5`) |
+| `READY_RETRY_BASE_DELAY_MS` | ❌ | Base exponential backoff delay for sync retries (default: `1500`) |
+| `READY_SYNC_INITIAL_DELAY_MS` | ❌ | Delay before first sync cycle after ready (default: `5000`) |
+| `READY_SYNC_INTERVAL_MS` | ❌ | Periodic background re-sync interval (default: `900000`) |
+| `ROLE_CONNECTION_TIMEOUT_MS` | ❌ | Timeout (ms) for role-connections metadata update (default: `15000`) |
+| `GATEWAY_RECOVERY_GRACE_MS` | ❌ | Grace period before forced restart after gateway/session instability (default: `120000`) |
+| `PREFIX_QUERY_TIMEOUT_MS` | ❌ | Timeout (ms) for prefix DB read/update operations (default: `2500`) |
 
 See `.env.example` for a ready-to-copy template.
 

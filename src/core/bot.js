@@ -62,7 +62,7 @@ function createBot() {
  * @returns {Promise<void>}
  */
 async function initializeBot(bot, config, log) {
-  bot.load("commands");
+  await bot.load("commands");
   wrapPrefixedCommands(log);
   loadAndRegisterEvents(bot, log);
   registerReadyHandler(bot, config, log);
