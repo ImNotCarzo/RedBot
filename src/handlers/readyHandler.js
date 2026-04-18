@@ -8,7 +8,6 @@ function parsePositiveInt(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const ROLE_CONNECTION_TIMEOUT_MS = parsePositiveInt(process.env.ROLE_CONNECTION_TIMEOUT_MS, 15000);
 const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
 const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);
 const READY_RETRY_MAX_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_MAX_DELAY_MS, 30000);
@@ -120,37 +119,6 @@ async function runReadySyncCycle(client, config, log, state) {
   state.running = true;
 
   try {
-    // ── Role-connections metadata ─────────────────────────────────────────
-    if (!state.roleMetadataUpdated) {
-      try {
-        await runWithRetry(async () => {
-          const res = await fetch(
-            `https://discord.com/api/v10/applications/${config.CLIENT_ID}/role-connections/metadata`,
-            {
-              method: "PUT",
-              headers: {
-                Authorization: `Bot ${config.TOKEN}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify([
-                { key: "servidores", name: "Servidores", description: "Servidores", type: 2 },
-              ]),
-              signal: AbortSignal.timeout(ROLE_CONNECTION_TIMEOUT_MS),
-            }
-          );
-
-          if (!res.ok) {
-            const body = await res.text().catch(() => "");
-            throw new Error(`HTTP ${res.status} ${body}`.trim());
-          }
-        }, log, "Actualización de role connections metadata");
-        state.roleMetadataUpdated = true;
-      } catch (err) {
-        log?.error("Error al actualizar role connections metadata", { err: err.message });
-      }
-    }
-
-    // ── Sync slash commands + contexts ────────────────────────────────────
     await syncSlashAndContexts(client, config, log);
     state.lastSyncAt = Date.now();
   } catch (err) {
@@ -181,7 +149,6 @@ function registerReadyHandler(bot, config, log) {
     const client = readyBot ?? _bot;
     const state = readySyncState.get(client) ?? {
       running: false,
-      roleMetadataUpdated: false,
       lastSyncAt: 0,
       interval: null,
     };
