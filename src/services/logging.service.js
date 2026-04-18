@@ -30,4 +30,3 @@ async function sendLog(guild, embed, context = {}) {
 }
 
 module.exports = sendLog;
-module.exports.sendLog = sendLog;

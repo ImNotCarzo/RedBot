@@ -2,16 +2,12 @@ const { ActivityType } = require("discord.js");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/services/moderation.service");
 const Logger = require("../src/core/logger");
 const { sanitizeError } = require("../src/handlers/eventRuntime");
+const { parsePositiveInt } = require("../src/utils/numbers");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
 const presenceIntervals = new WeakMap();
 const recoveryTimers = new WeakMap();
 const lifecycleBound = new WeakSet();
-
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
 
 // If Discord gateway/session does not recover within this grace window, the
 // process exits so external supervisors (Pterodactyl/PM2/systemd) can restart it.

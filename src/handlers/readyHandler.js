@@ -2,11 +2,8 @@ const { REST, Routes } = require("discord.js");
 const { setId } = require("../state/commandIds.store");
 const { COMMANDS_TO_UPDATE } = require("../config/constants");
 const { registerBotEvent } = require("./eventRuntime");
-
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
+const { parsePositiveInt } = require("../utils/numbers");
+const { withTimeout, sleep: wait } = require("../utils/async");
 
 const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
 const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);
@@ -16,27 +13,6 @@ const READY_SYNC_INITIAL_DELAY_MS = parsePositiveInt(process.env.READY_SYNC_INIT
 const READY_SYNC_INTERVAL_MS = parsePositiveInt(process.env.READY_SYNC_INTERVAL_MS, 900000);
 
 const readySyncState = new WeakMap();
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function withTimeout(promise, timeoutMs, taskName) {
-  let timer;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error(`${taskName} excedió el tiempo límite (${timeoutMs}ms)`));
-        }, timeoutMs);
-        timer.unref();
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 async function runWithRetry(task, log, taskName) {
   let lastError;
