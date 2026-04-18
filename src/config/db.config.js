@@ -5,5 +5,8 @@ module.exports = {
 
   options: {
     serverSelectionTimeoutMS: 10_000,
+    connectTimeoutMS: 10_000,
+    socketTimeoutMS: 15_000,
+    maxPoolSize: 15,
   },
 };
