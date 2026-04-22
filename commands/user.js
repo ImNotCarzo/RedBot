@@ -85,6 +85,16 @@ function uniqueId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function formatPermName(p) {
+  return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``;
+}
+
+function paginateArray(arr, size = 15) {
+  const pages = [];
+  for (let i = 0; i < arr.length; i += size) pages.push(arr.slice(i, i + size));
+  return pages;
+}
+
 /* ══════════════════════════════════════════
    Collector manager
    ══════════════════════════════════════════ */
@@ -109,57 +119,70 @@ function createCollectorManager() {
 }
 
 /* ══════════════════════════════════════════
-   Extended profile data (Guild Tag & Decorations)
+   Extended profile data
+   Usa las APIs nativas de DJS 14.21+:
+   - user.primaryGuild       → Guild Tag (tag, identityGuildId, badge hash)
+   - user.guildTagBadgeURL() → URL de la insignia del tag
+   - user.avatarDecorationData / user.avatarDecorationURL() → decoración global
+   - member.avatarDecorationData / member.displayAvatarDecorationURL() → deco de servidor
+   - user.collectibles?.nameplate → Placa (label, asset, palette)
+   NO existe profileEffect en la API pública de DJS.
    ══════════════════════════════════════════ */
 
-async function fetchExtendedProfile(member, user, guild) {
-  let guildTag = null;
-  const decorations = { avatar: null, profile: null, plate: null };
+function buildExtendedFields(member, user) {
+  const fields = [];
 
-  try {
-    const mProfile = member.guildMemberProfile || member.profile || await member.fetchProfile?.().catch(() => null);
-    if (mProfile?.guildTag) {
-      guildTag = {
-        name: mProfile.guildTag.name || "Tag del servidor",
-        guildId: mProfile.guildTag.guildId || guild.id,
-        badge: mProfile.guildTag.badgeURL?.({ size: 4096 })
-            || mProfile.badgeURL?.({ size: 4096 })
-            || null
-      };
-    }
-  } catch { /* Feature no soportada por la versión de Discord.js */ }
+  // ── Guild Tag ──────────────────────────────────────────────
+  // user.primaryGuild está disponible tras user.fetch()
+  const pg = user.primaryGuild;
+  if (pg?.tag) {
+    const badgeURL = user.guildTagBadgeURL({ size: 4096 });
+    fields.push({
+      name: "Guild Tag",
+      value:
+        `> **Tag:** \`${pg.tag}\`\n` +
+        `> **ID del servidor:** \`${pg.identityGuildId ?? "N/A"}\`\n` +
+        `> **Mostrar insignia:** ${badgeURL ? `[Ver insignia](${badgeURL})` : "Sin insignia"}`,
+    });
+  }
 
-  try {
-    if (user.avatarDecorationData) {
-      decorations.avatar = {
-        name: user.avatarDecorationData.skuId
-           || user.avatarDecorationData.asset?.split(/[\/._]/).pop()
-           || "Decoración de avatar",
-        url: user.avatarDecorationURL?.({ size: 4096 }) || null
-      };
-    }
+  // ── Decoraciones ──────────────────────────────────────────
+  // Avatar decoration: se prefiere la del servidor (member) sobre la global (user)
+  const memberDecData  = member?.avatarDecorationData ?? null;
+  const userDecData    = user.avatarDecorationData ?? null;
+  const activeDecData  = memberDecData ?? userDecData;
 
-    // Efecto de perfil y placa (requiere fetchProfile en versiones muy recientes)
-    const uProfile = await user.fetchProfile?.().catch(() => null) || user.profile;
-    if (uProfile) {
-      if (uProfile.effect || uProfile.profileEffect) {
-        const eff = uProfile.effect || uProfile.profileEffect;
-        decorations.profile = {
-          name: eff.name || eff.id || "Efecto de perfil",
-          url: eff.assetURL?.() || eff.url || null
-        };
-      }
-      if (uProfile.namePlate || uProfile.nameplate) {
-        const plate = uProfile.namePlate || uProfile.nameplate;
-        decorations.plate = {
-          name: plate.name || plate.id || "Placa de nombre",
-          url: plate.assetURL?.() || plate.url || null
-        };
-      }
-    }
-  } catch { /* Feature no soportada por la versión de Discord.js */ }
+  // URL: member.displayAvatarDecorationURL() incluye la del servidor si existe,
+  // de lo contrario cae en la global automáticamente.
+  const avatarDecURL = member
+    ? member.displayAvatarDecorationURL?.({ size: 4096 }) ?? user.avatarDecorationURL?.({ size: 4096 })
+    : user.avatarDecorationURL?.({ size: 4096 });
 
-  return { guildTag, decorations };
+  // Nameplate (placa): user.collectibles?.nameplate
+  // No hay URL directa — Discord usa el asset como path relativo en su CDN.
+  // Construimos una URL de la Store de Discord con el skuId para que el usuario pueda verla.
+  const nameplate = user.collectibles?.nameplate ?? null;
+
+  const decoLines = [];
+  if (activeDecData) {
+    const decName = activeDecData.skuId ?? "Decoración de avatar";
+    const decLine = avatarDecURL ? `[${decName}](${avatarDecURL})` : decName;
+    decoLines.push(`> **Avatar:** ${decLine}`);
+  }
+  // Profile effect: no expuesto por la API pública de DJS → omitido
+  if (nameplate) {
+    const plateName  = nameplate.label || nameplate.skuId || "Placa de nombre";
+    // Enlace a la tienda de Discord para ver la placa
+    const plateLink  = nameplate.skuId
+      ? `[${plateName}](https://discord.com/shop?skuId=${nameplate.skuId})`
+      : plateName;
+    decoLines.push(`> **Placa:** ${plateLink}`);
+  }
+  if (decoLines.length) {
+    fields.push({ name: "Decoraciones", value: decoLines.join("\n") });
+  }
+
+  return fields;
 }
 
 /* ══════════════════════════════════════════
@@ -188,6 +211,7 @@ const data = {
         const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
         const guild   = ctx.guild;
 
+        // ── Sin servidor (DM) ──────────────────────────────
         if (!guild) {
           const user    = await resolveUser(ctx, input);
           if (!user) return ctx.send("No se encontró ningún usuario");
@@ -208,7 +232,7 @@ const data = {
             })
             .setTimestamp();
 
-          const hasBanner = !!fetched.banner;
+          const hasBanner   = !!fetched.banner;
           const baseOptions = [
             { label: "Avatar", value: "avatar", description: "Avatar del usuario" },
             ...(hasBanner ? [{ label: "Banner", value: "banner", description: "Banner del usuario" }] : []),
@@ -222,7 +246,7 @@ const data = {
 
           const collector = reply.createMessageComponentCollector({
             componentType: ComponentType.StringSelect,
-            time: 5 * 60 * 1000,
+            time: 5 * 60_000,
             filter: i => i.customId === selectId,
           });
 
@@ -236,7 +260,7 @@ const data = {
             }
             if (selected === "avatar") {
               const url = fetched.displayAvatarURL({ size: 4096, extension: "png" });
-              const av = new EmbedBuilder()
+              const av  = new EmbedBuilder()
                 .setAuthor({ name: fetched.username, iconURL: fetched.displayAvatarURL({ size: 128 }) })
                 .setTitle("Avatar").setURL(url).setImage(url).setColor("#ff383d").setTimestamp();
               if (!isAuthor) return interaction.reply({ embeds: [av], flags: MessageFlags.Ephemeral });
@@ -257,18 +281,17 @@ const data = {
           return;
         }
 
+        // ── Con servidor ───────────────────────────────────
         const member = await resolveMember(ctx, input);
         if (!member) return ctx.send("No se encontró ningún usuario");
 
-        const user      = await member.user.fetch().catch(() => member.user);
-        const insignias = user.flags?.toArray().map(f => `\`${f}\``).join(", ") || "Sin insignias";
-        const colorRol  = member.displayHexColor || "#2b2d31";
-        const createdTs = Math.floor(user.createdTimestamp / 1000);
-        const joinedTs  = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
-        const usernameDisplay = user.username;
-        const hasBanner = !!user.banner;
-
-        const { guildTag, decorations } = await fetchExtendedProfile(member, user, guild);
+        // fetch() fuerza la carga de banner, accentColor, primaryGuild, collectibles y avatarDecorationData
+        const user        = await member.user.fetch().catch(() => member.user);
+        const insignias   = user.flags?.toArray().map(f => `\`${f}\``).join(", ") || "Sin insignias";
+        const colorRol    = member.displayHexColor || "#2b2d31";
+        const createdTs   = Math.floor(user.createdTimestamp / 1000);
+        const joinedTs    = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
+        const hasBanner   = !!user.banner;
 
         const fields = [
           {
@@ -282,36 +305,13 @@ const data = {
           },
           {
             name: "Servidor",
-            value: `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`,
-          }
-        ];
-
-        if (guildTag) {
-          fields.push({
-            name: "Guild Tag",
             value:
-              `> **Tag:** ${guildTag.name}\n` +
-              `> **ID del servidor:** \`${guildTag.guildId}\`\n` +
-              `> **Mostrar insignia:** ${guildTag.badge ? `[Ver insignia](${guildTag.badge})` : "Sin insignia"}`
-          });
-        }
-
-        const decoLines = [];
-        if (decorations.avatar) {
-          const link = decorations.avatar.url ? `[${decorations.avatar.name}](${decorations.avatar.url})` : decorations.avatar.name;
-          decoLines.push(`> **Avatar:** ${link}`);
-        }
-        if (decorations.profile) {
-          const link = decorations.profile.url ? `[${decorations.profile.name}](${decorations.profile.url})` : decorations.profile.name;
-          decoLines.push(`> **Perfil:** ${link}`);
-        }
-        if (decorations.plate) {
-          const link = decorations.plate.url ? `[${decorations.plate.name}](${decorations.plate.url})` : decorations.plate.name;
-          decoLines.push(`> **Placa:** ${link}`);
-        }
-        if (decoLines.length) {
-          fields.push({ name: "Decoraciones", value: decoLines.join("\n") });
-        }
+              `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n` +
+              `> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`,
+          },
+          // Guild Tag + Decoraciones desde las APIs nativas de DJS 14.21+
+          ...buildExtendedFields(member, user),
+        ];
 
         const infoEmbed = new EmbedBuilder()
           .setThumbnail(user.displayAvatarURL({ size: 1024 }))
@@ -320,15 +320,15 @@ const data = {
           .setTimestamp();
 
         const baseOptions = [
-          { label: "Avatar",     value: "avatar",      description: "Avatar del usuario" },
+          { label: "Avatar",   value: "avatar",      description: "Avatar del usuario" },
           ...(hasBanner ? [{ label: "Banner", value: "banner", description: "Banner del usuario" }] : []),
-          { label: "Roles",      value: "roles",       description: "Roles del usuario" },
-          { label: "Permisos",   value: "permissions", description: "Permisos del usuario" },
+          { label: "Roles",    value: "roles",       description: "Roles del usuario" },
+          { label: "Permisos", value: "permissions", description: "Permisos del usuario" },
         ];
         const selectId = uniqueId("user_info_select");
         const authorId = invoker.id;
+        const cm       = createCollectorManager();
 
-        const cm = createCollectorManager();
         const reply = await ctx.send({
           embeds: [infoEmbed],
           components: [makeSelectRow(selectId, false, baseOptions)]
@@ -336,7 +336,7 @@ const data = {
 
         const collector = reply.createMessageComponentCollector({
           componentType: ComponentType.StringSelect,
-          time: 5 * 60 * 1000,
+          time: 5 * 60_000,
           filter: i => i.customId === selectId,
         });
 
@@ -346,11 +346,11 @@ const data = {
 
           cm.stopAll();
 
+          // ── Respuesta efímera para no-autores ──
           if (!isAuthor) {
-            // non-author
             if (selected === "avatar") {
               const url = member.displayAvatarURL({ extension: "png", size: 4096 });
-              const av = new EmbedBuilder()
+              const av  = new EmbedBuilder()
                 .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
                 .setTitle("Avatar").setURL(url).setImage(url).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [av], flags: MessageFlags.Ephemeral });
@@ -364,34 +364,37 @@ const data = {
               return interaction.reply({ embeds: [bn], flags: MessageFlags.Ephemeral });
             }
             if (selected === "roles") {
-              const roles = member.roles.cache.filter(r => r.id !== guild.id).sort((a, b) => b.position - a.position).map((r, i) => `${i + 1}. <@&${r.id}>`);
+              const roles = member.roles.cache
+                .filter(r => r.id !== guild.id)
+                .sort((a, b) => b.position - a.position)
+                .map((r, i) => `${i + 1}. <@&${r.id}>`);
               if (!roles.length) return interaction.reply({ content: "Este usuario no tiene roles", flags: MessageFlags.Ephemeral });
               const embed = new EmbedBuilder()
-                .setAuthor({ name: usernameDisplay, iconURL: user.displayAvatarURL({ size: 128 }) })
+                .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
                 .setDescription(roles.join("\n")).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
             if (selected === "permissions") {
-              const perms = member.permissions.toArray().sort().map(p => `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``);
+              const perms = member.permissions.toArray().sort().map(formatPermName);
               if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
               const embed = new EmbedBuilder()
                 .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                .setTitle(user.username)
                 .setDescription(perms.join("\n")).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
             return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           }
 
+          // ── Respuestas del autor ──
           if (selected === "info") {
             return interaction.update({ embeds: [infoEmbed], components: [makeSelectRow(selectId, false, baseOptions)] });
           }
 
           if (selected === "avatar") {
-            const avatarOpts = { extension: "png", size: 4096 };
+            const avatarOpts   = { extension: "png", size: 4096 };
             const serverAvatar = member.displayAvatarURL(avatarOpts);
             const globalAvatar = user.displayAvatarURL(avatarOpts);
-            const hasDistinct  = member.avatar && member.avatar !== user.avatar;
+            const hasDistinct  = !!(member.avatar && member.avatar !== user.avatar);
 
             const buildAv = (type) => new EmbedBuilder()
               .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
@@ -417,7 +420,6 @@ const data = {
                 filter: i => i.customId === avSelectId && i.user.id === authorId,
               });
               cm.set("avatar", avCollector);
-
               avCollector.on("collect", async i => {
                 await i.update({ embeds: [buildAv(i.values[0])], components: [makeSelectRow(selectId, true, baseOptions), avRow] });
               });
@@ -439,56 +441,48 @@ const data = {
           }
 
           if (selected === "roles") {
-            const allRoles = member.roles.cache.filter(r => r.id !== guild.id).sort((a, b) => b.position - a.position).map(r => `<@&${r.id}>`);
+            const allRoles = member.roles.cache
+              .filter(r => r.id !== guild.id)
+              .sort((a, b) => b.position - a.position)
+              .map(r => `<@&${r.id}>`);
             if (!allRoles.length) return interaction.reply({ content: "Este usuario no tiene roles", flags: MessageFlags.Ephemeral });
 
-            const pages = [];
-            for (let i = 0; i < allRoles.length; i += 15) pages.push(allRoles.slice(i, i + 15));
+            const pages = paginateArray(allRoles);
             let page = 0;
-
             const prevId = uniqueId("roles_prev");
             const nextId = uniqueId("roles_next");
 
             await interaction.update({
-              embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)],
+              embeds: [buildRolesEmbed(member, user, user.username, pages[page], page, pages.length)],
               components: pages.length > 1
                 ? [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)]
                 : [makeSelectRow(selectId, true, baseOptions)],
             });
-
             if (pages.length <= 1) return;
 
             const rCollector = reply.createMessageComponentCollector({
               componentType: ComponentType.Button,
-              time: 2 * 60 * 1000,
+              time: 2 * 60_000,
               filter: i => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
             });
             cm.set("roles", rCollector);
-
             rCollector.on("collect", async i => {
-              if (i.customId === prevId) page--;
-              if (i.customId === nextId) page++;
-              page = clampPage(page, pages.length);
+              page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
               await i.update({
-                embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)],
-                components: [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)]
+                embeds: [buildRolesEmbed(member, user, user.username, pages[page], page, pages.length)],
+                components: [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)],
               });
             });
-
-            rCollector.on("end", async () => {
-              await reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {});
-            });
+            rCollector.on("end", async () => reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {}));
             return;
           }
 
           if (selected === "permissions") {
-            const perms = member.permissions.toArray().sort().map(p => `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``);
+            const perms = member.permissions.toArray().sort().map(formatPermName);
             if (!perms.length) return interaction.reply({ content: "Este usuario no tiene permisos", flags: MessageFlags.Ephemeral });
 
-            const pages = [];
-            for (let i = 0; i < perms.length; i += 15) pages.push(perms.slice(i, i + 15));
+            const pages = paginateArray(perms);
             let page = 0;
-
             const prevId = uniqueId("perms_prev");
             const nextId = uniqueId("perms_next");
 
@@ -498,29 +492,22 @@ const data = {
                 ? [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)]
                 : [makeSelectRow(selectId, true, baseOptions)],
             });
-
             if (pages.length <= 1) return;
 
             const pCollector = reply.createMessageComponentCollector({
               componentType: ComponentType.Button,
-              time: 2 * 60 * 1000,
+              time: 2 * 60_000,
               filter: i => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
             });
             cm.set("permissions", pCollector);
-
             pCollector.on("collect", async i => {
-              if (i.customId === prevId) page--;
-              if (i.customId === nextId) page++;
-              page = clampPage(page, pages.length);
+              page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
               await i.update({
                 embeds: [buildPermsEmbed(user, pages[page], page, pages.length, colorRol)],
-                components: [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)]
+                components: [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)],
               });
             });
-
-            pCollector.on("end", async () => {
-              await reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {});
-            });
+            pCollector.on("end", async () => reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {}));
           }
         });
 
@@ -563,7 +550,7 @@ const data = {
         const avatarOpts   = { extension: "png", size: 4096 };
         const serverAvatar = member ? member.displayAvatarURL(avatarOpts) : user.displayAvatarURL(avatarOpts);
         const globalAvatar = user.displayAvatarURL(avatarOpts);
-        const hasDistinct  = member?.avatar && member.avatar !== user.avatar;
+        const hasDistinct  = !!(member?.avatar && member.avatar !== user.avatar);
         const color        = member?.displayHexColor || "#ff383d";
 
         const buildEmbed = (type) => new EmbedBuilder()
@@ -636,12 +623,12 @@ const data = {
         const globalBannerURL = user.bannerURL({ size: 4096 });
         if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
 
-        const hasDistinct = serverBannerURL && serverBannerURL !== globalBannerURL;
+        const hasDistinct = !!(serverBannerURL && serverBannerURL !== globalBannerURL);
         const color       = member?.displayHexColor || "#ff383d";
 
         const buildEmbed = (type) => {
           const isServer = type === "server";
-          const url = isServer ? serverBannerURL : globalBannerURL;
+          const url      = isServer ? serverBannerURL : globalBannerURL;
           return new EmbedBuilder()
             .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
             .setTitle(hasDistinct ? (isServer ? "Banner del servidor" : "Banner global") : "Banner")
@@ -698,42 +685,36 @@ const data = {
         const member  = await resolveMember(ctx, input);
         if (!member) return ctx.send("No pude encontrar al usuario");
 
-        const user            = member.user;
-        const usernameDisplay = user.username;
-        const allRoles        = member.roles.cache
+        const user     = member.user;
+        const allRoles = member.roles.cache
           .filter(r => r.id !== ctx.guild.id)
           .sort((a, b) => b.position - a.position)
           .map(r => `<@&${r.id}>`);
 
         if (!allRoles.length) return ctx.send("Este usuario no tiene roles");
 
-        const pages = [];
-        for (let i = 0; i < allRoles.length; i += 15) pages.push(allRoles.slice(i, i + 15));
+        const pages = paginateArray(allRoles);
         let page = 0;
-
         const prevId = uniqueId("roles_prev");
         const nextId = uniqueId("roles_next");
 
-        const reply  = await ctx.send({
-          embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)],
+        const reply = await ctx.send({
+          embeds: [buildRolesEmbed(member, user, user.username, pages[page], page, pages.length)],
           components: pages.length > 1 ? [buildPaginationRow(prevId, nextId, page, pages.length)] : [],
         });
-
         if (pages.length <= 1) return;
 
         const collector = reply.createMessageComponentCollector({
           componentType: ComponentType.Button,
-          time: 2 * 60 * 1000,
+          time: 2 * 60_000,
           filter: i => [prevId, nextId].includes(i.customId) && i.user.id === invoker.id,
         });
 
         collector.on("collect", async i => {
-          if (i.customId === prevId) page--;
-          if (i.customId === nextId) page++;
-          page = clampPage(page, pages.length);
+          page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
           await i.update({
-            embeds: [buildRolesEmbed(member, user, usernameDisplay, pages[page], page, pages.length)],
-            components: [buildPaginationRow(prevId, nextId, page, pages.length)]
+            embeds: [buildRolesEmbed(member, user, user.username, pages[page], page, pages.length)],
+            components: [buildPaginationRow(prevId, nextId, page, pages.length)],
           });
         });
 
@@ -746,7 +727,7 @@ const data = {
   })
 
   // ══════════════════════════════════════════
-  // user perms
+  // user permissions
   // ══════════════════════════════════════════
   .addCommand({
     data: new CommandBuilder({ name: "permissions", description: "Muestra los permisos de un usuario" }),
@@ -762,16 +743,12 @@ const data = {
 
         const user  = member.user;
         const color = member.displayHexColor || "#2b2d31";
-        const perms = member.permissions.toArray().sort().map(p =>
-          `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``
-        );
+        const perms = member.permissions.toArray().sort().map(formatPermName);
 
         if (!perms.length) return ctx.send("Este usuario no tiene permisos");
 
-        const pages = [];
-        for (let i = 0; i < perms.length; i += 15) pages.push(perms.slice(i, i + 15));
+        const pages = paginateArray(perms);
         let page = 0;
-
         const prevId = uniqueId("perms_prev");
         const nextId = uniqueId("perms_next");
 
@@ -779,22 +756,19 @@ const data = {
           embeds: [buildPermsEmbed(user, pages[page], page, pages.length, color)],
           components: pages.length > 1 ? [buildPaginationRow(prevId, nextId, page, pages.length)] : [],
         });
-
         if (pages.length <= 1) return;
 
         const collector = reply.createMessageComponentCollector({
           componentType: ComponentType.Button,
-          time: 2 * 60 * 1000,
+          time: 2 * 60_000,
           filter: i => [prevId, nextId].includes(i.customId) && i.user.id === invoker.id,
         });
 
         collector.on("collect", async i => {
-          if (i.customId === prevId) page--;
-          if (i.customId === nextId) page++;
-          page = clampPage(page, pages.length);
+          page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
           await i.update({
             embeds: [buildPermsEmbed(user, pages[page], page, pages.length, color)],
-            components: [buildPaginationRow(prevId, nextId, page, pages.length)]
+            components: [buildPaginationRow(prevId, nextId, page, pages.length)],
           });
         });
 
