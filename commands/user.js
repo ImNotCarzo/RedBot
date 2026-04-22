@@ -142,7 +142,7 @@ function buildExtendedFields(member, user) {
       value:
         `> **Tag:** \`${pg.tag}\`\n` +
         `> **ID del servidor:** \`${pg.identityGuildId ?? "N/A"}\`\n` +
-        `> **Mostrar insignia:** ${badgeURL ? `[Ver insignia](${badgeURL})` : "Sin insignia"}`,
+        `> ${badgeURL ? `**[Insignia](${badgeURL})**` : "Sin insignia"}`,
     });
   }
 
