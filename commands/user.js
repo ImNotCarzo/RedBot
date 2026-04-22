@@ -174,7 +174,7 @@ function buildExtendedFields(member, user) {
     const plateName  = nameplate.label || nameplate.skuId || "Placa de nombre";
     // Enlace a la tienda de Discord para ver la placa
     const plateLink  = nameplate.skuId
-      ? `[${plateName}](https://discord.com/shop?skuId=${nameplate.skuId})`
+      ? `[${plateName}](https://discord.com/shop#itemSkuId=${nameplate.skuId})`
       : plateName;
     decoLines.push(`> **Placa:** ${plateLink}`);
   }
