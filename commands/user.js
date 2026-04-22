@@ -315,7 +315,7 @@ const data = {
         const infoEmbed = new EmbedBuilder()
           .setThumbnail(user.displayAvatarURL({ size: 1024 }))
           .setColor(colorRol)
-          .setTitle(`${fetched.id}`)
+          .setTitle(`${user.username}`)
           .addFields(fields)
           .setTimestamp();
 
