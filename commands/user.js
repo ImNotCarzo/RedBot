@@ -222,11 +222,11 @@ const data = {
           const embed = new EmbedBuilder()
             .setThumbnail(fetched.displayAvatarURL({ size: 1024 }))
             .setColor("#ff383d")
+            .setTitle(`${fetched.id}`)
             .addFields({
               name: "General",
               value:
                 `> **ID:** \`${fetched.id}\`\n` +
-                `> **Nombre:** ${fetched.username}\n` +
                 `> **Insignias:** ${insignias}\n` +
                 `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
             })
@@ -298,7 +298,6 @@ const data = {
             name: "General",
             value:
               `> **ID:** \`${user.id}\`\n` +
-              `> **Nombre:** ${user.username}\n` +
               `> **Color del rol:** \`${colorRol}\`\n` +
               `> **Insignias:** ${insignias}\n` +
               `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
@@ -316,6 +315,7 @@ const data = {
         const infoEmbed = new EmbedBuilder()
           .setThumbnail(user.displayAvatarURL({ size: 1024 }))
           .setColor(colorRol)
+          .setTitle(`${fetched.id}`)
           .addFields(fields)
           .setTimestamp();
 
