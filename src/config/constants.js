@@ -16,7 +16,7 @@ const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
 
 const MAX_EMBED_DESCRIPTION = 4096;
 
-const AI_MODEL_DEFAULT = "gemini-3.1-flash-lite-preview";
+const AI_MODEL_DEFAULT = "gemini-3.1-flash-lite";
 
 const AI_MODEL_SEARCH = "gemini-2.5-flash";
 
