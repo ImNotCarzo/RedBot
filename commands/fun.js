@@ -57,7 +57,7 @@ async function generateGemmaVision(prompt, imageUrl) {
 async function generateGeminiFlash(prompt) {
   const { generateWithFallback } = require("../src/services/ai.service");
   const response = await generateWithFallback({
-    model: "gemini-3.1-flash-lite-preview",
+    model: "gemini-3.1-flash-lite",
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
   return response.text?.trim() ?? null;
