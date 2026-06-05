@@ -67,6 +67,12 @@ async function initializeBot(bot, config, log) {
   loadAndRegisterEvents(bot, log);
   registerReadyHandler(bot, config, log);
   registerMessageHandler(bot, log);
+  const https = require("https");
+https.get("https://discord.com/api/v10/gateway", (res) => {
+  log.info("Discord alcanzable", { status: res.statusCode });
+}).on("error", (e) => {
+  log.error("No se puede alcanzar Discord", { err: e.message });
+});
   await bot.login(config.TOKEN);
 }
 
