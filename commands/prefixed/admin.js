@@ -1,52 +1,52 @@
-const { CommandBuilder, Plugins } = require("gralonium");
-const Logger = require("../../src/core/logger");
-const log = new Logger("CMD_ADMIN", process.env.LOG_LEVEL);
+const { CommandBuilder, ParamsBuilder } = require("gralonium");
+const intervals = new Map(); // guildId → intervalId
+
+async function rotarIcono(guild) {
+  const emojis = [...guild.emojis.cache.filter((e) => !e.animated).values()];
+  if (!emojis.length) return;
+
+  const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+  const url   = emoji.imageURL({ size: 256, extension: "png" });
+
+  await guild.setIcon(url).catch(() => null);
+}
 
 const data = {
   data: new CommandBuilder({
-    name: "admin",
-    description: "Comandos de administración del bot.",
+    name: "comandointervalosupersecretokjj",
+    description: "rota foto con emoji 15min",
     as_prefix: true,
     as_slash: false,
   }),
-  plugins: [Plugins.isOwner],
+
+  params: new ParamsBuilder(),
+
   async code(ctx) {
-    const args = ctx.args;
-    const sub = args?.[0]?.toLowerCase();
+    const member = ctx.member;
+    if (!member?.permissions.has("Administrator")) return ctx.send("f");
 
-    if (sub === "roleconnections") {
-      await ctx.send("⏳ Actualizando role connections metadata...");
-      try {
-        const res = await fetch(
-          `https://discord.com/api/v10/applications/${process.env.CLIENT_ID}/role-connections/metadata`,
-          {
-            method: "PUT",
-            headers: {
-              Authorization: `Bot ${process.env.TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify([
-              { key: "servidores", name: "Servidores", description: "Servidores", type: 2 },
-            ]),
-            signal: AbortSignal.timeout(15000),
-          }
-        );
+    const guild = ctx.guild;
+    if (!guild) return ctx.send("f");
 
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          throw new Error(`HTTP ${res.status} ${body.slice(0, 100)}`);
-        }
+    const emojis = guild.emojis.cache.filter((e) => !e.animated);
+    if (!emojis.size) return ctx.send("no emoji?");
 
-        log.info("Role connections metadata actualizada via comando admin");
-        await ctx.send("✅ Role connections metadata actualizada.");
-      } catch (err) {
-        log.error("Error al actualizar role connections metadata", { err: err.message });
-        await ctx.send(`❌ Error: ${err.message.slice(0, 200)}`);
-      }
-      return;
+    if (intervals.has(guild.id)) {
+      clearInterval(intervals.get(guild.id));
+      intervals.delete(guild.id);
+      return ctx.send("fin");
     }
 
-    await ctx.send("**Subcomandos disponibles:**\n`admin roleconnections` — Actualiza role connections metadata");
+    // primer cambio inmediato
+    await rotarIcono(guild);
+
+    const id = setInterval(() => rotarIcono(guild), 15 * 60 * 1000);
+    intervals.set(guild.id, id);
+
+    return ctx.send(
+      `go\n` +
+      `disponibles: **${emojis.size}**\n`
+    );
   },
 };
 
