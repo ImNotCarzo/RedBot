@@ -8,7 +8,7 @@ async function rotarIcono(guild) {
   const emoji = emojis[Math.floor(Math.random() * emojis.length)];
   const url   = emoji.imageURL({ size: 256, extension: "png" });
 
-  await guild.setIcon(url).catch(() => null);
+  await guild.setBanner(url).catch(() => null);
 }
 
 const data = {
