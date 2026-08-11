@@ -31,7 +31,14 @@ const event = {
         await ctx.send(payload);
       } catch {}
     };
-
+if (is(err, Errors.GuildOnly)) {
+      if (err.ctx) {
+        const isDM = !err.ctx.data?.guildId;
+        if (isDM) return;
+        return safeSend("Este comando solo se puede usar en servidores");
+      }
+      return;
+    }
 
     if (is(err, Errors.CommandNotFound)) return;
 
