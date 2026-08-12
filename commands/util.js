@@ -458,7 +458,7 @@ const data = {
 
   .addCommand({
     data: new CommandBuilder({
-      name: "dmall",
+      name: "dm",
       description: "Envia un dm a todos los usuarios",
     }),
 
