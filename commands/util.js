@@ -453,6 +453,82 @@ const data = {
     },
   })
 
+
+    // DMALL
+
+  .addCommand({
+    data: new CommandBuilder({
+      name: "dmall",
+      description: "Envia un dm a todos los usuarios",
+    }),
+
+    params: new ParamsBuilder()
+      .addString({
+        name: "titulo",
+        description: "Título del embed",
+        required: true,
+      })
+      .addString({
+        name: "texto",
+        description: "Mensaje que recibirán los usuarios",
+        required: true,
+      }),
+
+    plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("Administrator")],
+
+    async code(ctx) {
+      if (!ctx.guild) return noGuildReply(ctx);
+
+      const titulo = ctx.get("titulo");
+      const texto  = ctx.get("texto");
+
+      await ctx.interaction.deferReply({ ephemeral: true });
+
+      const author    = ctx.author;
+      const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+
+      const embed = new EmbedBuilder()
+        .setTitle(titulo)
+        .setDescription(texto)
+        .setColor(RED)
+        .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
+        .setThumbnail(ctx.guild.iconURL({ size: 512 }));
+
+      await ctx.guild.members.fetch();
+
+      let enviados = 0;
+      let fallidos = 0;
+
+      for (const [, miembro] of ctx.guild.members.cache) {
+        if (miembro.user.bot) continue;
+        try {
+          await miembro.send({ embeds: [embed] });
+          enviados++;
+        } catch {
+          fallidos++;
+        }
+      }
+
+      const logEmbed = new EmbedBuilder()
+        .setTitle("DM masivo enviado")
+        .setColor(RED)
+        .addFields(
+          { name: "Moderador", value: author.tag ?? author.username, inline: true },
+          { name: "Enviados",  value: `\`${enviados}\``,             inline: true },
+          { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true },
+          { name: "Título",    value: titulo,                         inline: false },
+          { name: "Texto",     value: texto,                          inline: false },
+        )
+        .setTimestamp();
+
+      await sendLog(ctx.guild, logEmbed);
+
+      await ctx.interaction.editReply({
+        content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`,
+      });
+    },
+  })
+    
   // ── RESUME ────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
