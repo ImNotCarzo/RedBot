@@ -456,12 +456,12 @@ const data = {
 
     // DMALL
 
-  .addCommand({
+    .addCommand({
     data: new CommandBuilder({
       name: "dm",
-      description: "Envia un dm a todos los usuarios",
+      description: "Envía un DM con embed a todos los miembros del servidor",
     }),
-
+ 
     params: new ParamsBuilder()
       .addString({
         name: "titulo",
@@ -473,42 +473,48 @@ const data = {
         description: "Mensaje que recibirán los usuarios",
         required: true,
       }),
-
-    plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("Administrator")],
-
+ 
+    plugins: [Plugins.hasPerms("Administrator")],
+ 
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
-
+ 
       const titulo = ctx.get("titulo");
       const texto  = ctx.get("texto");
-
+ 
       await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
+ 
       const author    = ctx.author;
       const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
-
+ 
       const embed = new EmbedBuilder()
         .setTitle(titulo)
         .setDescription(texto)
         .setColor(RED)
         .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
         .setThumbnail(ctx.guild.iconURL({ size: 512 }));
-
+ 
       await ctx.guild.members.fetch();
-
+ 
+      const members = [...ctx.guild.members.cache.values()].filter((m) => !m.user.bot);
+      const total   = members.length;
+ 
+      await ctx.interaction.editReply({ content: `enviando... 0/${total}` });
+ 
       let enviados = 0;
       let fallidos = 0;
-
-      for (const [, miembro] of ctx.guild.members.cache) {
-        if (miembro.user.bot) continue;
-        try {
-          await miembro.send({ embeds: [embed] });
-          enviados++;
-        } catch {
-          fallidos++;
+ 
+      for (let i = 0; i < members.length; i++) {
+        const ok = await sendWithRetry(members[i], { embeds: [embed] });
+        if (ok) enviados++; else fallidos++;
+ 
+        await sleep(800);
+ 
+        if (i % 10 === 0) {
+          await ctx.interaction.editReply({ content: `enviando... ${i + 1}/${total}` }).catch(() => null);
         }
       }
-
+ 
       const logEmbed = new EmbedBuilder()
         .setTitle("DM masivo enviado")
         .setColor(RED)
@@ -520,15 +526,13 @@ const data = {
           { name: "Texto",     value: texto,                          inline: false },
         )
         .setTimestamp();
-
+ 
       await sendLog(ctx.guild, logEmbed);
-
-      await ctx.interaction.editReply({
-        content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`,
-      });
+ 
+      await ctx.interaction.editReply({ content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**` });
     },
   })
-    
+
   // ── RESUME ────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
