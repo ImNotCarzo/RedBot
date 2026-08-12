@@ -1,4 +1,4 @@
-const { CommandBuilder } = require("gralonium");
+const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 const sendLog = require("../../src/services/logging.service");
@@ -25,10 +25,43 @@ async function sendWithRetry(miembro, payload, maxRetries = 3) {
   }
   return false;
 }
+function parseArgs(raw) {
+  let str    = raw;
+  let rolId  = null;
+  let userId = null;
+
+  const rolMatch  = str.match(/--rol\s+(\d+)/);
+  const userMatch = str.match(/--user\s+(\d+)/);
+
+  if (rolMatch)  { rolId  = rolMatch[1];  str = str.replace(rolMatch[0],  "").trim(); }
+  if (userMatch) { userId = userMatch[1]; str = str.replace(userMatch[0], "").trim(); }
+
+  const sep    = str.indexOf(",");
+  const titulo = sep !== -1 ? str.slice(0, sep).trim() : str.trim();
+  const texto  = sep !== -1 ? str.slice(sep + 1).trim() : "";
+
+  return { titulo, texto, rolId, userId };
+}
 
 // ─────────────────────────────────────────────
 //  COMANDO
 // ─────────────────────────────────────────────
+
+const PARAMERROR = (bot) => ({
+  embeds: [
+    new EmbedBuilder()
+      .setAuthor({ name: "Comando DM", iconURL: bot.displayAvatarURL() })
+      .setDescription(
+        `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
+        `\n\n**Aliases:**\n\`dm\`, \`dmeveryone\`` +
+        `\n\n\`\`\`js\n.dm titulo,texto --rol <@rol> --user <@user>\n\n` +
+        `Ejemplo base: .dm Hoy jugamos, go ofi\n` +
+        `Excluir usuarios con un rol: .dm Hoy jugamos, go ofi --rol @blacklist\n` +
+        `Excluir usuario: .dmall Hoy jugamos, go ofi --user @loge\`\`\``
+      )
+      .setColor(RED),
+  ],
+});
 
 const data = {
   data: new CommandBuilder({
@@ -43,39 +76,11 @@ const data = {
     const bot = ctx.bot.user;
     const raw = ctx.args?.join(" ").trim();
 
-    if (!raw) {
-      return ctx.send({
-        embeds: [
-          new EmbedBuilder()
-            .setAuthor({ name: "Comando DM All", iconURL: bot.displayAvatarURL() })
-            .setDescription(
-              `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
-              `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
-              `\n\n\`\`\`js\n.dmall titulo,texto\nEjemplo: .dmall Hoy jugamos,go ofi\`\`\``
-            )
-            .setColor(RED),
-        ],
-      });
-    }
+    if (!raw) return ctx.send(PARAMERROR(bot));
 
-    const sep    = raw.indexOf(",");
-    const titulo = sep !== -1 ? raw.slice(0, sep).trim() : raw.trim();
-    const texto  = sep !== -1 ? raw.slice(sep + 1).trim() : "";
+    const { titulo, texto, rolId, userId } = parseArgs(raw);
 
-    if (!titulo || !texto) {
-      return ctx.send({
-        embeds: [
-          new EmbedBuilder()
-            .setAuthor({ name: "Comando DM", iconURL: bot.displayAvatarURL() })
-            .setDescription(
-              `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
-              `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
-              `\n\n\`\`\`js\n.dmall titulo,texto\nEjemplo: .dmall Hoy jugamos,go ofi\`\`\``
-            )
-            .setColor(RED),
-        ],
-      });
-    }
+    if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
 
     const member = ctx.member;
     if (!member?.permissions.has("Administrator")) return ctx.send("f");
@@ -95,9 +100,14 @@ const data = {
 
     await guild.members.fetch();
 
-    const members = [...guild.members.cache.values()].filter((m) => !m.user.bot);
-    const total   = members.length;
+    const members = [...guild.members.cache.values()].filter((m) => {
+      if (m.user.bot) return false;
+      if (rolId  && m.roles.cache.has(rolId))  return false;
+      if (userId && m.id === userId)            return false;
+      return true;
+    });
 
+    const total       = members.length;
     const progressMsg = await ctx.send(`enviando... 0/${total}`);
 
     let enviados = 0;
@@ -107,22 +117,28 @@ const data = {
       const ok = await sendWithRetry(members[i], { embeds: [embed] });
       if (ok) enviados++; else fallidos++;
 
-      await sleep(800);
+      await sleep(500);
 
       if (i % 10 === 0) {
         await progressMsg.edit(`enviando... ${i + 1}/${total}`).catch(() => null);
       }
     }
 
+    const exclusiones = [
+      rolId  ? `Rol excluido: \`${rolId}\``      : null,
+      userId ? `Usuario excluido: \`${userId}\`` : null,
+    ].filter(Boolean);
+
     const logEmbed = new EmbedBuilder()
       .setTitle("DM masivo enviado")
       .setColor(RED)
       .addFields(
-        { name: "Moderador", value: author.tag ?? author.username, inline: true },
-        { name: "Enviados",  value: `\`${enviados}\``,             inline: true },
-        { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true },
-        { name: "Título",    value: titulo,                         inline: false },
-        { name: "Texto",     value: texto,                          inline: false },
+        { name: "Moderador", value: author.tag ?? author.username,                          inline: true  },
+        { name: "Enviados",  value: `\`${enviados}\``,                                      inline: true  },
+        { name: "Fallidos",  value: `\`${fallidos}\``,                                      inline: true  },
+        { name: "Título",    value: titulo,                                                  inline: false },
+        { name: "Texto",     value: texto,                                                   inline: false },
+        ...(exclusiones.length ? [{ name: "Exclusiones", value: exclusiones.join("\n"), inline: false }] : []),
       )
       .setTimestamp();
 
