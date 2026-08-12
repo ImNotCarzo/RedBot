@@ -55,9 +55,9 @@ const PARAMERROR = (bot) => ({
         `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
         `\n\n**Aliases:**\n\`dm\`, \`dmeveryone\`` +
         `\n\n\`\`\`js\n.dm titulo,texto --rol <@rol> --user <@user>\n\n` +
-        `Ejemplo base: .dm Hoy jugamos, go ofi\n` +
-        `Excluir usuarios con un rol: .dm Hoy jugamos, go ofi --rol @blacklist\n` +
-        `Excluir usuario: .dmall Hoy jugamos, go ofi --user @loge\`\`\``
+        `Ejemplo base: \n.dm Hoy jugamos, go ofi\n` +
+        `Excluir usuarios con un rol: \n.dm Hoy jugamos, go ofi --rol @blacklist\n` +
+        `Excluir usuario: \n.dmall Hoy jugamos, go ofi --user @loge\`\`\``
       )
       .setColor(RED),
   ],
