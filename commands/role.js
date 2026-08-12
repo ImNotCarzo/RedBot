@@ -732,7 +732,7 @@ const data = {
           embeds: [
             new EmbedBuilder()
               .setDescription(`Añadiendo ${role} a **${done + failed}/${total}** miembros...`)
-              .setColor(BLUE),
+              .setColor(RED),
           ],
         }).catch(() => {});
       }
