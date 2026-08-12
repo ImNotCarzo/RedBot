@@ -491,15 +491,27 @@ const data = {
         name: "texto",
         description: "Mensaje que recibirán los usuarios",
         required: true,
+      })
+      .addRole({
+        name: "excluir_rol",
+        description: "Excluir todos los miembros con este rol",
+        required: false,
+      })
+      .addMember({
+        name: "excluir_usuario",
+        description: "Excluir un usuario específico",
+        required: false,
       }),
  
-    plugins: [Plugins.hasPerms("Administrator")],
+    plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("Administrator")],
  
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
  
-      const titulo = ctx.get("titulo");
-      const texto  = ctx.get("texto");
+      const titulo         = ctx.get("titulo");
+      const texto          = ctx.get("texto");
+      const rolExcluido    = ctx.get("excluir_rol");
+      const usuarioExcluido = ctx.get("excluir_usuario");
  
       await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
  
@@ -515,9 +527,14 @@ const data = {
  
       await ctx.guild.members.fetch();
  
-      const members = [...ctx.guild.members.cache.values()].filter((m) => !m.user.bot);
-      const total   = members.length;
+      const members = [...ctx.guild.members.cache.values()].filter((m) => {
+        if (m.user.bot) return false;
+        if (rolExcluido     && m.roles.cache.has(rolExcluido.id)) return false;
+        if (usuarioExcluido && m.id === usuarioExcluido.id)        return false;
+        return true;
+      });
  
+      const total = members.length;
       await ctx.interaction.editReply({ content: `enviando... 0/${total}` });
  
       let enviados = 0;
@@ -527,30 +544,39 @@ const data = {
         const ok = await sendWithRetry(members[i], { embeds: [embed] });
         if (ok) enviados++; else fallidos++;
  
-        await sleep(800);
+        await sleep(500);
  
         if (i % 10 === 0) {
           await ctx.interaction.editReply({ content: `enviando... ${i + 1}/${total}` }).catch(() => null);
         }
       }
  
+      const exclusiones = [
+        rolExcluido     ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)`                : null,
+        usuarioExcluido ? `Usuario excluido: ${usuarioExcluido.user.tag} (\`${usuarioExcluido.id}\`)` : null,
+      ].filter(Boolean);
+ 
       const logEmbed = new EmbedBuilder()
         .setTitle("DM masivo enviado")
         .setColor(RED)
         .addFields(
-          { name: "Moderador", value: author.tag ?? author.username, inline: true },
-          { name: "Enviados",  value: `\`${enviados}\``,             inline: true },
-          { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true },
-          { name: "Título",    value: titulo,                         inline: false },
-          { name: "Texto",     value: texto,                          inline: false },
+          { name: "Moderador", value: author.tag ?? author.username,                          inline: true  },
+          { name: "Enviados",  value: `\`${enviados}\``,                                      inline: true  },
+          { name: "Fallidos",  value: `\`${fallidos}\``,                                      inline: true  },
+          { name: "Título",    value: titulo,                                                  inline: false },
+          { name: "Texto",     value: texto,                                                   inline: false },
+          ...(exclusiones.length ? [{ name: "Exclusiones", value: exclusiones.join("\n"), inline: false }] : []),
         )
         .setTimestamp();
  
       await sendLog(ctx.guild, logEmbed);
  
-      await ctx.interaction.editReply({ content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**` });
+      await ctx.interaction.editReply({
+        content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`,
+      });
     },
   })
+
 
   // ── RESUME ────────────────────────────────────
   .addCommand({
