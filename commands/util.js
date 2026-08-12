@@ -6,7 +6,7 @@ const { RED, GREEN } = require("../utils/colors");
 const { getPrefix, setPrefix } = require("../src/services/guildConfig.service");
 const { getAI } = require("../src/services/ai.service");
 const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
-
+const sendLog = require("../src/services/logging.service");
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 const log = createCommandLogger("CMD_UTIL");
@@ -482,7 +482,7 @@ const data = {
       const titulo = ctx.get("titulo");
       const texto  = ctx.get("texto");
 
-      await ctx.interaction.deferReply({ ephemeral: true });
+      await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const author    = ctx.author;
       const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
