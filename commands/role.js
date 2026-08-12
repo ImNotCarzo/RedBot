@@ -711,7 +711,7 @@ const data = {
       embeds: [
         new EmbedBuilder()
           .setDescription(`Añadiendo ${role} a **0/${targets.size}** miembros...`)
-          .setColor(BLUE),
+          .setColor(RED),
       ],
     });
 
