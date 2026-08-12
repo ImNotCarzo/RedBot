@@ -4,9 +4,9 @@ const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "dmall",
+    name: "dm",
     description: "Envía un DM con embed a todos los miembros del servidor",
-    aliases: ["dm", "dmerveryone"],
+    aliases: ["dmall", "dmerveryone"],
     as_prefix: true,
     as_slash: false,
   }),
