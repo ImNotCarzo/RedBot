@@ -75,7 +75,7 @@ const data = {
       }
     }
 
-    const resultado = `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`;
+    const resultado = `Enviados: **${enviados}**\nFallidos: **${fallidos}**`;
 
     if (ctx.interaction) {
       await ctx.interaction.editReply({ content: resultado });
