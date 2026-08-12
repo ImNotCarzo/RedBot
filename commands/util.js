@@ -70,6 +70,25 @@ async function generateGeminiText(prompt) {
 //  HELPERS
 // ─────────────────────────────────────────────
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function sendWithRetry(miembro, payload, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await miembro.send(payload);
+      return true;
+    } catch (err) {
+      if (err?.status === 429) {
+        const wait = (err?.rawError?.retry_after ?? 2) * 1000;
+        await sleep(wait);
+        continue;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
 // ─────────────────────────────────────────────
 //  DATA
 // ─────────────────────────────────────────────
