@@ -59,11 +59,11 @@ const PARAMERROR = (bot) => ({
         `\n\n\`\`\`js\n.dm titulo,texto --solo <@rol> --rol <@rol> --user <@user> \n\n` +
         `Ejemplo base:         
         .dm Hoy jugamos, go ofi \n` +
-        `Solo un rol:     
+        `Solo un rol:
         .dm Hoy jugamos,solo los gokianos --solo @gokianos\n` +
-        `Excluir rol:     
+        `Excluir rol:
         .dm Hoy jugamos,menos los malos --rol @malos\n` +
-        `Excluir usuario: 
+        `Excluir usuario:
         .dm Hoy jugamos,todos menos el mamon --user @loge\n` +
         `Todo:
         .dm Hoy jugamos, solo los gokianos que no son malos ni mamones --solo @gokianos --rol @malos --user @loge\`\`\``
