@@ -25,19 +25,15 @@ async function sendWithRetry(miembro, payload, maxRetries = 3) {
   }
   return false;
 }
-
-/**
- * Formato: titulo,texto [--solo <id>] [--rol <id>] [--user <id>]
- */
 function parseArgs(raw) {
   let str    = raw;
   let soloId = null;
   let rolId  = null;
   let userId = null;
 
-  const soloMatch = str.match(/--solo\s+(\d+)/);
-  const rolMatch  = str.match(/--rol\s+(\d+)/);
-  const userMatch = str.match(/--user\s+(\d+)/);
+  const soloMatch = str.match(/--solo\s+(?:<@&)?(\d+)>?/);
+  const rolMatch  = str.match(/--rol\s+(?:<@&)?(\d+)>?/);
+  const userMatch = str.match(/--user\s+(?:<@!?)?(\d+)>?/);
 
   if (soloMatch) { soloId = soloMatch[1]; str = str.replace(soloMatch[0], "").trim(); }
   if (rolMatch)  { rolId  = rolMatch[1];  str = str.replace(rolMatch[0],  "").trim(); }
@@ -49,7 +45,6 @@ function parseArgs(raw) {
 
   return { titulo, texto, soloId, rolId, userId };
 }
-
 // ─────────────────────────────────────────────
 //  COMANDO
 // ─────────────────────────────────────────────
