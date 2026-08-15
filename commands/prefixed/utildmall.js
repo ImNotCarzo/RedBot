@@ -56,17 +56,24 @@ const PARAMERROR = (bot) => ({
       .setDescription(
         `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
         `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
-        `\n\n\`\`\`js\n.dm titulo,texto --solo <@rol> --rol <@rol> --user <@user> \n\n`
-        `Ejemplo base:
-        .dm Hoy jugamos, go ofi \n` +
-        `Solo un rol:
-        .dm Hoy jugamos,solo los gokianos --solo @gokianos\n` +
-        `Excluir rol: 
-        .dm Hoy jugamos,menos los malos --rol @malos\n` +
-        `Excluir usuario: 
-        .dm Hoy jugamos,todos menos el mamon --user @loge\n` +
-        `Todo: 
-        .dm Hoy jugamos, solo los gokianos que no son malos ni mamones --solo @gokianos --rol @malos --user @loge\`\`\``
+        `\n\`\`\`\n` +
+        `.dm titulo,texto [--solo <@rol>] [--rol <@rol>] [--user <@user>]\n` +
+        `\n` +
+        `Ejemplo base:\n` +
+        `  .dm Hoy jugamos,go ofi\n` +
+        `\n` +
+        `Solo un rol:\n` +
+        `  .dm Hoy jugamos,solo los gokianos --solo @gokianos\n` +
+        `\n` +
+        `Excluir rol:\n` +
+        `  .dm Hoy jugamos,menos los malos --rol @malos\n` +
+        `\n` +
+        `Excluir usuario:\n` +
+        `  .dm Hoy jugamos,todos menos el mamon --user @loge\n` +
+        `\n` +
+        `Todo:\n` +
+        `  .dm Hoy jugamos,solo gokianos sin malos ni mamones --solo @gokianos --rol @malos --user @loge` +
+        `\`\`\``
       )
       .setColor(RED),
   ],
