@@ -25,14 +25,21 @@ async function sendWithRetry(miembro, payload, maxRetries = 3) {
   }
   return false;
 }
+
+/**
+ * Formato: titulo,texto [--solo <id>] [--rol <id>] [--user <id>]
+ */
 function parseArgs(raw) {
   let str    = raw;
+  let soloId = null;
   let rolId  = null;
   let userId = null;
 
+  const soloMatch = str.match(/--solo\s+(\d+)/);
   const rolMatch  = str.match(/--rol\s+(\d+)/);
   const userMatch = str.match(/--user\s+(\d+)/);
 
+  if (soloMatch) { soloId = soloMatch[1]; str = str.replace(soloMatch[0], "").trim(); }
   if (rolMatch)  { rolId  = rolMatch[1];  str = str.replace(rolMatch[0],  "").trim(); }
   if (userMatch) { userId = userMatch[1]; str = str.replace(userMatch[0], "").trim(); }
 
@@ -40,7 +47,7 @@ function parseArgs(raw) {
   const titulo = sep !== -1 ? str.slice(0, sep).trim() : str.trim();
   const texto  = sep !== -1 ? str.slice(sep + 1).trim() : "";
 
-  return { titulo, texto, rolId, userId };
+  return { titulo, texto, soloId, rolId, userId };
 }
 
 // ─────────────────────────────────────────────
@@ -50,14 +57,21 @@ function parseArgs(raw) {
 const PARAMERROR = (bot) => ({
   embeds: [
     new EmbedBuilder()
-      .setAuthor({ name: "Comando DM", iconURL: bot.displayAvatarURL() })
+      .setAuthor({ name: "Comando DM All", iconURL: bot.displayAvatarURL() })
       .setDescription(
         `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
-        `\n\n**Aliases:**\n\`dm\`, \`dmeveryone\`` +
-        `\n\n\`\`\`js\n.dm titulo,texto --rol <@rol> --user <@user>\n\n` +
-        `Ejemplo base: \n.dm Hoy jugamos, go ofi\n` +
-        `Excluir usuarios con un rol: \n.dm Hoy jugamos, go ofi --rol @blacklist\n` +
-        `Excluir usuario: \n.dmall Hoy jugamos, go ofi --user @loge\`\`\``
+        `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
+        `\n\n\`\`\`js\n.dm titulo,texto --solo <@rol> --rol <@ol> --user <@user> \n\n` +
+        `Ejemplo base:         
+        .dm Hoy jugamos, go ofi \n` +
+        `Solo un rol:     
+        .dm Hoy jugamos,solo los gokianos --solo @gokianos\n` +
+        `Excluir rol:     
+        .dm Hoy jugamos,menos los malos --rol @malos\n` +
+        `Excluir usuario: 
+        .dm Hoy jugamos,todos menos el mamon --user @loge\n` +
+        `Todo:
+        .dm Hoy jugamos, solo los gokianos que no son malos ni mamones --solo @gokianos --rol @malos --user @loge\`\`\``
       )
       .setColor(RED),
   ],
@@ -78,7 +92,7 @@ const data = {
 
     if (!raw) return ctx.send(PARAMERROR(bot));
 
-    const { titulo, texto, rolId, userId } = parseArgs(raw);
+    const { titulo, texto, soloId, rolId, userId } = parseArgs(raw);
 
     if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
 
@@ -102,8 +116,9 @@ const data = {
 
     const members = [...guild.members.cache.values()].filter((m) => {
       if (m.user.bot) return false;
-      if (rolId  && m.roles.cache.has(rolId))  return false;
-      if (userId && m.id === userId)            return false;
+      if (soloId && !m.roles.cache.has(soloId))  return false;
+      if (rolId  &&  m.roles.cache.has(rolId))   return false;
+      if (userId &&  m.id === userId)             return false;
       return true;
     });
 
@@ -125,20 +140,21 @@ const data = {
     }
 
     const exclusiones = [
-      rolId  ? `Rol excluido: \`${rolId}\``      : null,
-      userId ? `Usuario excluido: \`${userId}\`` : null,
+      soloId ? `Solo rol: \`${soloId}\``            : null,
+      rolId  ? `Rol excluido: \`${rolId}\``         : null,
+      userId ? `Usuario excluido: \`${userId}\``    : null,
     ].filter(Boolean);
 
     const logEmbed = new EmbedBuilder()
       .setTitle("DM masivo enviado")
       .setColor(RED)
       .addFields(
-        { name: "Moderador", value: author.tag ?? author.username,                          inline: true  },
-        { name: "Enviados",  value: `\`${enviados}\``,                                      inline: true  },
-        { name: "Fallidos",  value: `\`${fallidos}\``,                                      inline: true  },
-        { name: "Título",    value: titulo,                                                  inline: false },
-        { name: "Texto",     value: texto,                                                   inline: false },
-        ...(exclusiones.length ? [{ name: "Exclusiones", value: exclusiones.join("\n"), inline: false }] : []),
+        { name: "Moderador", value: author.tag ?? author.username, inline: true  },
+        { name: "Enviados",  value: `\`${enviados}\``,             inline: true  },
+        { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true  },
+        { name: "Título",    value: titulo,                         inline: false },
+        { name: "Texto",     value: texto,                         inline: false },
+        ...(exclusiones.length ? [{ name: "Filtros", value: exclusiones.join("\n"), inline: false }] : []),
       )
       .setTimestamp();
 
