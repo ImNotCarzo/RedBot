@@ -56,7 +56,7 @@ const PARAMERROR = (bot) => ({
       .setDescription(
         `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
         `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
-        `\n\n\`\`\`js\n.dm titulo,texto --solo <@rol> --rol <@ol> --user <@user> \n\n` +
+        `\n\n\`\`\`js\n.dm titulo,texto --solo <@rol> --rol <@rol> --user <@user> \n\n` +
         `Ejemplo base:         
         .dm Hoy jugamos, go ofi \n` +
         `Solo un rol:     
