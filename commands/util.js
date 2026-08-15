@@ -508,7 +508,7 @@ const data = {
         required: false,
       }),
  
-    plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("Administrator")],
+    plugins: [Plugins.hasPerms("Administrator")],
  
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
