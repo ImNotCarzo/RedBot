@@ -475,7 +475,7 @@ const data = {
 
     // DMALL
 
-    .addCommand({
+   .addCommand({
     data: new CommandBuilder({
       name: "dm",
       description: "Envía un DM con embed a todos los miembros del servidor",
@@ -493,6 +493,11 @@ const data = {
         required: true,
       })
       .addRole({
+        name: "solo_rol",
+        description: "Enviar solo a miembros con este rol",
+        required: false,
+      })
+      .addRole({
         name: "excluir_rol",
         description: "Excluir todos los miembros con este rol",
         required: false,
@@ -508,9 +513,10 @@ const data = {
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
  
-      const titulo         = ctx.get("titulo");
-      const texto          = ctx.get("texto");
-      const rolExcluido    = ctx.get("excluir_rol");
+      const titulo          = ctx.get("titulo");
+      const texto           = ctx.get("texto");
+      const soloRol         = ctx.get("solo_rol");
+      const rolExcluido     = ctx.get("excluir_rol");
       const usuarioExcluido = ctx.get("excluir_usuario");
  
       await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -529,8 +535,9 @@ const data = {
  
       const members = [...ctx.guild.members.cache.values()].filter((m) => {
         if (m.user.bot) return false;
-        if (rolExcluido     && m.roles.cache.has(rolExcluido.id)) return false;
-        if (usuarioExcluido && m.id === usuarioExcluido.id)        return false;
+        if (soloRol         && !m.roles.cache.has(soloRol.id))         return false;
+        if (rolExcluido     &&  m.roles.cache.has(rolExcluido.id))     return false;
+        if (usuarioExcluido &&  m.id === usuarioExcluido.id)           return false;
         return true;
       });
  
@@ -551,8 +558,9 @@ const data = {
         }
       }
  
-      const exclusiones = [
-        rolExcluido     ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)`                : null,
+      const filtros = [
+        soloRol         ? `Solo rol: ${soloRol} (\`${soloRol.id}\`)`                              : null,
+        rolExcluido     ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)`                  : null,
         usuarioExcluido ? `Usuario excluido: ${usuarioExcluido.user.tag} (\`${usuarioExcluido.id}\`)` : null,
       ].filter(Boolean);
  
@@ -560,12 +568,12 @@ const data = {
         .setTitle("DM masivo enviado")
         .setColor(RED)
         .addFields(
-          { name: "Moderador", value: author.tag ?? author.username,                          inline: true  },
-          { name: "Enviados",  value: `\`${enviados}\``,                                      inline: true  },
-          { name: "Fallidos",  value: `\`${fallidos}\``,                                      inline: true  },
-          { name: "Título",    value: titulo,                                                  inline: false },
-          { name: "Texto",     value: texto,                                                   inline: false },
-          ...(exclusiones.length ? [{ name: "Exclusiones", value: exclusiones.join("\n"), inline: false }] : []),
+          { name: "Moderador", value: author.tag ?? author.username, inline: true  },
+          { name: "Enviados",  value: `\`${enviados}\``,             inline: true  },
+          { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true  },
+          { name: "Título",    value: titulo,                         inline: false },
+          { name: "Texto",     value: texto,                          inline: false },
+          ...(filtros.length ? [{ name: "Filtros", value: filtros.join("\n"), inline: false }] : []),
         )
         .setTimestamp();
  
