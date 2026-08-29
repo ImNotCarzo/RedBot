@@ -1,32 +1,10 @@
 const GuildConfig = require("../../models/GuildConfig");
 const prefixCache = require("../cache/prefix.cache");
+const { parsePositiveInt } = require("../utils/numbers");
+const { withTimeout } = require("../utils/async");
 
 const DEFAULT_PREFIX = ".";
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 const PREFIX_QUERY_TIMEOUT_MS = parsePositiveInt(process.env.PREFIX_QUERY_TIMEOUT_MS, 2500);
-
-function createTimeoutError(operation, timeoutMs) {
-  return new Error(`${operation} excedió el tiempo límite (${timeoutMs}ms)`);
-}
-
-async function withTimeout(promise, operation, timeoutMs = PREFIX_QUERY_TIMEOUT_MS) {
-  let timer;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(createTimeoutError(operation, timeoutMs)), timeoutMs);
-        timer.unref();
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 function assertGuildId(guildId) {
   if (!guildId || typeof guildId !== "string") {
@@ -46,10 +24,7 @@ async function getPrefix(guildId) {
   assertGuildId(guildId);
   if (prefixCache.has(guildId)) return prefixCache.get(guildId);
   try {
-    const doc = await withTimeout(
-      GuildConfig.findOne({ guildId }).lean(),
-      "Lectura de prefijo de servidor"
-    );
+    const doc = await withTimeout(GuildConfig.findOne({ guildId }).lean(), PREFIX_QUERY_TIMEOUT_MS, "Guild prefix read");
     const prefix = doc?.prefix ?? DEFAULT_PREFIX;
     prefixCache.set(guildId, prefix);
     return prefix;
@@ -68,7 +43,8 @@ async function setPrefix(guildId, prefix) {
       { prefix: normalized },
       { upsert: true, setDefaultsOnInsert: true }
     ),
-    "Actualización de prefijo de servidor"
+    PREFIX_QUERY_TIMEOUT_MS,
+    "Guild prefix update"
   );
   prefixCache.set(guildId, normalized);
   return normalized;

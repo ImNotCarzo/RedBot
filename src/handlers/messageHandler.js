@@ -35,7 +35,7 @@ function registerMessageHandler(bot, log) {
       if (!userData) return;
       if (message.reference.messageId !== userData.lastBotMessageId) return;
 
-      const pregunta = message.content.trim();
+      const pregunta = typeof message.content === "string" ? message.content.trim() : "";
       if (!pregunta) return;
 
       await message.channel.sendTyping().catch(() => {});

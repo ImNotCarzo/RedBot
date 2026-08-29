@@ -1,5 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const Logger = require("../core/logger");
+const { sleep, withTimeout } = require("../utils/async");
 
 const log = new Logger("AI_SERVICE", process.env.LOG_LEVEL);
 
@@ -9,10 +10,6 @@ let currentKey = 0;
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 const DEFAULT_ATTEMPTS = 3;
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function getCurrentApiKey() {
   return GEMINI_KEYS[currentKey] ?? null;
@@ -43,21 +40,6 @@ function isRetriableAIError(err) {
   return msg.includes("timeout") || msg.includes("timed out") || msg.includes("econnreset");
 }
 
-async function withTimeout(promise, timeoutMs) {
-  let timeout;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(`AI timeout (${timeoutMs}ms)`)), timeoutMs);
-        timeout.unref();
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
 async function generateWithFallback(params, options = {}) {
   if (!params || typeof params !== "object") {
     throw new TypeError("Parámetros de AI inválidos");
@@ -69,7 +51,7 @@ async function generateWithFallback(params, options = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await withTimeout(getAI().models.generateContent(params), timeoutMs);
+        return await withTimeout(getAI().models.generateContent(params), timeoutMs, "AI timeout");
     } catch (err) {
       lastErr = err;
       const status = Number(err?.status ?? err?.code ?? 0);
