@@ -15,25 +15,56 @@ const slashCommandMap = new Map();
 /** Cache of inferred permission requirements by slash command key. */
 const inferredPermissionsCache = new Map();
 
+function readJsFilesRecursively(baseDir) {
+  const files = [];
+  const stack = [baseDir];
+  while (stack.length) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith("_")) continue;
+        stack.push(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".js")) continue;
+      if (entry.name.startsWith("_")) continue;
+      files.push(full);
+    }
+  }
+  return files;
+}
+
 /**
- * Populate `slashCommandMap` with every slash command from the `commands/` directory.
- * No-op if already loaded.
+ * Populate `slashCommandMap` with every slash command from `commands/slash`.
+ * Falls back to root-level `commands/*.js` for backward compatibility.
  */
 function loadSlashCommandMap(log) {
   if (slashCommandMap.size) return;
 
-  const commandsDir = path.join(__dirname, "../../commands");
-  const entries = fs.readdirSync(commandsDir, { withFileTypes: true });
+  const slashDir = path.join(__dirname, "../../commands/slash");
+  const legacyRootDir = path.join(__dirname, "../../commands");
+  const files = [];
 
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith(".js")) continue;
-    if (entry.name.startsWith("_")) continue;
+  if (fs.existsSync(slashDir)) {
+    files.push(...readJsFilesRecursively(slashDir));
+  } else if (fs.existsSync(legacyRootDir)) {
+    const entries = fs.readdirSync(legacyRootDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".js")) continue;
+      if (entry.name.startsWith("_")) continue;
+      files.push(path.join(legacyRootDir, entry.name));
+    }
+  }
 
-    const file = entry.name.slice(0, -3);
+  for (const fullPath of files) {
+    const file = path.basename(fullPath, ".js");
 
     try {
-      const mod = require(path.join(commandsDir, entry.name));
+      const mod = require(fullPath);
       const exported = mod?.data;
       const rootData = exported?.data;
 
@@ -50,7 +81,7 @@ function loadSlashCommandMap(log) {
         slashCommandMap.set(`${rootData.name}/${rootData.name}`, exported);
       }
     } catch (err) {
-      log?.warn(`No se pudo cargar comando slash desde ${entry.name}`, { err: err?.message ?? String(err) });
+      log?.warn(`No se pudo cargar comando slash desde ${fullPath}`, { err: err?.message ?? String(err) });
     }
   }
 }

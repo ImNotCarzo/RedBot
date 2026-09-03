@@ -3,8 +3,6 @@ const botConfig = require("../config/bot.config");
 const { getPrefix, DEFAULT_PREFIX } = require("../services/guildConfig.service");
 const { loadAndRegisterEvents } = require("../handlers/eventHandler");
 const { wrapPrefixedCommands } = require("../handlers/commandHandler");
-const { registerReadyHandler } = require("../handlers/readyHandler");
-const { registerMessageHandler } = require("../handlers/messageHandler");
 
 function buildPrefixResolver() {
   return async (ctx) => {
@@ -65,14 +63,14 @@ async function initializeBot(bot, config, log) {
   await bot.load("commands");
   wrapPrefixedCommands(log);
   loadAndRegisterEvents(bot, log);
-  registerReadyHandler(bot, config, log);
-  registerMessageHandler(bot, log);
+
   const https = require("https");
-https.get("https://discord.com/api/v10/gateway", (res) => {
-  log.info("Discord alcanzable", { status: res.statusCode });
-}).on("error", (e) => {
-  log.error("No se puede alcanzar Discord", { err: e.message });
-});
+  https.get("https://discord.com/api/v10/gateway", (res) => {
+    log.info("Discord alcanzable", { status: res.statusCode });
+  }).on("error", (e) => {
+    log.error("No se puede alcanzar Discord", { err: e.message });
+  });
+
   await bot.login(config.TOKEN);
 }
 

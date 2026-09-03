@@ -1,7 +1,6 @@
 const { REST, Routes } = require("discord.js");
 const { setId } = require("../state/commandIds.store");
 const { COMMANDS_TO_UPDATE } = require("../config/constants");
-const { registerBotEvent } = require("./eventRuntime");
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -60,7 +59,11 @@ async function runWithRetry(task, log, taskName) {
   throw lastError;
 }
 
-async function syncSlashAndContexts(client, config, log) {
+async function syncSlashAndContexts(client, log) {
+  const token = process.env.TOKEN;
+  const clientId = process.env.CLIENT_ID;
+  if (!token || !clientId) throw new Error("TOKEN/CLIENT_ID no disponibles para sincronización");
+
   await runWithRetry(
     () => withTimeout(
       client.sync(),
@@ -72,10 +75,10 @@ async function syncSlashAndContexts(client, config, log) {
   );
   log?.info("Comandos slash sincronizados");
 
-  const rest = new REST().setToken(config.TOKEN);
+  const rest = new REST().setToken(token);
   const commands = await runWithRetry(
     () => withTimeout(
-      rest.get(Routes.applicationCommands(config.CLIENT_ID)),
+      rest.get(Routes.applicationCommands(clientId)),
       READY_API_TIMEOUT_MS,
       "Lectura de comandos de aplicación"
     ),
@@ -89,11 +92,10 @@ async function syncSlashAndContexts(client, config, log) {
 
   for (const cmd of commands) {
     if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
-
     try {
       await runWithRetry(
         () => withTimeout(
-          rest.patch(Routes.applicationCommand(config.CLIENT_ID, cmd.id), {
+          rest.patch(Routes.applicationCommand(clientId, cmd.id), {
             body: {
               integration_types: [0, 1],
               contexts: [0, 1, 2],
@@ -110,16 +112,13 @@ async function syncSlashAndContexts(client, config, log) {
       log?.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
     }
   }
-
-  log?.info("Todos los contextos actualizados");
 }
 
-async function runReadySyncCycle(client, config, log, state) {
+async function runReadySyncCycle(client, log, state) {
   if (state.running) return;
   state.running = true;
-
   try {
-    await syncSlashAndContexts(client, config, log);
+    await syncSlashAndContexts(client, log);
     state.lastSyncAt = Date.now();
   } catch (err) {
     log?.error("Fallo en ciclo de sincronización de aplicación", { err: err?.message ?? String(err) });
@@ -128,66 +127,41 @@ async function runReadySyncCycle(client, config, log, state) {
   }
 }
 
-/**
- * Register the `clientReady` handler on the bot.
- *
- * Responsibilities:
- * - Update role-connections metadata.
- * - Sync slash commands.
- * - Patch integration_types / contexts for specific commands.
- *
- * @param {import("gralonium").Gralonium} bot
- * @param {{ TOKEN: string, CLIENT_ID: string }} config
- * @param {import("../core/logger")} [log]
- */
-function registerReadyHandler(bot, config, log) {
-  registerBotEvent(bot, {
-    name: "clientReady",
-    once: true,
-    source: "handlers/readyHandler",
-    async code(_bot, readyBot) {
-    const client = readyBot ?? _bot;
-    const state = readySyncState.get(client) ?? {
-      running: false,
-      lastSyncAt: 0,
-      interval: null,
-    };
+function startReadySyncScheduler(client, log) {
+  if (!client) return;
+  const state = readySyncState.get(client) ?? { running: false, lastSyncAt: 0, interval: null };
 
-    const delay = READY_SYNC_INITIAL_DELAY_MS;
-    setTimeout(() => {
-      runReadySyncCycle(client, config, log, state).catch((err) => {
-        log?.error("Error inesperado en ciclo inicial de sincronización", { err: err?.message ?? String(err) });
-      });
-    }, delay).unref();
-
-    const syncInterval = READY_SYNC_INTERVAL_MS;
-    if (syncInterval > 0) {
-      if (state.interval) clearInterval(state.interval);
-      state.interval = setInterval(() => {
-        runReadySyncCycle(client, config, log, state).catch((err) => {
-          log?.error("Error inesperado en ciclo periódico de sincronización", { err: err?.message ?? String(err) });
-        });
-      }, syncInterval);
-      state.interval.unref();
-      log?.info("Scheduler de sincronización de comandos iniciado", {
-        initialDelayMs: delay,
-        intervalMs: syncInterval,
-      });
-    } else {
-      log?.warn("Scheduler de sincronización periódica deshabilitado por configuración", {
-        READY_SYNC_INTERVAL_MS: syncInterval,
-      });
-    }
-
-    client.once("invalidated", () => {
-      const currentState = readySyncState.get(client);
-      if (currentState?.interval) clearInterval(currentState.interval);
-      readySyncState.delete(client);
+  setTimeout(() => {
+    runReadySyncCycle(client, log, state).catch((err) => {
+      log?.error("Error inesperado en ciclo inicial de sincronización", { err: err?.message ?? String(err) });
     });
+  }, READY_SYNC_INITIAL_DELAY_MS).unref();
 
-    readySyncState.set(client, state);
-    },
-  }, log);
+  if (READY_SYNC_INTERVAL_MS > 0) {
+    if (state.interval) clearInterval(state.interval);
+    state.interval = setInterval(() => {
+      runReadySyncCycle(client, log, state).catch((err) => {
+        log?.error("Error inesperado en ciclo periódico de sincronización", { err: err?.message ?? String(err) });
+      });
+    }, READY_SYNC_INTERVAL_MS);
+    state.interval.unref();
+    log?.info("Scheduler de sincronización de comandos iniciado", {
+      initialDelayMs: READY_SYNC_INITIAL_DELAY_MS,
+      intervalMs: READY_SYNC_INTERVAL_MS,
+    });
+  } else {
+    log?.warn("Scheduler de sincronización periódica deshabilitado por configuración", {
+      READY_SYNC_INTERVAL_MS,
+    });
+  }
+
+  client.once("invalidated", () => {
+    const currentState = readySyncState.get(client);
+    if (currentState?.interval) clearInterval(currentState.interval);
+    readySyncState.delete(client);
+  });
+
+  readySyncState.set(client, state);
 }
 
-module.exports = { registerReadyHandler };
+module.exports = { startReadySyncScheduler };

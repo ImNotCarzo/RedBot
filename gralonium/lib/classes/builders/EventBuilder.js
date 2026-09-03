@@ -1,1 +1,0 @@
-"use strict";Object.defineProperty(exports,"__esModule",{value:!0}),exports.EventBuilder=void 0;class EventBuilder{name;once;description;constructor(e){this.name=e?.name??"",this.once=e?.once??!1,this.description=e?.description??"..."}toJSON(){return{name:this.name,description:this.description}}}exports.EventBuilder=EventBuilder;

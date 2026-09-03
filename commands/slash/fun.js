@@ -1,7 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { getAI } = require("../src/services/ai.service");
-const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
+const { getAI } = require("../../src/services/ai.service");
+const { createCommandLogger, fetchWithTimeout, prepareReply } = require("../_shared/runtime");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -55,7 +55,7 @@ async function generateGemmaVision(prompt, imageUrl) {
   return response.text?.trim() ?? null;
 }
 async function generateGeminiFlash(prompt) {
-  const { generateWithFallback } = require("../src/services/ai.service");
+  const { generateWithFallback } = require("../../src/services/ai.service");
   const response = await generateWithFallback({
     model: "gemini-3.1-flash-lite",
     contents: [{ role: "user", parts: [{ text: prompt }] }],

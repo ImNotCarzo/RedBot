@@ -1,5 +1,6 @@
 const { ActivityType } = require("discord.js");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/services/moderation.service");
+const { startReadySyncScheduler } = require("../src/services/readySync.service");
 const Logger = require("../src/core/logger");
 const { sanitizeError } = require("../src/handlers/eventRuntime");
 
@@ -126,6 +127,7 @@ const event = {
       guilds: client.guilds?.cache?.size ?? 0,
     });
 
+    startReadySyncScheduler(client, log);
     await restoreTempBans(client);
 
     const getActivities = () => [

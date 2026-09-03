@@ -8,11 +8,11 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const { clampPage } = require("./_shared/runtime");
+const { clampPage } = require("../_shared/runtime");
 
-const { RED, YELLOW, GREEN } = require("../utils/colors");
-const { generateId, parseDuration, formatDuration } = require("../src/utils/moderation");
-const sendLog = require("../src/services/logging.service");
+const { RED, YELLOW, GREEN } = require("../../utils/colors");
+const { generateId, parseDuration, formatDuration } = require("../../src/utils/moderation");
+const sendLog = require("../../src/services/logging.service");
 const {
   addWarn,
   removeWarnById,
@@ -20,8 +20,8 @@ const {
   listWarnsForUser,
   upsertTempBan,
   scheduleTempUnban,
-} = require("../src/services/moderation.service");
-const { setLogChannel, clearLogChannel } = require("../src/services/guildLog.service");
+} = require("../../src/services/moderation.service");
+const { setLogChannel, clearLogChannel } = require("../../src/services/guildLog.service");
 
 // ─────────────────────────────────────────────
 //  HELPERS

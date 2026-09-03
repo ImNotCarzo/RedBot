@@ -9,7 +9,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage } = require("./_shared/runtime");
+const { createCommandLogger, clampPage } = require("../_shared/runtime");
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
 const COLOR = "#ff383d";

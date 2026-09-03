@@ -9,8 +9,8 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage } = require("./_shared/runtime");
-const { resolveMemberFlexible } = require("../src/resolvers/member.resolver");
+const { createCommandLogger, clampPage } = require("../_shared/runtime");
+const { resolveMemberFlexible } = require("../../src/resolvers/member.resolver");
 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const log = createCommandLogger("CMD_USER");

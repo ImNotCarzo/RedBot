@@ -1,12 +1,12 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { deleteConversacion } = require("../src/services/memory.service");
-const { generateWithFallback } = require("../src/services/ai.service");
-const { RED, GREEN } = require("../utils/colors");
-const { getPrefix, setPrefix } = require("../src/services/guildConfig.service");
-const { getAI } = require("../src/services/ai.service");
-const { createCommandLogger, fetchWithTimeout, prepareReply } = require("./_shared/runtime");
-const sendLog = require("../src/services/logging.service");
+const { deleteConversacion } = require("../../src/services/memory.service");
+const { generateWithFallback } = require("../../src/services/ai.service");
+const { RED, GREEN } = require("../../utils/colors");
+const { getPrefix, setPrefix } = require("../../src/services/guildConfig.service");
+const { getAI } = require("../../src/services/ai.service");
+const { createCommandLogger, fetchWithTimeout, prepareReply } = require("../_shared/runtime");
+const sendLog = require("../../src/services/logging.service");
 const INVITE_URL  = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 const log = createCommandLogger("CMD_UTIL");
@@ -150,8 +150,8 @@ const data = {
         if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
 
         const { version: djsVersion }   = require("discord.js");
-        const { version: botVersion }   = require("../package.json");
-        const { version: graloniumVersion } = require("../node_modules/gralonium/package.json");
+        const { version: botVersion }   = require("../../package.json");
+        const { version: graloniumVersion } = require("gralonium/package.json");
 
         const formatUptime = (ms) => {
           const s = Math.floor(ms / 1000) % 60;

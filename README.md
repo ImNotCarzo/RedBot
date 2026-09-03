@@ -80,10 +80,9 @@ RedBot/
 │   │   ├── database.js         # MongoDB connection with retry & backoff
 │   │   └── bot.js              # Bot factory — wires everything together
 │   ├── handlers/
-│   │   ├── commandHandler.js   # Prefixed→slash adapter, command loader
+│   │   ├── commandHandler.js   # Prefixed→slash adapter
 │   │   ├── eventHandler.js     # Event file loader & registrar
-│   │   ├── readyHandler.js     # clientReady — sync, metadata, contexts
-│   │   └── messageHandler.js   # AI follow-up conversation handler
+│   │   └── eventRuntime.js     # Safe event registration/dedup/error context
 │   ├── resolvers/
 │   │   ├── role.resolver.js    # resolveRoleFlexible
 │   │   ├── channel.resolver.js # resolveChannelFlexible
@@ -101,17 +100,19 @@ RedBot/
 │   ├── services/
 │   │   ├── ai.service.js       # Gemini generation with timeout/retry/rotation
 │   │   ├── memory.service.js   # Conversational memory lifecycle (TTL)
+│   │   ├── readySync.service.js # Slash sync + command-context patch scheduler
 │   │   └── logging.service.js  # Guild moderation log sender
 │   ├── middleware/
 │   │   └── errorHandler.js     # Graceful shutdown, SIGTERM/SIGINT
 │   └── index.js                # Entry point (~30 lines)
 │
-├── commands/                   # Slash command groups & standalone commands
-│   ├── ask.js
-│   ├── channel.js / fun.js / mod.js / role.js / server.js / user.js / util.js
-│   ├── _shared/thinking.js     # Shared "thinking..." reply helpers
-│   └── prefixed/               # Prefixed equivalents (auto-wrapped)
-├── events/                     # Gralonium event handlers
+├── commands/
+│   ├── slash/                  # Slash command groups & standalone commands
+│   │   ├── ask.js
+│   │   └── channel.js / fun.js / mod.js / role.js / server.js / user.js / util.js
+│   ├── prefixed/               # Prefixed equivalents (auto-wrapped)
+│   └── _shared/                # Shared command helpers
+├── events/                     # Gralonium event handlers (ready, messageCreate, etc.)
 ├── models/                     # Mongoose models (GuildConfig, Log, Warn, TempBan)
 ├── utils/                      # Pure shared constants/helpers (colors)
 ├── config/
@@ -124,8 +125,8 @@ RedBot/
 
 ## Adding a new slash command
 
-1. Create (or extend) a file in `commands/` using the existing gralonium command structure.
-2. The bot auto-loads all command files via `bot.load("commands")`.
+1. Create (or extend) a file in `commands/slash/` using the existing gralonium command structure.
+2. The bot auto-loads all command files recursively via `bot.load("commands")`.
 3. If you need a prefixed alias, add a file in `commands/prefixed/` with the same logic
    (or omit it — the adapter will try to match the slash implementation automatically).
 
