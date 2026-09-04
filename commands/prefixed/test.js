@@ -28,6 +28,28 @@ async function getBotMessageCount(guildId) {
 // DATOS DE UN SERVIDOR
 // ──────────────────────────────────────────────
 
+// Devuelve una fecha en formato extendido, e.g.:
+// "lunes, 3 de abril de 2023 — 14:32 UTC"
+function formatJoinDate(date) {
+  if (!date) return "Desconocida";
+
+  const day = date.toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  const time = date.toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+
+  return `${day} — ${time} UTC`;
+}
+
 async function getGuildInfo(guild) {
   let owner = null;
 
@@ -37,6 +59,10 @@ async function getGuildInfo(guild) {
     // El owner puede no estar en caché.
   }
 
+  // guild.members.me contiene al bot dentro del servidor.
+  // joinedAt es la fecha en que el bot fue añadido.
+  const botMember = guild.members.me;
+
   return {
     name: guild.name,
     id: guild.id,
@@ -44,6 +70,8 @@ async function getGuildInfo(guild) {
     ownerName: owner?.user?.tag ?? owner?.user?.username ?? "Desconocido",
     ownerId: guild.ownerId ?? "Desconocido",
     botMessages: await getBotMessageCount(guild.id),
+    joinedAt: botMember?.joinedAt ?? null,
+    joinedAtFormatted: formatJoinDate(botMember?.joinedAt ?? null),
     icon: guild.iconURL({ size: 256, extension: "png" }),
   };
 }
@@ -74,6 +102,7 @@ function buildPageEmbed(servers, page, totalPages) {
         `👥 **${s.members.toLocaleString()}** miembros\n` +
         `👑 ${s.ownerName} — \`${s.ownerId}\`\n` +
         `🤖 **${s.botMessages.toLocaleString()}** msgs de RedBot\n` +
+        `📅 ${s.joinedAtFormatted}\n` +
         `🏠 \`${s.id}\``,
       inline: false,
     });
@@ -138,9 +167,16 @@ const data = {
 
     // ── Obtener y ordenar servidores ──────────────
 
-    const guilds = [...client.guilds.cache.values()].sort(
-      (a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0)
-    );
+    // Orden principal: más miembros primero.
+    // Desempate: el bot se unió más recientemente primero.
+    const guilds = [...client.guilds.cache.values()].sort((a, b) => {
+      const memberDiff = (b.memberCount ?? 0) - (a.memberCount ?? 0);
+      if (memberDiff !== 0) return memberDiff;
+
+      const aJoined = a.members.me?.joinedTimestamp ?? 0;
+      const bJoined = b.members.me?.joinedTimestamp ?? 0;
+      return bJoined - aJoined;
+    });
 
     if (!guilds.length) {
       return ctx.send("❌ RedBot no está en ningún servidor.");
@@ -161,6 +197,8 @@ const data = {
             ownerName: "Desconocido",
             ownerId: guild.ownerId ?? "Desconocido",
             botMessages: 0,
+            joinedAt: null,
+            joinedAtFormatted: "Desconocida",
             icon: guild.iconURL({ size: 256, extension: "png" }),
           };
         }
