@@ -179,7 +179,7 @@ const data = {
     // CLIENT
     // ==================================================
 
-    const client = ctx.client;
+    const client = ctx.bot;
 
     if (!client) {
       return ctx.send("❌ No pude acceder al cliente de Discord.");
