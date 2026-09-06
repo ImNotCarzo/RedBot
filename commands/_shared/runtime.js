@@ -1,4 +1,9 @@
-const Logger = require("../../src/core/logger");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
+const Logger = require("../../src/logger");
+const { RED } = require("../../utils/colors");
+
+const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
+const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 
 function createCommandLogger(label) {
   return new Logger(label, process.env.LOG_LEVEL);
@@ -24,4 +29,24 @@ async function prepareReply(ctx) {
   return (payload) => ctx.send(payload);
 }
 
-module.exports = { createCommandLogger, clampPage, fetchWithTimeout, prepareReply };
+function noGuildReply(ctx, message = "Este comando solo funciona en servidores") {
+  return ctx.send({
+    embeds: [new EmbedBuilder().setDescription(message).setColor(RED)],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setLabel("Invítame").setStyle(ButtonStyle.Link).setURL(INVITE_URL)
+      ),
+    ],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+module.exports = {
+  INVITE_URL,
+  SUPPORT_URL,
+  createCommandLogger,
+  clampPage,
+  fetchWithTimeout,
+  prepareReply,
+  noGuildReply,
+};
