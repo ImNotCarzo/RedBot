@@ -1,21 +1,23 @@
-const { ActivityType } = require("discord.js");
-const { scheduleTempUnban, listPendingTempBans } = require("../src/services/moderation.service");
-const Logger = require("../src/core/logger");
-const { sanitizeError } = require("../src/handlers/eventRuntime");
+const { ActivityType, REST, Routes } = require("discord.js");
+const { scheduleTempUnban, listPendingTempBans } = require("../src/moderation");
+const Logger = require("../src/logger");
+const { sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
+const { setId } = require("../src/commandIds");
+const { COMMANDS_TO_UPDATE } = require("../src/config");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
 const presenceIntervals = new WeakMap();
 const recoveryTimers = new WeakMap();
 const lifecycleBound = new WeakSet();
+const readySyncState = new WeakMap();
 
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-// If Discord gateway/session does not recover within this grace window, the
-// process exits so external supervisors (Pterodactyl/PM2/systemd) can restart it.
 const GATEWAY_RECOVERY_GRACE_MS = parsePositiveInt(process.env.GATEWAY_RECOVERY_GRACE_MS, 120000);
+const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
+const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);
+const READY_RETRY_MAX_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_MAX_DELAY_MS, 30000);
+const READY_API_TIMEOUT_MS = parsePositiveInt(process.env.READY_API_TIMEOUT_MS, 45000);
+const READY_SYNC_INITIAL_DELAY_MS = parsePositiveInt(process.env.READY_SYNC_INITIAL_DELAY_MS, 5000);
+const READY_SYNC_INTERVAL_MS = parsePositiveInt(process.env.READY_SYNC_INTERVAL_MS, 900000);
 
 async function restoreTempBans(client) {
   try {
@@ -107,9 +109,122 @@ function bindGatewayLifecycle(client) {
 
   client.once("invalidated", () => {
     clearPresenceInterval(client);
+    const currentState = readySyncState.get(client);
+    if (currentState?.interval) clearInterval(currentState.interval);
+    readySyncState.delete(client);
     scheduleRecoveryExit(client, "invalidated");
     log.warn("Sesión invalidada detectada");
   });
+}
+
+async function syncSlashAndContexts(client) {
+  const token = process.env.TOKEN;
+  const clientId = process.env.CLIENT_ID;
+
+  await runWithRetry(
+    () => withTimeout(client.sync(), READY_API_TIMEOUT_MS, "Sincronización de comandos slash"),
+    log,
+    "Sincronización de comandos slash",
+    READY_RETRY_ATTEMPTS,
+    READY_RETRY_BASE_DELAY_MS,
+    READY_RETRY_MAX_DELAY_MS
+  );
+  log.info("Comandos slash sincronizados");
+
+  const rest = new REST().setToken(token);
+  const commands = await runWithRetry(
+    () => withTimeout(
+      rest.get(Routes.applicationCommands(clientId)),
+      READY_API_TIMEOUT_MS,
+      "Lectura de comandos de aplicación"
+    ),
+    log,
+    "Lectura de comandos de aplicación",
+    READY_RETRY_ATTEMPTS,
+    READY_RETRY_BASE_DELAY_MS,
+    READY_RETRY_MAX_DELAY_MS
+  );
+
+  for (const cmd of commands) {
+    setId(cmd.name, cmd.id);
+  }
+
+  for (const cmd of commands) {
+    if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
+
+    try {
+      await runWithRetry(
+        () => withTimeout(
+          rest.patch(Routes.applicationCommand(clientId, cmd.id), {
+            body: {
+              integration_types: [0, 1],
+              contexts: [0, 1, 2],
+            },
+          }),
+          READY_API_TIMEOUT_MS,
+          `Patch de contextos para ${cmd.name}`
+        ),
+        log,
+        `Patch de contextos para ${cmd.name}`,
+        READY_RETRY_ATTEMPTS,
+        READY_RETRY_BASE_DELAY_MS,
+        READY_RETRY_MAX_DELAY_MS
+      );
+      log.info(`Contextos actualizados: ${cmd.name}`);
+    } catch (patchErr) {
+      log.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
+    }
+  }
+
+  log.info("Todos los contextos actualizados");
+}
+
+async function runReadySyncCycle(client, state) {
+  if (state.running) return;
+  state.running = true;
+
+  try {
+    await syncSlashAndContexts(client);
+    state.lastSyncAt = Date.now();
+  } catch (err) {
+    log.error("Fallo en ciclo de sincronización de aplicación", { err: err?.message ?? String(err) });
+  } finally {
+    state.running = false;
+  }
+}
+
+function startCommandSync(client) {
+  const state = readySyncState.get(client) ?? {
+    running: false,
+    lastSyncAt: 0,
+    interval: null,
+  };
+
+  setTimeout(() => {
+    runReadySyncCycle(client, state).catch((err) => {
+      log.error("Error inesperado en ciclo inicial de sincronización", { err: err?.message ?? String(err) });
+    });
+  }, READY_SYNC_INITIAL_DELAY_MS).unref();
+
+  if (READY_SYNC_INTERVAL_MS > 0) {
+    if (state.interval) clearInterval(state.interval);
+    state.interval = setInterval(() => {
+      runReadySyncCycle(client, state).catch((err) => {
+        log.error("Error inesperado en ciclo periódico de sincronización", { err: err?.message ?? String(err) });
+      });
+    }, READY_SYNC_INTERVAL_MS);
+    state.interval.unref();
+    log.info("Scheduler de sincronización de comandos iniciado", {
+      initialDelayMs: READY_SYNC_INITIAL_DELAY_MS,
+      intervalMs: READY_SYNC_INTERVAL_MS,
+    });
+  } else {
+    log.warn("Scheduler de sincronización periódica deshabilitado por configuración", {
+      READY_SYNC_INTERVAL_MS,
+    });
+  }
+
+  readySyncState.set(client, state);
 }
 
 const event = {
@@ -137,6 +252,7 @@ const event = {
     clearPresenceInterval(client);
     clearRecoveryTimer(client);
     bindGatewayLifecycle(client);
+    startCommandSync(client);
 
     let i = 0;
     const interval = setInterval(() => {

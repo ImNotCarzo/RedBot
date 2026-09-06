@@ -33,7 +33,7 @@ npm start
 | `TOKEN`       | ✅        | Discord bot token                                            |
 | `MONGO`       | ✅        | MongoDB connection URI                                       |
 | `CLIENT_ID`   | ✅        | Discord application (client) ID                             |
-| `GEMINI`      | ✅*       | Primary Google Gemini API key (`*` needed for `/ask`; read by `src/services/ai.service.js`) |
+| `GEMINI`      | ✅*       | Primary Google Gemini API key (`*` needed for `/ask`; read by `src/ai.js`) |
 | `GEMINI2`     | ❌        | Second Gemini key — rotated automatically on rate-limit      |
 | `OPENROUTER`  | ❌        | OpenRouter API key                                            |
 | `GROQ`        | ❌        | Groq API key (used by specific commands)                     |
@@ -69,53 +69,43 @@ npm run dev
 
 ```
 RedBot/
-├── src/                        # Core infrastructure
-│   ├── config/
-│   │   ├── env.js              # Env-var validation & typed config object
-│   │   ├── constants.js        # Global constants (AI models, prompts, limits)
-│   │   ├── bot.config.js       # Gralonium intents & partials
-│   │   └── db.config.js        # MongoDB connection settings
-│   ├── core/
-│   │   ├── logger.js           # Structured logger (levels + timestamps)
-│   │   ├── database.js         # MongoDB connection with retry & backoff
-│   │   └── bot.js              # Bot factory — wires everything together
-│   ├── handlers/
-│   │   ├── commandHandler.js   # Prefixed→slash adapter, command loader
-│   │   ├── eventHandler.js     # Event file loader & registrar
-│   │   ├── readyHandler.js     # clientReady — sync, metadata, contexts
-│   │   └── messageHandler.js   # AI follow-up conversation handler
-│   ├── resolvers/
-│   │   ├── role.resolver.js    # resolveRoleFlexible
-│   │   ├── channel.resolver.js # resolveChannelFlexible
-│   │   ├── attachment.resolver.js # buildAttachmentFromUrl + resolveAttachmentInput
-│   │   └── member.resolver.js  # resolveMemberFlexible
-│   ├── cache/
-│   │   └── prefix.cache.js     # Prefix cache with TTL + LRU-style eviction
-│   ├── state/
-│   │   └── commandIds.store.js # Runtime slash-command ID registry
-│   ├── utils/
-│   │   ├── normalize.js        # normalizeReplyPayload
-│   │   ├── parsers.js          # parsePrefixedArgsForSlash
-│   │   ├── validators.js       # DISCORD_ID_PATTERN, language tokens
-│   │   └── moderation.js       # generateId + parse/formatDuration
-│   ├── services/
-│   │   ├── ai.service.js       # Gemini generation with timeout/retry/rotation
-│   │   ├── memory.service.js   # Conversational memory lifecycle (TTL)
-│   │   └── logging.service.js  # Guild moderation log sender
-│   ├── middleware/
-│   │   └── errorHandler.js     # Graceful shutdown, SIGTERM/SIGINT
-│   └── index.js                # Entry point (~30 lines)
+├── src/                        # Core bot infrastructure (11 clean, modular files)
+│   ├── index.js                # Entry point & startup sequence
+│   ├── bot.js                  # Gralonium bot factory & dynamic prefix resolver
+│   ├── adapter.js              # Prefixed→slash argument adapter & delegation bridge
+│   ├── config.js               # Environment validation, bot/db options & AI prompts
+│   ├── database.js             # Mongoose connection with backoff retry
+│   ├── logger.js               # Structured logger (levels + timestamps)
+│   ├── runtime.js              # Event loader, process handlers & graceful shutdown
+│   ├── guild.js                # Guild prefix caching, log channel settings & sendLog
+│   ├── ai.js                   # Gemini AI generation, rotation & session memory
+│   ├── moderation.js           # Warns, duration parser/formatter & tempban scheduler
+│   └── commandIds.js           # Discord application command ID registry
 │
-├── commands/                   # Slash command groups & standalone commands
-│   ├── ask.js
-│   ├── channel.js / fun.js / mod.js / role.js / server.js / user.js / util.js
-│   ├── _shared/thinking.js     # Shared "thinking..." reply helpers
-│   └── prefixed/               # Prefixed equivalents (auto-wrapped)
-├── events/                     # Gralonium event handlers
-├── models/                     # Mongoose models (GuildConfig, Log, Warn, TempBan)
-├── utils/                      # Pure shared constants/helpers (colors)
-├── config/
-│   └── prefixedToSlashMap.js   # Static prefixed→slash name mapping
+├── commands/                   # Command definitions
+│   ├── slash/                  # Slash command groups & standalone commands
+│   │   ├── ask.js              # AI interaction command
+│   │   ├── channel.js          # Channel management group
+│   │   ├── fun.js              # Persona & entertainment group
+│   │   ├── help.js             # Help & command directory
+│   │   ├── mod.js              # Moderation suite
+│   │   ├── role.js             # Role management group
+│   │   ├── server.js           # Server utilities & info
+│   │   ├── user.js             # User utilities & profile info
+│   │   └── util.js             # Utility tools (ping, translate, transcribe, etc.)
+│   ├── prefixed/               # 67 prefixed commands (auto-delegated to slash)
+│   └── _shared/                # Shared helpers (pagination, fetch, URLs, replies)
+│       ├── runtime.js
+│       └── thinking.js
+├── events/                     # Gralonium & Discord event listeners
+│   ├── error.js                # Centralized frameworkError handler
+│   ├── guildMemberAdd.js       # Auto-role assignment on member join
+│   ├── messageCreate.js        # Conversational AI replies
+│   └── ready.js                # Presence, tempban restore & command sync
+├── models/                     # Mongoose schemas (GuildConfig, JoinRole, Log, TempBan, Warn)
+├── utils/                      # Color palette constants
+│   └── colors.js
+├── gralonium/                  # Gralonium framework source
 ├── .env.example
 └── package.json
 ```
@@ -124,10 +114,9 @@ RedBot/
 
 ## Adding a new slash command
 
-1. Create (or extend) a file in `commands/` using the existing gralonium command structure.
+1. Create (or extend) a file in `commands/slash/` using the Gralonium command/group structure.
 2. The bot auto-loads all command files via `bot.load("commands")`.
-3. If you need a prefixed alias, add a file in `commands/prefixed/` with the same logic
-   (or omit it — the adapter will try to match the slash implementation automatically).
+3. If you need a prefixed alias, add a file in `commands/prefixed/` with `as_prefix: true, as_slash: false`. The adapter will match and delegate to the slash implementation automatically.
 
 ## Adding a new event
 

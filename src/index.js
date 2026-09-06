@@ -1,11 +1,10 @@
 require("dotenv").config();
 
-const { validateEnv }            = require("./config/env");
-const Logger                     = require("./core/logger");
-const { connectDatabase }        = require("./core/database");
-const { createBot, initializeBot } = require("./core/bot");
-const { registerShutdownHandlers, registerProcessErrorHandlers } = require("./middleware/errorHandler");
-const { sanitizeError } = require("./handlers/eventRuntime");
+const { validateEnv } = require("./config");
+const Logger = require("./logger");
+const { connectDatabase } = require("./database");
+const { createBot, initializeBot } = require("./bot");
+const { registerShutdownHandlers, registerProcessErrorHandlers, sanitizeError } = require("./runtime");
 
 const log = new Logger("MAIN", process.env.LOG_LEVEL || "info");
 

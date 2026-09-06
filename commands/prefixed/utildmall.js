@@ -1,7 +1,7 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
-const sendLog = require("../../src/services/logging.service");
+const { sendLog } = require("../../src/guild");
 
 // ─────────────────────────────────────────────
 //  HELPERS

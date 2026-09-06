@@ -1,7 +1,4 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const sendLog = require("../../src/services/logging.service");
-const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
