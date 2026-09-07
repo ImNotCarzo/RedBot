@@ -30,20 +30,23 @@ function parseArgs(raw) {
   let soloId = null;
   let rolId  = null;
   let userId = null;
+  let imagen = null;
 
-  const soloMatch = str.match(/--solo\s+(?:<@&)?(\d+)>?/);
-  const rolMatch  = str.match(/--rol\s+(?:<@&)?(\d+)>?/);
-  const userMatch = str.match(/--user\s+(?:<@!?)?(\d+)>?/);
+  const soloMatch   = str.match(/--solo\s+(?:<@&)?(\d+)>?/);
+  const rolMatch    = str.match(/--rol\s+(?:<@&)?(\d+)>?/);
+  const userMatch   = str.match(/--user\s+(?:<@!?)?(\d+)>?/);
+  const imagenMatch = str.match(/--imagen\s+(https?:\/\/\S+)/);
 
-  if (soloMatch) { soloId = soloMatch[1]; str = str.replace(soloMatch[0], "").trim(); }
-  if (rolMatch)  { rolId  = rolMatch[1];  str = str.replace(rolMatch[0],  "").trim(); }
-  if (userMatch) { userId = userMatch[1]; str = str.replace(userMatch[0], "").trim(); }
+  if (soloMatch)   { soloId = soloMatch[1];   str = str.replace(soloMatch[0],   "").trim(); }
+  if (rolMatch)    { rolId  = rolMatch[1];     str = str.replace(rolMatch[0],    "").trim(); }
+  if (userMatch)   { userId = userMatch[1];    str = str.replace(userMatch[0],   "").trim(); }
+  if (imagenMatch) { imagen = imagenMatch[1];  str = str.replace(imagenMatch[0], "").trim(); }
 
   const sep    = str.indexOf(",");
   const titulo = sep !== -1 ? str.slice(0, sep).trim() : str.trim();
   const texto  = sep !== -1 ? str.slice(sep + 1).trim() : "";
 
-  return { titulo, texto, soloId, rolId, userId };
+  return { titulo, texto, soloId, rolId, userId, imagen };
 }
 // ─────────────────────────────────────────────
 //  COMANDO
@@ -57,10 +60,13 @@ const PARAMERROR = (bot) => ({
         `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
         `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
         `\n\`\`\`\n` +
-        `.dm titulo,texto [--solo <@rol>] [--rol <@rol>] [--user <@user>]\n` +
+        `.dm titulo,texto [--solo <@rol>] [--rol <@rol>] [--user <@user>] [--imagen <url>]\n` +
         `\n` +
         `Ejemplo base:\n` +
         `  .dm Hoy jugamos,go ofi\n` +
+        `\n` +
+        `Con imagen:\n` +
+        `  .dm Hoy jugamos,miren esto --imagen https://i.imgur.com/abc.png\n` +
         `\n` +
         `Solo un rol:\n` +
         `  .dm Hoy jugamos,solo los gokianos --solo @gokianos\n` +
@@ -72,7 +78,7 @@ const PARAMERROR = (bot) => ({
         `  .dm Hoy jugamos,todos menos el mamon --user @loge\n` +
         `\n` +
         `Todo:\n` +
-        `  .dm Hoy jugamos,solo gokianos sin malos ni mamones --solo @gokianos --rol @malos --user @loge` +
+        `  .dm Hoy jugamos,solo gokianos sin malos ni mamones --solo @gokianos --rol @malos --user @loge --imagen https://i.imgur.com/abc.png` +
         `\`\`\``
       )
       .setColor(RED),
@@ -94,7 +100,7 @@ const data = {
 
     if (!raw) return ctx.send(PARAMERROR(bot));
 
-    const { titulo, texto, soloId, rolId, userId } = parseArgs(raw);
+    const { titulo, texto, soloId, rolId, userId, imagen } = parseArgs(raw);
 
     if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
 
@@ -113,6 +119,8 @@ const data = {
       .setColor(RED)
       .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
       .setThumbnail(guild.iconURL({ size: 512 }));
+
+    if (imagen) embed.setImage(imagen);
 
     await guild.members.fetch();
 

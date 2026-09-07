@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
 const Logger = require("../../src/logger");
 const { RED } = require("../../utils/colors");
+const { clampPage, paginateArray, buildPaginationRow, buildPagRow, uniqueCollectorId } = require("./pagination");
 
 const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
@@ -9,11 +10,9 @@ function createCommandLogger(label) {
   return new Logger(label, process.env.LOG_LEVEL);
 }
 
-function clampPage(page, totalPages) {
-  if (!Number.isFinite(page) || !Number.isFinite(totalPages) || totalPages <= 0) return 0;
-  if (page < 0) return 0;
-  if (page >= totalPages) return totalPages - 1;
-  return page;
+function formatPermissionName(p) {
+  if (!p) return "";
+  return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}\``;
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
@@ -46,6 +45,11 @@ module.exports = {
   SUPPORT_URL,
   createCommandLogger,
   clampPage,
+  paginateArray,
+  buildPaginationRow,
+  buildPagRow,
+  uniqueCollectorId,
+  formatPermissionName,
   fetchWithTimeout,
   prepareReply,
   noGuildReply,

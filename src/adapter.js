@@ -10,6 +10,8 @@ const PREFIXED_TO_SLASH_MAP = {
   channel: "channel/info",
   channelclone: "channel/clone",
   channelunlock: "channel/unlock",
+  dmall: "util/dm",
+  rename: "channel/rename",
   role: "role/info",
   roleadd: "role/add",
   roleall: "role/all",
@@ -22,6 +24,7 @@ const PREFIXED_TO_SLASH_MAP = {
   roleremove: "role/remove",
   roleremoveall: "role/removeall",
   rolerename: "role/rename",
+  roles: "server/roles",
   roleusers: "role/users",
   roleperms: "role/permissions",
   server: "server/info",
@@ -212,14 +215,26 @@ function loadSlashCommandMap(log) {
   const entries = fs.readdirSync(targetDir, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith(".js")) continue;
     if (entry.name.startsWith("_")) continue;
 
-    const file = entry.name.slice(0, -3);
+    let targetFilePath = null;
+    let file = null;
+
+    if (entry.isFile() && entry.name.endsWith(".js")) {
+      targetFilePath = path.join(targetDir, entry.name);
+      file = entry.name.slice(0, -3);
+    } else if (entry.isDirectory()) {
+      const indexCandidate = path.join(targetDir, entry.name, "index.js");
+      if (fs.existsSync(indexCandidate)) {
+        targetFilePath = indexCandidate;
+        file = entry.name;
+      }
+    }
+
+    if (!targetFilePath) continue;
 
     try {
-      const mod = require(path.join(targetDir, entry.name));
+      const mod = require(targetFilePath);
       const exported = mod?.data;
       const rootData = exported?.data;
 
