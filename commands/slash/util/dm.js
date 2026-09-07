@@ -12,6 +12,8 @@ module.exports = {
     data: new CommandBuilder({
       name: "dm",
       description: "Envía un DM con embed a todos los miembros del servidor",
+      as_prefix: false,
+      as_slash: true,
     }),
 
     params: new ParamsBuilder()
