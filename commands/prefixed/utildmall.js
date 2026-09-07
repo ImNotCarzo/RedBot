@@ -100,7 +100,7 @@ const data = {
 
     if (!raw) return ctx.send(PARAMERROR(bot));
 
-    const { titulo, texto, soloId, rolId, userId, imagen } = parseArgs(raw);
+    const { titulo, texto, soloId, rolId, userId, imagen: imagenUrl } = parseArgs(raw);
 
     if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
 
@@ -112,6 +112,9 @@ const data = {
 
     const author    = ctx.author;
     const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+
+    // --imagen tiene prioridad; si no, usa el primer adjunto del mensaje
+    const imagen = imagenUrl ?? ctx.message.attachments.first()?.url ?? null;
 
     const embed = new EmbedBuilder()
       .setTitle(titulo)

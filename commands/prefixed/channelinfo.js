@@ -4,7 +4,7 @@ const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
-    name: "channel",
+    name: "channelinfo",
     description: "Muestra información de un canal",
     aliases: ["chinfo", "cinfo", "channelinfo"],
     as_prefix: true,
