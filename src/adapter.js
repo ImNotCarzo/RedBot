@@ -10,7 +10,6 @@ const PREFIXED_TO_SLASH_MAP = {
   channel: "channel/info",
   channelclone: "channel/clone",
   channelunlock: "channel/unlock",
-  dmall: "util/dm",
   rename: "channel/rename",
   role: "role/info",
   roleadd: "role/add",
