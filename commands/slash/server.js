@@ -9,20 +9,11 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply } = require("../_shared/runtime");
+const { createCommandLogger, clampPage, noGuildReply, buildPagRow } = require("../_shared/runtime");
 const { RED } = require("../../utils/colors");
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
 const COLOR = RED;
 const log = createCommandLogger("CMD_SERVER");
-
-
-
-function buildPagRow(prevId, nextId, page, total) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === total - 1)
-  );
-}
 
 const data = {
   data: new GroupBuilder({

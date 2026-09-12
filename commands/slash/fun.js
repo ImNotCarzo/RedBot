@@ -1,7 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const { getAI, generateWithFallback } = require("../../src/ai");
-const { createCommandLogger, fetchWithTimeout, prepareReply } = require("../_shared/runtime");
+const { createCommandLogger, fetchImageAsInlineData, prepareReply } = require("../_shared/runtime");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -33,19 +33,14 @@ async function generateGemma(prompt) {
 }
 
 async function generateGemmaVision(prompt, imageUrl) {
-  const imgRes    = await fetchWithTimeout(imageUrl, {}, 10_000);
-  if (!imgRes.ok) throw new Error(`No se pudo descargar imagen (${imgRes.status})`);
-  const imgBuf    = await imgRes.arrayBuffer();
-  const imgBase64 = Buffer.from(imgBuf).toString("base64");
-  const mimeType  = imgRes.headers.get("content-type") ?? "image/png";
-
+  const imagePart = await fetchImageAsInlineData(imageUrl);
   const response = await generateWithFallback({
     model: "gemma-4-26b-a4b-it",
     contents: [{
       role: "user",
       parts: [
         { text: prompt },
-        { inlineData: { mimeType, data: imgBase64 } },
+        imagePart,
       ],
     }],
     config: {

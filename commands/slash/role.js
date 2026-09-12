@@ -10,7 +10,7 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply } = require("../_shared/runtime");
+const { createCommandLogger, clampPage, noGuildReply, buildPagRow, formatPermissionName: formatPerm } = require("../_shared/runtime");
 const JoinRole = require("../../models/JoinRole");
 const { sendLog } = require("../../src/guild");
  
@@ -35,13 +35,6 @@ function roleHierarchyCheck(ctx, role) {
   return null;
 }
  
-function buildPagRow(prevId, nextId, page, total) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === total - 1)
-  );
-}
- 
 // Embed base de info sin permisos
 function buildRoleInfoEmbed(role) {
   const hex = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "Sin color";
@@ -61,10 +54,6 @@ function buildRoleInfoEmbed(role) {
     .setTimestamp();
   if (role.icon) embed.setThumbnail(role.iconURL({ size: 1024 }));
   return embed;
-}
- 
-function formatPerm(p) {
-  return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``;
 }
  
 // ─────────────────────────────────────────────

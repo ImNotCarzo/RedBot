@@ -75,16 +75,21 @@ const event = {
       if (!err.ctx) return;
       const bot = err.ctx.bot.user;
 
-      const paramerror = new EmbedBuilder()
-        .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
-        .setDescription(
-          `**Usos:**\nHazle una pregunta a la IA` +
-          `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
-        )
-        .setColor(RED);
+      if (commandName === "ask" || err.param?.name === "pregunta") {
+        const paramerror = new EmbedBuilder()
+          .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
+          .setDescription(
+            `**Usos:**\nHazle una pregunta a la IA` +
+            `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
+            `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
+          )
+          .setColor(RED);
 
-      return safeSend({ embeds: [paramerror] });
+        return safeSend({ embeds: [paramerror] });
+      }
+
+      const paramName = err.param?.name ?? "requerido";
+      return safeSend(`Falta el parámetro requerido: \`${paramName}\``);
     }
     
     if (is(err, Errors.NotNSFW)) {
@@ -108,8 +113,8 @@ const event = {
     }
 
     if (
-      is(err, Errors.NotParamBoolean) ||
-      is(err, Errors.NotParamNumber) ||
+      is(err, Errors.InvalidParamBoolean) ||
+      is(err, Errors.InvalidParamNumber) ||
       is(err, Errors.InvalidParamChoice) ||
       is(err, Errors.InvalidChannelType)
     ) {

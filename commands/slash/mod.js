@@ -8,7 +8,7 @@ const {
   PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const { clampPage } = require("../_shared/runtime");
+const { clampPage, buildPagRow } = require("../_shared/runtime");
 
 const { RED, YELLOW, GREEN } = require("../../utils/colors");
 const {
@@ -27,13 +27,6 @@ const { sendLog, setLogChannel, clearLogChannel } = require("../../src/guild");
 // ─────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────
-
-function buildPagRow(prevId, nextId, page, total) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === total - 1)
-  );
-}
 
 function makeSend(ctx, isSlash) {
   return (payload) => isSlash ? ctx.interaction.editReply(payload) : ctx.send(payload);

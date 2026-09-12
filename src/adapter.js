@@ -8,6 +8,7 @@ const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 
 const PREFIXED_TO_SLASH_MAP = {
   channel: "channel/info",
+  channelinfo: "channel/info",
   channelclone: "channel/clone",
   channelunlock: "channel/unlock",
   rename: "channel/rename",

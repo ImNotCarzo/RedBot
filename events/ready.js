@@ -6,18 +6,13 @@ const { setId } = require("../src/commandIds");
 const { COMMANDS_TO_UPDATE } = require("../src/config");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
-const presenceIntervals = new WeakMap();
-const recoveryTimers = new WeakMap();
-const lifecycleBound = new WeakSet();
-const readySyncState = new WeakMap();
 
-const GATEWAY_RECOVERY_GRACE_MS = parsePositiveInt(process.env.GATEWAY_RECOVERY_GRACE_MS, 120000);
 const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
 const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);
 const READY_RETRY_MAX_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_MAX_DELAY_MS, 30000);
 const READY_API_TIMEOUT_MS = parsePositiveInt(process.env.READY_API_TIMEOUT_MS, 45000);
-const READY_SYNC_INITIAL_DELAY_MS = parsePositiveInt(process.env.READY_SYNC_INITIAL_DELAY_MS, 5000);
-const READY_SYNC_INTERVAL_MS = parsePositiveInt(process.env.READY_SYNC_INTERVAL_MS, 900000);
+
+let presenceInterval = null;
 
 async function restoreTempBans(client) {
   try {
@@ -42,79 +37,6 @@ async function restoreTempBans(client) {
   } catch (err) {
     log.error("Error al restaurar tempbans", { err: sanitizeError(err) });
   }
-}
-
-function clearRecoveryTimer(client) {
-  const timer = recoveryTimers.get(client);
-  if (!timer) return;
-  clearTimeout(timer);
-  recoveryTimers.delete(client);
-}
-
-function clearPresenceInterval(client) {
-  const current = presenceIntervals.get(client);
-  if (current) clearInterval(current);
-  presenceIntervals.delete(client);
-}
-
-function scheduleRecoveryExit(client, reason, meta = {}) {
-  if (recoveryTimers.has(client)) return;
-  const timeoutMs = GATEWAY_RECOVERY_GRACE_MS;
-  log.warn("Gateway degradado, programando reinicio del proceso", { reason, timeoutMs, ...meta });
-
-  const timer = setTimeout(() => {
-    log.error("Reinicio forzado por sesión inestable de Discord", { reason, ...meta });
-    process.exit(1);
-  }, timeoutMs);
-  timer.unref();
-  recoveryTimers.set(client, timer);
-}
-
-function bindGatewayLifecycle(client) {
-  if (lifecycleBound.has(client)) return;
-  lifecycleBound.add(client);
-
-  client.on("shardDisconnect", (event, shardId) => {
-    log.warn("Shard desconectado", {
-      shardId,
-      code: event?.code ?? null,
-      reason: event?.reason ?? "unknown",
-    });
-    scheduleRecoveryExit(client, "shardDisconnect", {
-      shardId,
-      code: event?.code ?? null,
-    });
-  });
-
-  client.on("shardError", (error, shardId) => {
-    log.error("Error de shard", {
-      shardId,
-      err: sanitizeError(error),
-    });
-  });
-
-  client.on("shardReconnecting", (shardId) => {
-    log.warn("Shard reconectando", { shardId });
-  });
-
-  client.on("shardResume", (_replayedEvents, shardId) => {
-    log.info("Shard reanudado", { shardId });
-    clearRecoveryTimer(client);
-  });
-
-  client.on("shardReady", (shardId) => {
-    log.info("Shard listo", { shardId });
-    clearRecoveryTimer(client);
-  });
-
-  client.once("invalidated", () => {
-    clearPresenceInterval(client);
-    const currentState = readySyncState.get(client);
-    if (currentState?.interval) clearInterval(currentState.interval);
-    readySyncState.delete(client);
-    scheduleRecoveryExit(client, "invalidated");
-    log.warn("Sesión invalidada detectada");
-  });
 }
 
 async function syncSlashAndContexts(client) {
@@ -179,52 +101,30 @@ async function syncSlashAndContexts(client) {
   log.info("Todos los contextos actualizados");
 }
 
-async function runReadySyncCycle(client, state) {
-  if (state.running) return;
-  state.running = true;
+function startPresenceRotation(client) {
+  if (presenceInterval) clearInterval(presenceInterval);
 
-  try {
-    await syncSlashAndContexts(client);
-    state.lastSyncAt = Date.now();
-  } catch (err) {
-    log.error("Fallo en ciclo de sincronización de aplicación", { err: err?.message ?? String(err) });
-  } finally {
-    state.running = false;
-  }
-}
+  const getActivities = () => [
+    `${client.guilds.cache.size} servidores`,
+    `${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)} usuarios`,
+    "/help",
+  ];
 
-function startCommandSync(client) {
-  const state = readySyncState.get(client) ?? {
-    running: false,
-    lastSyncAt: 0,
-    interval: null,
-  };
-
-  setTimeout(() => {
-    runReadySyncCycle(client, state).catch((err) => {
-      log.error("Error inesperado en ciclo inicial de sincronización", { err: err?.message ?? String(err) });
-    });
-  }, READY_SYNC_INITIAL_DELAY_MS).unref();
-
-  if (READY_SYNC_INTERVAL_MS > 0) {
-    if (state.interval) clearInterval(state.interval);
-    state.interval = setInterval(() => {
-      runReadySyncCycle(client, state).catch((err) => {
-        log.error("Error inesperado en ciclo periódico de sincronización", { err: err?.message ?? String(err) });
+  let i = 0;
+  presenceInterval = setInterval(() => {
+    try {
+      const activities = getActivities();
+      client.user.setPresence({
+        activities: [{ name: activities[i], type: ActivityType.Watching }],
+        status: "dnd",
       });
-    }, READY_SYNC_INTERVAL_MS);
-    state.interval.unref();
-    log.info("Scheduler de sincronización de comandos iniciado", {
-      initialDelayMs: READY_SYNC_INITIAL_DELAY_MS,
-      intervalMs: READY_SYNC_INTERVAL_MS,
-    });
-  } else {
-    log.warn("Scheduler de sincronización periódica deshabilitado por configuración", {
-      READY_SYNC_INTERVAL_MS,
-    });
-  }
-
-  readySyncState.set(client, state);
+      i = (i + 1) % activities.length;
+    } catch (err) {
+      log.error("Error al actualizar presencia", { err: sanitizeError(err) });
+      if (presenceInterval) clearInterval(presenceInterval);
+      presenceInterval = null;
+    }
+  }, 10000);
 }
 
 const event = {
@@ -242,33 +142,13 @@ const event = {
     });
 
     await restoreTempBans(client);
+    startPresenceRotation(client);
 
-    const getActivities = () => [
-      `${client.guilds.cache.size} servidores`,
-      `${client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0)} usuarios`,
-      "/help",
-    ];
-
-    clearPresenceInterval(client);
-    clearRecoveryTimer(client);
-    bindGatewayLifecycle(client);
-    startCommandSync(client);
-
-    let i = 0;
-    const interval = setInterval(() => {
-      try {
-        const activities = getActivities();
-        client.user.setPresence({
-          activities: [{ name: activities[i], type: ActivityType.Watching }],
-          status: "dnd",
-        });
-        i = (i + 1) % activities.length;
-      } catch (err) {
-        log.error("Error al actualizar presencia", { err: sanitizeError(err) });
-        clearPresenceInterval(client);
-      }
-    }, 10000);
-    presenceIntervals.set(client, interval);
+    try {
+      await syncSlashAndContexts(client);
+    } catch (err) {
+      log.error("Fallo al sincronizar comandos slash en arranque", { err: err?.message ?? String(err) });
+    }
   },
 };
 

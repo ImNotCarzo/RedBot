@@ -40,6 +40,18 @@ function noGuildReply(ctx, message = "Este comando solo funciona en servidores")
   });
 }
 
+async function fetchImageAsInlineData(url, timeoutMs = 10_000) {
+  const res = await fetchWithTimeout(url, {}, timeoutMs);
+  if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status})`);
+  const buf = await res.arrayBuffer();
+  return {
+    inlineData: {
+      mimeType: res.headers.get("content-type") || "image/png",
+      data: Buffer.from(buf).toString("base64"),
+    },
+  };
+}
+
 module.exports = {
   INVITE_URL,
   SUPPORT_URL,
@@ -49,8 +61,10 @@ module.exports = {
   buildPaginationRow,
   buildPagRow,
   uniqueCollectorId,
+  uniqueId: uniqueCollectorId,
   formatPermissionName,
   fetchWithTimeout,
+  fetchImageAsInlineData,
   prepareReply,
   noGuildReply,
 };

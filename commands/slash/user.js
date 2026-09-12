@@ -9,7 +9,15 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply } = require("../_shared/runtime");
+const {
+  createCommandLogger,
+  clampPage,
+  noGuildReply,
+  buildPaginationRow,
+  uniqueId,
+  formatPermissionName: formatPermName,
+  paginateArray,
+} = require("../_shared/runtime");
 const { resolveMemberFlexible } = require("../../src/adapter");
 
 const log = createCommandLogger("CMD_USER");
@@ -50,13 +58,6 @@ function buildPermsEmbed(user, perms, page, totalPages, color) {
   return embed;
 }
 
-function buildPaginationRow(prevId, nextId, page, totalPages) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(prevId).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-    new ButtonBuilder().setCustomId(nextId).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages - 1)
-  );
-}
-
 function makeSelectRow(customId, includeInfo, options) {
   const opts = (includeInfo
     ? [{ label: "Info", value: "info", description: "Información del usuario" }, ...options]
@@ -66,20 +67,6 @@ function makeSelectRow(customId, includeInfo, options) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder("Navegar...").addOptions(opts)
   );
-}
-
-function uniqueId(prefix) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function formatPermName(p) {
-  return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``;
-}
-
-function paginateArray(arr, size = 15) {
-  const pages = [];
-  for (let i = 0; i < arr.length; i += size) pages.push(arr.slice(i, i + size));
-  return pages;
 }
 
 /* ══════════════════════════════════════════

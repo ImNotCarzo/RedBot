@@ -3,7 +3,7 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralon
 const { deleteConversacion, generateWithFallback, getAI } = require("../../src/ai");
 const { RED, GREEN } = require("../../utils/colors");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
-const { createCommandLogger, fetchWithTimeout, prepareReply, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const { createCommandLogger, fetchWithTimeout, fetchImageAsInlineData, prepareReply, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
 const log = createCommandLogger("CMD_UTIL");
 
 //  AI
@@ -26,18 +26,7 @@ async function generateGemma(messages) {
     if (!text && !imageUrl) throw new Error("Request requires either text or an image");
     const parts = [{ text: text || "Describe la imagen." }];
     if (imageUrl) {
-      const res = await fetchWithTimeout(imageUrl, {}, 10_000);
-      if (!res.ok) {
-        throw new Error(`No se pudo descargar la imagen (${res.status})`);
-      }
-      const buf = await res.arrayBuffer();
-
-      parts.push({
-        inlineData: {
-          mimeType: res.headers.get("content-type") || "image/png",
-          data: Buffer.from(buf).toString("base64"),
-        },
-      });
+      parts.push(await fetchImageAsInlineData(imageUrl));
     }
 
     const response = await getAI().models.generateContent({
