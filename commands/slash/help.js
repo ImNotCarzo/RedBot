@@ -9,6 +9,7 @@ const {
   EmbedBuilder,
 } = require("gralonium");
 const { getId } = require("../../src/commandIds");
+const { getPrefix, prefixCache } = require("../../src/guild");
 const { createCommandLogger, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
 const log = createCommandLogger("CMD_HELP");
 
@@ -151,7 +152,7 @@ const data = {
       const isSlash  = Boolean(ctx.interaction);
       const authorId = ctx.user?.id ?? ctx.author?.id;
 
-      const prefix = (ctx.guild?.id && prefixCache.get(ctx.guild.id)) || ".";
+      const prefix = ctx.guild?.id ? await getPrefix(ctx.guild.id) : ".";
 
       const COMMANDS = getCommands();
 
