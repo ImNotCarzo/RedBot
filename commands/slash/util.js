@@ -502,6 +502,11 @@ const data = {
         name: "excluir_usuario",
         description: "Excluir un usuario específico",
         required: false,
+      })
+      .addAttachment({
+        name: "imagen",
+        description: "Imagen opcional para adjuntar al embed",
+        required: false,
       }),
  
     plugins: [Plugins.hasPerms("Administrator")],
@@ -514,6 +519,7 @@ const data = {
       const soloRol         = ctx.get("solo_rol");
       const rolExcluido     = ctx.get("excluir_rol");
       const usuarioExcluido = ctx.get("excluir_usuario");
+      const imagen          = ctx.get("imagen");
  
       await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
  
@@ -527,6 +533,8 @@ const data = {
         .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
         .setThumbnail(ctx.guild.iconURL({ size: 512 }));
  
+      if (imagen) embed.setImage(imagen.url);
+
       await ctx.guild.members.fetch();
  
       const members = [...ctx.guild.members.cache.values()].filter((m) => {

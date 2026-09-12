@@ -214,26 +214,13 @@ function loadSlashCommandMap(log) {
   const entries = fs.readdirSync(targetDir, { withFileTypes: true });
 
   for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
     if (entry.name.startsWith("_")) continue;
 
-    let targetFilePath = null;
-    let file = null;
-
-    if (entry.isFile() && entry.name.endsWith(".js")) {
-      targetFilePath = path.join(targetDir, entry.name);
-      file = entry.name.slice(0, -3);
-    } else if (entry.isDirectory()) {
-      const indexCandidate = path.join(targetDir, entry.name, "index.js");
-      if (fs.existsSync(indexCandidate)) {
-        targetFilePath = indexCandidate;
-        file = entry.name;
-      }
-    }
-
-    if (!targetFilePath) continue;
+    const file = entry.name.slice(0, -3);
 
     try {
-      const mod = require(targetFilePath);
+      const mod = require(path.join(targetDir, entry.name));
       const exported = mod?.data;
       const rootData = exported?.data;
 
