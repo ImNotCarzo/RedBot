@@ -97,18 +97,16 @@ const data = {
   async code(ctx) {
     const bot = ctx.bot.user;
     const raw = ctx.args?.join(" ").trim();
-
-    if (!raw) return ctx.send(PARAMERROR(bot));
-
-    const { titulo, texto, soloId, rolId, userId, imagen: imagenUrl } = parseArgs(raw);
-
-    if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
-
     const member = ctx.member;
     if (!member?.permissions.has("Administrator")) return ctx.send("f");
 
     const guild = ctx.guild;
     if (!guild) return ctx.send("f");
+    if (!raw) return ctx.send(PARAMERROR(bot));
+
+    const { titulo, texto, soloId, rolId, userId, imagen: imagenUrl } = parseArgs(raw);
+
+    if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
 
     const author    = ctx.author;
     const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
