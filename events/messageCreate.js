@@ -81,7 +81,7 @@ const event = {
       if (isRateLimit) {
         log.warn("messageCreate IA: límite de tasa alcanzado", { err: err.message });
         await message.reply({
-          content: "⚠️ El servicio de IA está temporalmente sobrecargado. Por favor intenta de nuevo en unos segundos.",
+          content: "Se acabaron los tokens",
           allowedMentions: { repliedUser: false },
         }).catch(() => {});
       } else {
