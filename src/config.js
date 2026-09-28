@@ -18,6 +18,9 @@ function validateEnv() {
     GEMINI: process.env.GEMINI,
     GEMINI2: process.env.GEMINI2,
     GROQ: process.env.GROQ,
+    API_PORT: process.env.API_PORT || "3000",
+    API_KEY: process.env.API_KEY || "",
+    API_CORS_ORIGIN: process.env.API_CORS_ORIGIN || "*",
   };
 }
 

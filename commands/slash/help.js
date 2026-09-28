@@ -316,4 +316,4 @@ const data = {
   },
 };
 
-module.exports = { data };
+module.exports = { data, getCommands, CATEGORIES, CATEGORY_LABELS };

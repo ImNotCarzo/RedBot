@@ -169,6 +169,12 @@ async function gracefulShutdown(signal, bot, log) {
   forceExitTimer.unref();
 
   try {
+    // Cerrar API HTTP primero
+    try {
+      const { stopApi } = require("./api");
+      await stopApi();
+    } catch { /* API module might not be loaded */ }
+
     if (typeof bot?.destroy === "function") {
       await bot.destroy().catch((err) => log?.error("Error al cerrar bot", { err: err.message }));
     }
