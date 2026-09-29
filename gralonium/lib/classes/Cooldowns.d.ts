@@ -1,4 +1,4 @@
-import { Erine } from "./Client";
+import { Gralonium } from "./Client.js";
 import { Collection } from "discord.js";
 export declare enum Bucket {
     Member = "MEMBER",
@@ -7,12 +7,12 @@ export declare enum Bucket {
     Channel = "CHANNEL"
 }
 export declare class Cooldowns {
-    bot: Erine;
+    bot: Gralonium;
     track: Collection<string, {
         startedAt: number;
         expiresAt: number;
     }>;
-    constructor(bot: Erine);
+    constructor(bot: Gralonium);
     getCooldownSource(command: string, id: string, bucket: Bucket): Promise<number | undefined>;
     setCooldownSource(command: string, id: string, bucket: Bucket, time: number): Promise<void>;
     check(command: string, id: string, cooldown: number, bucket: Bucket): Promise<{

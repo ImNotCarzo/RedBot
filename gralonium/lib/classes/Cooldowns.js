@@ -49,13 +49,8 @@ class Cooldowns {
     const tracked = this.track.get(key);
     if (!tracked) return null;
 
-    if (Date.now() >= tracked.expiresAt) {
-      this.track.delete(key);
-      return null;
-    }
-
-    const elapsed = Date.now() - tracked.startedAt;
-    if (elapsed >= cooldown) {
+    const now = Date.now();
+    if (now >= tracked.expiresAt) {
       this.track.delete(key);
       return null;
     }
@@ -65,7 +60,7 @@ class Cooldowns {
       id,
       time: cooldown,
       bucket,
-      left: cooldown - elapsed,
+      left: tracked.expiresAt - now,
     };
   }
 }

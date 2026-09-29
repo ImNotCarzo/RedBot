@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Gralonium = exports.Erine = exports.Enire = exports.RedBot = void 0;
+exports.Gralonium = void 0;
 
 const discord_js_1 = require("discord.js");
 const Context_js_1 = require("./Context.js");
@@ -8,7 +8,7 @@ const Loader_js_1 = require("./Loader.js");
 const Cooldowns_js_1 = require("./Cooldowns.js");
 const Utils_js_1 = require("./Utils.js");
 
-class RedBot extends discord_js_1.Client {
+class Gralonium extends discord_js_1.Client {
   static #processHandlersBound = false;
   static #boundClients = new Set();
 
@@ -104,10 +104,10 @@ class RedBot extends discord_js_1.Client {
   }
 
   static #bindProcessHandlers() {
-    if (RedBot.#processHandlersBound) return;
+    if (Gralonium.#processHandlersBound) return;
 
     const dispatch = (error) => {
-      for (const client of RedBot.#boundClients) {
+      for (const client of Gralonium.#boundClients) {
         client.handleFrameworkError(error);
       }
     };
@@ -115,7 +115,7 @@ class RedBot extends discord_js_1.Client {
     process.on("uncaughtException", dispatch);
     process.on("unhandledRejection", dispatch);
 
-    RedBot.#processHandlersBound = true;
+    Gralonium.#processHandlersBound = true;
   }
 
   #registerHelpCommand() {
@@ -134,8 +134,8 @@ class RedBot extends discord_js_1.Client {
 
   async login(token) {
     if (this.ops.bindProcessHandlers !== false) {
-      RedBot.#bindProcessHandlers();
-      RedBot.#boundClients.add(this);
+      Gralonium.#bindProcessHandlers();
+      Gralonium.#boundClients.add(this);
     }
 
     this.#bindCoreListeners();
@@ -151,12 +151,9 @@ class RedBot extends discord_js_1.Client {
   }
 
   destroy() {
-    RedBot.#boundClients.delete(this);
+    Gralonium.#boundClients.delete(this);
     return super.destroy();
   }
 }
 
-exports.RedBot = RedBot;
-exports.Enire = RedBot;
-exports.Erine = RedBot;
-exports.Gralonium = RedBot;
+exports.Gralonium = Gralonium;

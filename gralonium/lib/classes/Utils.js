@@ -9,10 +9,6 @@ const Errors = tslib_1.__importStar(require("./Errors.js"));
 const Cooldowns_js_1 = require("./Cooldowns.js");
 
 class Utils {
-  static isType(obj, func) {
-    return func(obj);
-  }
-
   static noop(n = null) {
     return n;
   }
@@ -137,19 +133,15 @@ class Utils {
     return paramsBuilder.params.map((param) => ({ ...param, value: undefined }));
   }
 
-  static #normalizeChoiceInput(input) {
-    return String(input ?? "").toLowerCase().trim();
-  }
-
   static async transform(input, param, ctx, seeable = true) {
     if (!input && seeable) {
       return { break: false, value: null };
     }
 
     if (param.choices?.length) {
-      const normalizedInput = Utils.#normalizeChoiceInput(input);
+      const normalizedInput = Utils.#toLower(input);
       const selected = param.choices.find(
-        (choice) => Utils.#normalizeChoiceInput(choice.name) === normalizedInput || String(choice.value) === String(input)
+        (choice) => Utils.#toLower(choice.name) === normalizedInput || String(choice.value) === String(input)
       );
       if (selected) return { break: false, value: selected.value };
       throw new Errors.InvalidParamChoice(ctx, param, param.choices);

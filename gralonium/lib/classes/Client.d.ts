@@ -4,14 +4,14 @@ import { Loader, Plugin } from "./Loader.js";
 import { HelpCommand } from "./HelpCommand.js";
 import { Cooldowns } from "./Cooldowns.js";
 
-export interface EnireRestrictions {
+export interface GraloniumRestrictions {
   userIDs: Set<Snowflake>;
   guildIDs: Set<Snowflake>;
 }
 
 type MaybePromise<T> = T | Promise<T>;
 
-export interface EnireOptions extends ClientOptions {
+export interface GraloniumOptions extends ClientOptions {
   autoSync?: boolean;
   context?: typeof Context;
   guildOnly?: boolean;
@@ -19,17 +19,17 @@ export interface EnireOptions extends ClientOptions {
   prefix: string | string[] | ((ctx: Context) => MaybePromise<string | string[]>);
   replyOnEdit?: boolean;
   helpCommand?: typeof HelpCommand;
-  restrictions?: EnireRestrictions;
+  restrictions?: GraloniumRestrictions;
   debug?: boolean;
   bindProcessHandlers?: boolean;
   retryOnRateLimit?: boolean;
 }
 
-export declare class RedBot extends Client {
+export declare class Gralonium extends Client {
   cooldowns: Cooldowns;
   loader: Loader;
-  ops: EnireOptions;
-  constructor(options: EnireOptions);
+  ops: GraloniumOptions;
+  constructor(options: GraloniumOptions);
   addGlobalPlugins(plugins: Plugin[]): this;
   getContext(data: CommandInteraction | Message): Context;
   load(dir: string, reload?: boolean): Promise<import("./Loader.js").ModuleData<import("./builders/InteractionBuilder.js").InteractionBuilder | import("./builders/CommandBuilder.js").CommandBuilder | import("./builders/EventBuilder.js").EventBuilder | import("./builders/GroupBuilder.js").GroupBuilder, any[]>[]>;
@@ -38,7 +38,3 @@ export declare class RedBot extends Client {
   login(token: string): Promise<string>;
   destroy(): this;
 }
-
-export { RedBot as Enire };
-export { RedBot as Erine };
-export { RedBot as Gralonium };

@@ -12,7 +12,4 @@ export * from "./classes/HelpCommand.js";
 export * from "./classes/Cooldowns.js";
 export * as Errors from "./classes/Errors.js";
 export * as Plugins from "./classes/Plugins.js";
-export * as ErineUtils from "./classes/Utils.js";
-export * as RedBotUtils from "./classes/Utils.js";
-export * as EnireUtils from "./classes/Utils.js";
 export * as GraloniumUtils from "./classes/Utils.js";

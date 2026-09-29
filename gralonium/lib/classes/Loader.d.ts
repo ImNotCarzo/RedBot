@@ -4,20 +4,20 @@ import { CommandBuilder } from "./builders/CommandBuilder.js";
 import { ParamsBuilder } from "./builders/ParamsBuilder.js";
 import { EventBuilder } from "./builders/EventBuilder.js";
 import { GroupBuilder } from "./builders/GroupBuilder.js";
-import { Plugins as EnirePlugins } from "../main.js";
+import { Plugins as GraloniumPlugins } from "../main.js";
 import { Context } from "./Context.js";
-import { Enire } from "./Client.js";
+import { Gralonium } from "./Client.js";
 
 export interface ModuleData<T extends unknown = unknown, K extends any[] = any[]> {
   data: CommandBuilder | GroupBuilder | InteractionBuilder | EventBuilder;
-  plugins?: T extends CommandBuilder ? (typeof EnirePlugins[] | Plugin[]) : never;
+  plugins?: T extends CommandBuilder ? (typeof GraloniumPlugins[] | Plugin[]) : never;
   params?: T extends CommandBuilder ? ParamsBuilder : never;
   code?: T extends CommandBuilder
     ? (ctx: Context) => Promise<void>
     : T extends InteractionBuilder
     ? (interaction: any) => Promise<void>
     : T extends EventBuilder
-    ? (bot: Enire, ...args: K) => Promise<void>
+    ? (bot: Gralonium, ...args: K) => Promise<void>
     : undefined;
 }
 
@@ -44,20 +44,25 @@ export declare enum Types {
 
 export type Command<K extends keyof CommandStructures = "normal"> = CommandStructures[K];
 
-interface EnireCollected {
+interface GraloniumCollected {
   normal: Collection<string, Command<"normal">> | null;
   group: Collection<string, Command<"group">> | null;
 }
 
 interface LoaderOptions {
-  client: Enire;
+  client: Gralonium;
 }
 
 export interface CommandHelpingObject extends Command<Types.Normal> {
   group: Command<Types.Group> | null;
 }
 
-type ErineInteractionTypes =
+export interface GroupHelpingObject {
+  data: GroupBuilder;
+  subcommands: CommandHelpingObject[];
+}
+
+type InteractionTypes =
   | "autocomplete"
   | "button"
   | "chatInput"
@@ -72,11 +77,10 @@ type ErineInteractionTypes =
   | "anyInteraction";
 
 export declare class Loader {
-  client: Enire;
-  commands: EnireCollected;
-  interactions: Record<ErineInteractionTypes, Collection<string, ModuleData<InteractionBuilder>>>;
+  client: Gralonium;
+  commands: GraloniumCollected;
+  interactions: Record<InteractionTypes, Collection<string, ModuleData<InteractionBuilder>>>;
   globalPlugins: Plugin[];
-  listeners: Collection<string, ModuleData<InteractionBuilder>> | null;
   rest: REST;
   constructor(options: LoaderOptions);
   load(dir: string, reload?: boolean): Promise<ModuleData<InteractionBuilder | CommandBuilder | EventBuilder | GroupBuilder, any[]>[]>;

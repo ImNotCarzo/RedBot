@@ -19,7 +19,7 @@ class Context {
     this.bot = bot;
     this.data = data;
     this.command = null;
-    this.params = this.data instanceof DJS.Message ? [] : [];
+    this.params = [];
     this.args = this.data instanceof DJS.Message ? [] : null;
   }
 

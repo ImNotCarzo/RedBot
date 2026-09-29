@@ -66,7 +66,6 @@ class ComponentsV2Builder {
   constructor() {
     this._container = new discord_js_1.ContainerBuilder();
     this._pendingButtons = [];
-    this._spoiler = false;
   }
 
   // ─── Internal helpers ────────────────────────────────────────────────────
@@ -190,7 +189,6 @@ class ComponentsV2Builder {
    * Mark the container as a spoiler (blurred until clicked).
    */
   setSpoiler(spoiler) {
-    this._spoiler = spoiler;
     this._container.setSpoiler(spoiler);
     return this;
   }

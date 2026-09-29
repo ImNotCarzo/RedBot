@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.GraloniumUtils = exports.EnireUtils = exports.ErineUtils = exports.RedBotUtils = exports.Plugins = exports.Errors = void 0;
+exports.GraloniumUtils = exports.Plugins = exports.Errors = void 0;
 
 const tslib_1 = require("tslib");
 
@@ -19,7 +19,4 @@ tslib_1.__exportStar(require("./classes/Cooldowns.js"), exports);
 
 exports.Errors = tslib_1.__importStar(require("./classes/Errors.js"));
 exports.Plugins = tslib_1.__importStar(require("./classes/Plugins.js"));
-exports.ErineUtils = tslib_1.__importStar(require("./classes/Utils.js"));
-exports.RedBotUtils = exports.ErineUtils;
-exports.EnireUtils = exports.ErineUtils;
-exports.GraloniumUtils = exports.ErineUtils;
+exports.GraloniumUtils = tslib_1.__importStar(require("./classes/Utils.js"));

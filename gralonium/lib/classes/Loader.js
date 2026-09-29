@@ -29,13 +29,12 @@ class Loader {
   commands;
   interactions;
   globalPlugins;
-  listeners;
   rest;
   #eventHandlers;
   #loadedSignature;
 
   constructor(options) {
-    if (!(options?.client instanceof Client_js_1.Enire)) {
+    if (!(options?.client instanceof Client_js_1.Gralonium)) {
       throw new SyntaxError("Invalid client provided in options");
     }
 
@@ -56,7 +55,6 @@ class Loader {
       anyInteraction: new discord_js_1.Collection(),
     };
     this.globalPlugins = [];
-    this.listeners = null;
     this.rest = new discord_js_1.REST();
     this.#eventHandlers = new Map();
     this.#loadedSignature = new Set();

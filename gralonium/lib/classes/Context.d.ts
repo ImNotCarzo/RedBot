@@ -1,10 +1,10 @@
 import { Command, Types } from "../classes/Loader.js";
 import * as P from "./builders/ParamsBuilder.js";
-import { Enire } from "./Client.js";
+import { Gralonium } from "./Client.js";
 import * as DJS from "discord.js";
 
 export declare class Context {
-  bot: Enire;
+  bot: Gralonium;
   args: string[] | null;
   data: DJS.Message | DJS.CommandInteraction;
   prefix: string;
@@ -12,7 +12,7 @@ export declare class Context {
   command: Command<Types.Normal> | null;
   parent: Command<Types.Group> | null;
   params: P.BaseParam[] | null;
-  constructor(bot: Enire, data: DJS.Message | DJS.CommandInteraction);
+  constructor(bot: Gralonium, data: DJS.Message | DJS.CommandInteraction);
   get message(): DJS.Message | null;
   get interaction(): DJS.CommandInteraction | null;
   get author(): DJS.User;
