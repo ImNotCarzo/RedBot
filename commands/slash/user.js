@@ -15,6 +15,7 @@ const {
   uniqueId,
   formatPermissionName: formatPermName,
   paginateArray,
+  handleCommandError,
 } = require("../_shared/runtime");
 const { resolveMemberFlexible } = require("../../src/adapter");
 const { RED } = require("../../utils/colors");
@@ -492,7 +493,7 @@ const data = {
 
       } catch (err) {
         log.error("Error en user info", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener la información del usuario");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -565,7 +566,7 @@ const data = {
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
         log.error("Error en user avatar", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener el avatar");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -641,7 +642,7 @@ const data = {
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
         log.error("Error en user banner", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener el banner");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -698,7 +699,7 @@ const data = {
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
         log.error("Error en user roles", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener los roles");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -753,7 +754,7 @@ const data = {
         collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
       } catch (err) {
         log.error("Error en user permissions", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudieron obtener los permisos del usuario");
+        return handleCommandError(ctx, err);
       }
     },
   }),

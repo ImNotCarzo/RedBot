@@ -7,7 +7,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply, buildPagRow, uniqueId } = require("../_shared/runtime");
+const { createCommandLogger, clampPage, noGuildReply, buildPagRow, uniqueId, handleCommandError } = require("../_shared/runtime");
 const { RED } = require("../../utils/colors");
 
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
@@ -234,7 +234,7 @@ const data = {
         });
       } catch (err) {
         log.error("Error en server info", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener la información del servidor");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -266,7 +266,7 @@ const data = {
         await ctx.send({ embeds: [embed] });
       } catch (err) {
         log.error("Error en server logo", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener el logo");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -298,7 +298,7 @@ const data = {
         await ctx.send({ embeds: [embed] });
       } catch (err) {
         log.error("Error en server banner", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener el banner");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -330,7 +330,7 @@ const data = {
         await ctx.send({ embeds: [embed] });
       } catch (err) {
         log.error("Error en server emojis", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener los emojis");
+        return handleCommandError(ctx, err);
       }
     },
   })
@@ -401,7 +401,7 @@ const data = {
         });
       } catch (err) {
         log.error("Error en server roles", { err: err?.message ?? String(err) });
-        await ctx.send("No se pudo obtener los roles");
+        return handleCommandError(ctx, err);
       }
     },
   }),

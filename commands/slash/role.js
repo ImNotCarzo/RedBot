@@ -7,7 +7,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply, buildPagRow, formatPermissionName: formatPerm, uniqueId } = require("../_shared/runtime");
+const { createCommandLogger, clampPage, noGuildReply, buildPagRow, buildPaginationRow, formatPermissionName: formatPerm, uniqueId, handleCommandError } = require("../_shared/runtime");
 const JoinRole = require("../../models/JoinRole");
 const { sendLog } = require("../../src/guild");
  
@@ -430,7 +430,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo asignar el rol", flags: MessageFlags.Ephemeral });
       }
     },
@@ -482,7 +483,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo quitar el rol", flags: MessageFlags.Ephemeral });
       }
     },
@@ -539,7 +541,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo renombrar el rol", flags: MessageFlags.Ephemeral });
       }
     },
@@ -591,7 +594,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo cambiar el hoist", flags: MessageFlags.Ephemeral });
       }
     },
@@ -643,7 +647,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo cambiar la mencionabilidad", flags: MessageFlags.Ephemeral });
       }
     },
@@ -1236,7 +1241,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
     } catch (err) {
       log.error("Error en role permissions", { err: err?.message ?? String(err) });
-      await ctx.send("No se pudieron obtener los permisos del rol");
+      return handleCommandError(ctx, err);
     }
   }
 }),

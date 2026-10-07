@@ -4,7 +4,7 @@ const { deleteConversacion, generateWithFallback } = require("../../src/ai");
 const { AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
 const { RED, GREEN } = require("../../utils/colors");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
-const { createCommandLogger, fetchWithTimeout, fetchImageAsInlineData, prepareReply, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const { createCommandLogger, fetchWithTimeout, fetchImageAsInlineData, prepareReply, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
 const { version: botVersion } = require("../../package.json");
 
 let graloniumVersion = "0.2.0";
@@ -88,6 +88,7 @@ const data = {
       try {
         const before  = Date.now();
         const sent    = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
+        if (ctx && sent) ctx._thinkingMessage = sent;
         const msgPing = Date.now() - before;
         const apiPing = ctx.bot?.ws?.ping ?? 0;
 
@@ -104,7 +105,7 @@ const data = {
         });
       } catch (err) {
         log.error("[util ping]", { err: err?.message ?? String(err) });
-        await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -159,7 +160,7 @@ const data = {
         });
       } catch (err) {
         log.error("[util botinfo]", { err: err?.message ?? String(err) });
-        await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -182,7 +183,7 @@ const data = {
         await ctx.send({ content: INVITE_URL, components: [row] });
       } catch (err) {
         log.error("[util invite]", { err: err?.message ?? String(err) });
-        await ctx.send({ content: "Algo salió mal", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -236,7 +237,7 @@ const data = {
         });
       } catch (err) {
         log.error("[util setprefix]", { err: err?.message ?? String(err) });
-        await ctx.send({ content: "No se pudo cambiar el prefix", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -358,7 +359,7 @@ const data = {
         });
       } catch (err) {
         log.error("[util describe]", { err: err?.message ?? String(err) });
-        await reply({ content: "No se pudo procesar la imagen", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -426,7 +427,7 @@ const data = {
         });
       } catch (err) {
         log.error("[util transcribe]", { err: err?.message ?? String(err) });
-        await reply({ content: "No se pudo transcribir el archivo", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -593,7 +594,7 @@ const data = {
         });
       } catch (err) {
         log.error("[util resume]", { err: err?.message ?? String(err) });
-        await reply({ content: "No se pudo resumir el texto", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   }),

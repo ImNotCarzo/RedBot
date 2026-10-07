@@ -2,7 +2,7 @@ const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, MessageFlags
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { RED, GREEN } = require("../../utils/colors");
 const { sendLog } = require("../../src/guild");
-const { createCommandLogger, noGuildReply, uniqueId } = require("../_shared/runtime");
+const { createCommandLogger, noGuildReply, uniqueId, handleCommandError } = require("../_shared/runtime");
 
 const log = createCommandLogger("CMD_CHANNEL");
 
@@ -103,7 +103,7 @@ const data = {
       await ctx.send({ embeds: [infoEmbed] });
     } catch (err) {
       log.error("Error en channel info", { err: err?.message ?? String(err) });
-      await ctx.send("No se pudo obtener la información del canal");
+      return handleCommandError(ctx, err);
     }
   },
 })
@@ -479,7 +479,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo clonar el canal", flags: MessageFlags.Ephemeral });
       }
     },

@@ -52,6 +52,35 @@ async function fetchImageAsInlineData(url, timeoutMs = 10_000) {
   };
 }
 
+function handleCommandError(ctx, err) {
+  if (err && typeof err === "object" && !err.ctx && ctx) {
+    err.ctx = ctx;
+  }
+  const bot = ctx?.bot ?? ctx?.client;
+  if (typeof bot?.handleFrameworkError === "function") {
+    bot.handleFrameworkError(err, ctx);
+  } else if (typeof bot?.emit === "function") {
+    bot.emit("frameworkError", err, ctx);
+  }
+}
+
+function checkBotPermissions(ctx, ...permissions) {
+  if (!ctx?.guild) return true;
+  const me = ctx.guild.members?.me ?? (ctx.bot?.user?.id ? ctx.guild.members.cache.get(ctx.bot.user.id) : null);
+  const channel = ctx.channel;
+  const channelPerms = channel?.permissionsFor ? channel.permissionsFor(me || ctx.bot?.user) : null;
+  if (!channelPerms) return true;
+
+  const missing = permissions.filter((p) => !channelPerms.has(p));
+  if (missing.length > 0) {
+    const { Errors } = require("gralonium");
+    const err = new Errors.MissingBotChannelPermission(ctx, missing, channel);
+    handleCommandError(ctx, err);
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
   INVITE_URL,
   SUPPORT_URL,
@@ -67,4 +96,6 @@ module.exports = {
   fetchImageAsInlineData,
   prepareReply,
   noGuildReply,
+  handleCommandError,
+  checkBotPermissions,
 };

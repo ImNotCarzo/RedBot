@@ -74,7 +74,16 @@ const event = {
         .setDescription(texto)
         .setColor(RED);
 
-      const botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+      let botMsg;
+      try {
+        botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+      } catch (sendErr) {
+        if (sendErr?.code === 50013 || sendErr?.code === 50006) {
+          botMsg = await message.reply({ content: texto, allowedMentions: { repliedUser: false } });
+        } else {
+          throw sendErr;
+        }
+      }
       setConversacion(message.author.id, historialFinal, botMsg.id);
     } catch (err) {
       const isRateLimit = err?.status === 429 || err?.message?.includes("429");

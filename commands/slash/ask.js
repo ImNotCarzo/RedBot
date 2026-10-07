@@ -4,7 +4,7 @@ const { generateWithFallback, toGeminiHistory, setConversacion, getConversacion 
 const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_SEARCH } = require("../../src/config");
 const { RED } = require("../../utils/colors");
 const { sendThinkingReply, editThinkingReply } = require("../_shared/thinking");
-const { createCommandLogger } = require("../_shared/runtime");
+const { createCommandLogger, handleCommandError } = require("../_shared/runtime");
 
 const log = createCommandLogger("CMD_ASK");
 
@@ -95,11 +95,7 @@ const data = {
 
     } catch (err) {
       log.error("Error en ask", { err: err?.message ?? String(err) });
-      if (ctx.interaction) {
-        await ctx.interaction.editReply("Algo salió mal, intenta de nuevo").catch(() => {});
-      } else {
-        await ctx.send("Ocurrió un error, intenta de nuevo");
-      }
+      handleCommandError(ctx, err);
     }
   },
 };

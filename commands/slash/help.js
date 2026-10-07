@@ -11,7 +11,7 @@ const {
 const { getId } = require("../../src/commandIds");
 const { getPrefix } = require("../../src/guild");
 const { RED } = require("../../utils/colors");
-const { createCommandLogger, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const { createCommandLogger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
 const log = createCommandLogger("CMD_HELP");
 
 const IDS = {
@@ -283,7 +283,7 @@ const data = {
 
     } catch (err) {
       log.error("[help]", { err: err?.message ?? String(err) });
-      await ctx.send("Error al mostrar el help");
+      handleCommandError(ctx, err);
     }
   },
 };

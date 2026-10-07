@@ -4,7 +4,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { clampPage, buildPagRow, uniqueId } = require("../_shared/runtime");
+const { clampPage, buildPagRow, uniqueId, handleCommandError } = require("../_shared/runtime");
 
 const { RED, YELLOW, GREEN } = require("../../utils/colors");
 const {
@@ -95,7 +95,8 @@ const data = {
             { name: "Mensajes borrados", value: `${days} días`,                           inline: true },
           ).setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No pude banear al usuario", flags: MessageFlags.Ephemeral });
       }
     },
@@ -137,7 +138,8 @@ const data = {
             { name: "Razón",     value: reason,                             inline: false },
           ).setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo desbanear al usuario, verifica que el ID sea correcto", flags: MessageFlags.Ephemeral });
       }
     },
@@ -189,7 +191,8 @@ const data = {
           .setFooter({ text: "El usuario puede volver a entrar al servidor" })
           .setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No pude softbanear al usuario", flags: MessageFlags.Ephemeral });
       }
     },
@@ -256,7 +259,8 @@ const data = {
             { name: "Razón",     value: reason,                                           inline: false },
           ).setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No pude hacer el tempban", flags: MessageFlags.Ephemeral });
       }
     },
@@ -372,7 +376,8 @@ const data = {
             { name: "Razón",     value: reason,                                   inline: false },
           ).setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No se pudo expulsar al usuario", flags: MessageFlags.Ephemeral });
       }
     },
@@ -432,7 +437,8 @@ const data = {
             { name: "Razón",     value: reason,                                   inline: false },
           ).setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No se pudo silenciar al usuario", flags: MessageFlags.Ephemeral });
       }
     },
@@ -477,7 +483,8 @@ const data = {
             { name: "Razón",     value: reason,                                   inline: false },
           ).setTimestamp()
         );
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No se pudo quitar el timeout", flags: MessageFlags.Ephemeral });
       }
     },
@@ -533,7 +540,8 @@ const data = {
         );
 
         setTimeout(() => reply.delete().catch(() => {}), 5000);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await send({ content: "No pude eliminar los mensajes — pueden ser demasiado antiguos", flags: MessageFlags.Ephemeral });
       }
     },
@@ -592,7 +600,8 @@ const data = {
               { name: "ID",          value: `\`${warnId}\``, inline: true },
             )],
         }).catch(() => {});
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo registrar la advertencia", flags: MessageFlags.Ephemeral });
       }
     },
@@ -624,7 +633,8 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
         await sendLog(ctx.guild, embed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo eliminar la advertencia", flags: MessageFlags.Ephemeral });
       }
     },
@@ -656,7 +666,8 @@ const data = {
 
         await ctx.send({ embeds: [embed] });
         await sendLog(ctx.guild, embed);
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudieron limpiar las advertencias", flags: MessageFlags.Ephemeral });
       }
     },
@@ -723,7 +734,8 @@ const data = {
         });
 
         collector.on("end", async () => msg.edit({ components: [] }).catch(() => {}));
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudieron obtener las advertencias", flags: MessageFlags.Ephemeral });
       }
     },
@@ -750,7 +762,8 @@ const data = {
           .setTitle("Canal de logs establecido")
           .setDescription(`Los logs se enviarán a ${channel}`)
           .setColor(GREEN).setTimestamp()] });
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo establecer el canal de logs", flags: MessageFlags.Ephemeral });
       }
     },
@@ -774,7 +787,8 @@ const data = {
           .setTitle("Logs desactivados")
           .setDescription("Ya no se enviarán logs en este servidor")
           .setColor(RED).setTimestamp()] });
-      } catch {
+      } catch (err) {
+        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
         await ctx.send({ content: "No se pudo desactivar los logs", flags: MessageFlags.Ephemeral });
       }
     },

@@ -2,7 +2,7 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const { generateWithFallback } = require("../../src/ai");
 const { AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
-const { createCommandLogger, fetchImageAsInlineData, prepareReply, noGuildReply } = require("../_shared/runtime");
+const { createCommandLogger, fetchImageAsInlineData, prepareReply, noGuildReply, handleCommandError } = require("../_shared/runtime");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -106,7 +106,7 @@ const data = {
         });
       } catch (err) {
         log.error("[fun opinion]", { err: err?.message ?? String(err) });
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -144,7 +144,7 @@ const data = {
         });
       } catch (err) {
         log.error("[fun critica]", { err: err?.message ?? String(err) });
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -189,11 +189,7 @@ const data = {
       });
     } catch (err) {
       log.error("[fun excusa]", { err: err?.message ?? String(err) });
-
-      await reply({
-        content: "Ocurrió un error con la IA, intenta de nuevo",
-        flags: MessageFlags.Ephemeral,
-      });
+      handleCommandError(ctx, err);
     }
   },
 })
@@ -232,7 +228,7 @@ const data = {
         });
       } catch (err) {
         log.error("[fun teoria]", { err: err?.message ?? String(err) });
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
@@ -320,7 +316,7 @@ ${datosUsuario}`;
         });
       } catch (err) {
         log.error("[fun roast]", { err: err?.message ?? String(err) });
-        await reply({ content: "Ocurrió un error con la IA, intenta de nuevo", flags: MessageFlags.Ephemeral });
+        handleCommandError(ctx, err);
       }
     },
   })
