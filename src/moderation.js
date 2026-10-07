@@ -175,6 +175,16 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
     return;
   }
 
+  const MAX_INT = 2147483647;
+  if (delay > MAX_INT) {
+    const timeout = setTimeout(() => {
+      scheduleTempUnban(client, guildId, userId, unbanAt);
+    }, MAX_INT);
+    timeout.unref();
+    tempBanTimers.set(key, timeout);
+    return;
+  }
+
   const timeout = setTimeout(() => {
     execute().catch((err) => {
       log.error("Fallo inesperado al ejecutar tempban programado", { guildId, userId, err: err?.message ?? String(err) });

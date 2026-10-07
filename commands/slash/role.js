@@ -75,6 +75,7 @@ const data = {
   params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     if (!ctx.guild) return noGuildReply(ctx);
 
     await ctx.guild.members.fetch();
@@ -272,6 +273,7 @@ const data = {
       .addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role = ctx.get("rol");
@@ -304,6 +306,7 @@ const data = {
       .addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role = ctx.get("rol");
@@ -333,6 +336,7 @@ const data = {
       .addRole({ name: "rol", description: "Rol", required: true }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role = ctx.get("rol");
@@ -395,6 +399,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const member = ctx.get("usuario");
       const role   = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -446,6 +451,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const member = ctx.get("usuario");
       const role   = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -497,6 +503,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role    = ctx.get("rol");
@@ -552,6 +559,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role   = ctx.get("rol");
@@ -603,6 +611,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role   = ctx.get("rol");
@@ -667,6 +676,7 @@ const data = {
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     const role       = ctx.get("rol");
     const incluirBot = ctx.get("incluir_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
@@ -699,11 +709,12 @@ const data = {
 
     for (const [, member] of targets) {
       try {
-        await member.roles.add(role, `${modTag}: role all`);
-        done++;
-      } catch {
-        failed++;
-      }
+        await member.roles.();
+          done++;
+        } catch {
+          failed++;
+        }
+        await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 10 === 0 || done + failed === total) {
         await msg.edit({
@@ -772,6 +783,7 @@ const data = {
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     const role       = ctx.get("rol");
     const incluirBot = ctx.get("incluir_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
@@ -804,11 +816,12 @@ const data = {
 
     for (const [, member] of targets) {
       try {
-        await member.roles.remove(role, `${modTag}: role removeall`);
-        done++;
-      } catch {
-        failed++;
-      }
+        await member.roles.();
+          done++;
+        } catch {
+          failed++;
+        }
+        await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 10 === 0 || done + failed === total) {
         await msg.edit({
@@ -877,6 +890,7 @@ const data = {
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     const role   = ctx.get("rol");
     const accion = ctx.get("accion");
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -914,11 +928,12 @@ const data = {
       try {
         accion === "add"
           ? await member.roles.add(role, `${modTag}: role bots`)
-          : await member.roles.remove(role, `${modTag}: role bots`);
-        done++;
-      } catch {
-        failed++;
-      }
+          : await member.roles.();
+          done++;
+        } catch {
+          failed++;
+        }
+        await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 5 === 0 || done + failed === total) {
         await msg.edit({
@@ -986,6 +1001,7 @@ const data = {
   plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")],
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     const role   = ctx.get("rol");
     const accion = ctx.get("accion");
     const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -1022,11 +1038,12 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       try {
         accion === "add"
           ? await member.roles.add(role, `${modTag}: role humans`)
-          : await member.roles.remove(role, `${modTag}: role humans`);
-        done++;
-      } catch {
-        failed++;
-      }
+          : await member.roles.();
+          done++;
+        } catch {
+          failed++;
+        }
+        await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 10 === 0 || done + failed === total) {
         await msg.edit({
@@ -1093,6 +1110,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
   plugins: [Plugins.hasPerms("ManageGuild")],
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     const role       = ctx.get("rol");
     const ignoreBots = ctx.get("ignorar_bots") === "true";
     const modTag     = ctx.user?.tag ?? ctx.author?.tag;
@@ -1154,6 +1172,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
       required: true }),
 
   async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     try {
       if (!ctx.guild) return noGuildReply(ctx);
 

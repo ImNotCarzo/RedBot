@@ -93,24 +93,6 @@ async function generateWithFallback(params, options = {}) {
   throw finalErr;
 }
 
-async function needsSearchAI(question) {
-  if (!question || typeof question !== "string") return false;
-  try {
-    const res = await generateWithFallback({
-      model: AI_MODEL_DEFAULT,
-      contents: [{
-        role: "user",
-        parts: [{
-          text: `Answer only YES or NO. Does this question require current or real-time information from the internet (news, weather, sports results, prices, events, updates)?\nQuestion: ${question}`,
-        }],
-      }],
-    }, { timeoutMs: 10_000, maxAttempts: 2 });
-
-    return res.text?.trim()?.toLowerCase().includes("yes") ?? false;
-  } catch (err) {
-    log.warn("No se pudo determinar si la consulta requiere búsqueda", { err: err?.message ?? String(err) });
-    return false;
-  }
 }
 
 function toGeminiHistory(history) {
@@ -183,7 +165,7 @@ function deleteConversacion(userId) {
 module.exports = {
   getAI,
   generateWithFallback,
-  needsSearchAI,
+  
   toGeminiHistory,
   setConversacion,
   getConversacion,

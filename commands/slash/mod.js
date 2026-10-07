@@ -295,6 +295,12 @@ const data = {
       const failed = [];
 
       for (const member of users) {
+        const hierr = hierarchyChecks(ctx, member, "banear a");
+        if (hierr) {
+          failed.push(member);
+          continue;
+        }
+
         try {
           await member.user.send({
             embeds: [new EmbedBuilder().setColor(RED).setDescription(`Fuiste baneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
@@ -387,6 +393,10 @@ const data = {
     plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
     async code(ctx) {
+      const isSlash = !!ctx.interaction;
+      if (isSlash) await ctx.interaction.deferReply();
+      const send = makeSend(ctx, isSlash);
+
       const member   = ctx.get("usuario");
       const durStr   = ctx.get("duracion");
       const reason   = ctx.get("razon") ?? "Sin razón";
@@ -394,12 +404,12 @@ const data = {
       const tag      = modTag(ctx);
 
       if (!duration)
-        return ctx.send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
+        return send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
       if (duration > 28 * 86_400_000)
-        return ctx.send({ content: "La duración máxima de timeout es 28 días", flags: MessageFlags.Ephemeral });
+        return send({ content: "La duración máxima de timeout es 28 días", flags: MessageFlags.Ephemeral });
 
       const hierr = hierarchyChecks(ctx, member, "silenciar a");
-      if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+      if (hierr) return send({ content: hierr, flags: MessageFlags.Ephemeral });
 
       try {
         await member.timeout(duration, `${tag}: ${reason}`);
@@ -408,7 +418,7 @@ const data = {
         const tiempo   = formatDuration(duration);
         const expireTs = Math.floor((Date.now() + duration) / 1000);
 
-        await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue silenciado por **${tiempo}**`).setColor(RED)] });
+        await send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue silenciado por **${tiempo}**`).setColor(RED)] });
 
         await member.user.send({
           embeds: [new EmbedBuilder().setColor(RED)
@@ -427,7 +437,7 @@ const data = {
           ).setTimestamp()
         );
       } catch {
-        await ctx.send({ content: "No se pudo silenciar al usuario", flags: MessageFlags.Ephemeral });
+        await send({ content: "No se pudo silenciar al usuario", flags: MessageFlags.Ephemeral });
       }
     },
   })
@@ -442,18 +452,22 @@ const data = {
     plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
     async code(ctx) {
+      const isSlash = !!ctx.interaction;
+      if (isSlash) await ctx.interaction.deferReply();
+      const send = makeSend(ctx, isSlash);
+
       const member = ctx.get("usuario");
       const reason = ctx.get("razon") ?? "Sin razón";
       const tag    = modTag(ctx);
       if (!member.communicationDisabledUntil)
-        return ctx.send({ content: "Ese usuario no está silenciado", flags: MessageFlags.Ephemeral });
+        return send({ content: "Ese usuario no está silenciado", flags: MessageFlags.Ephemeral });
 
       try {
         await member.timeout(null, `${tag}: ${reason}`);
 
         const username = member.user.globalName || member.user.username;
 
-        await ctx.send({ embeds: [new EmbedBuilder().setDescription(`El mute de **${username}** fue removido`).setColor(GREEN)] });
+        await send({ embeds: [new EmbedBuilder().setDescription(`El mute de **${username}** fue removido`).setColor(GREEN)] });
 
         await member.user.send({
           embeds: [new EmbedBuilder().setColor(GREEN).setDescription(`Tu silencio en **${ctx.guild.name}** fue removido`)],
@@ -468,7 +482,7 @@ const data = {
           ).setTimestamp()
         );
       } catch {
-        await ctx.send({ content: "No se pudo quitar el timeout", flags: MessageFlags.Ephemeral });
+        await send({ content: "No se pudo quitar el timeout", flags: MessageFlags.Ephemeral });
       }
     },
   })
@@ -483,12 +497,16 @@ const data = {
     plugins: [Plugins.hasPerms("ManageMessages"), Plugins.hasBotPerms("ManageMessages")],
 
     async code(ctx) {
+      const isSlash = !!ctx.interaction;
+      if (isSlash) await ctx.interaction.deferReply();
+      const send = makeSend(ctx, isSlash);
+
       const amount = Math.min(100, Math.max(1, parseInt(ctx.get("cantidad")) || 0));
       const target = ctx.get("usuario") ?? null;
       const tag    = modTag(ctx);
 
       if (!amount)
-        return ctx.send({ content: "Ingresa un número válido entre 1 y 100", flags: MessageFlags.Ephemeral });
+        return send({ content: "Ingresa un número válido entre 1 y 100", flags: MessageFlags.Ephemeral });
 
       try {
         const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
@@ -498,7 +516,7 @@ const data = {
           .first(amount);
 
         if (!toDelete.length)
-          return ctx.send({ content: "No hay mensajes recientes para borrar", flags: MessageFlags.Ephemeral });
+          return send({ content: "No hay mensajes recientes para borrar", flags: MessageFlags.Ephemeral });
 
         const deleted  = await ctx.channel.bulkDelete(toDelete, true);
         const cantidad = deleted.size;
@@ -506,7 +524,7 @@ const data = {
           ? `Se eliminaron **${cantidad}** mensaje${cantidad !== 1 ? "s" : ""} de **${target.user.globalName || target.user.username}**`
           : `Se eliminaron **${cantidad}** mensaje${cantidad !== 1 ? "s" : ""}`;
 
-        const reply = await ctx.send({ embeds: [new EmbedBuilder().setDescription(texto).setColor(GREEN).setTimestamp()] });
+        const reply = await send({ embeds: [new EmbedBuilder().setDescription(texto).setColor(GREEN).setTimestamp()] });
 
         await sendLog(ctx.guild, new EmbedBuilder()
           .setTitle("Purge ejecutado").setColor(GREEN)
@@ -520,7 +538,7 @@ const data = {
 
         setTimeout(() => reply.delete().catch(() => {}), 5000);
       } catch {
-        await ctx.send({ content: "No pude eliminar los mensajes — pueden ser demasiado antiguos", flags: MessageFlags.Ephemeral });
+        await send({ content: "No pude eliminar los mensajes — pueden ser demasiado antiguos", flags: MessageFlags.Ephemeral });
       }
     },
   })

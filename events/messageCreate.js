@@ -28,7 +28,9 @@ const event = {
 
       const userData = getConversacion(message.author.id);
       if (!userData) return;
-      if (message.reference.messageId !== userData.lastBotMessageId) return;
+      
+      const repliedMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+      if (!repliedMsg || repliedMsg.author.id !== _bot.user.id) return;
 
       const pregunta = message.content.trim();
       if (!pregunta) return;
@@ -40,9 +42,8 @@ const event = {
         : [];
       historial.push({ role: "user", content: pregunta });
 
-      const usarSearch = await needsSearchAI(pregunta);
-      const model = usarSearch ? AI_MODEL_SEARCH : AI_MODEL_DEFAULT;
-      const config = usarSearch ? { tools: [{ googleSearch: {} }] } : {};
+      const model = AI_MODEL_SEARCH;
+      const config = { tools: [{ googleSearch: {} }] };
 
       const response = await generateWithFallback({
         model,

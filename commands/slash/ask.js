@@ -58,10 +58,8 @@ const data = {
       const historial = prev?.historial ?? [];
       historial.push({ role: "user", content: pregunta });
 
-      const usarSearch = await needsSearchAI(pregunta);
-
-      const model = usarSearch ? AI_MODEL_SEARCH : AI_MODEL_DEFAULT;
-      const config = usarSearch ? { tools: [{ googleSearch: {} }] } : {};
+      const model = AI_MODEL_SEARCH;
+      const config = { tools: [{ googleSearch: {} }] };
 
       const response = await generateWithFallback({
         model,

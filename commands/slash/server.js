@@ -138,7 +138,7 @@ const data = {
               const emojis = guild.emojis.cache.map((e) => e.toString());
               if (!emojis.length) return interaction.reply({ content: "Este servidor no tiene emojis", flags: MessageFlags.Ephemeral });
               return interaction.reply({
-                embeds: [new EmbedBuilder().setTitle(`Emojis de ${guild.name} (${emojis.length})`).setDescription(emojis.join(" ")).setColor(COLOR).setTimestamp()],
+                embeds: [new EmbedBuilder().setTitle(`Emojis de ${guild.name} (${emojis.length})`).setDescription(emojis.reduce((acc, cur) => acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? ' ' : '') + cur, '')).setColor(COLOR).setTimestamp()],
                 flags: MessageFlags.Ephemeral,
               });
             }
@@ -176,7 +176,7 @@ const data = {
             const emojis = guild.emojis.cache.map((e) => e.toString());
             if (!emojis.length) return interaction.reply({ content: "Este servidor no tiene emojis", flags: MessageFlags.Ephemeral });
             return interaction.update({
-              embeds: [new EmbedBuilder().setTitle(`Emojis de ${guild.name} (${emojis.length})`).setDescription(emojis.join(" ")).setColor(COLOR).setTimestamp()],
+              embeds: [new EmbedBuilder().setTitle(`Emojis de ${guild.name} (${emojis.length})`).setDescription(emojis.reduce((acc, cur) => acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? ' ' : '') + cur, '')).setColor(COLOR).setTimestamp()],
               components: [buildSelectRow(true)],
             });
           }
@@ -315,7 +315,7 @@ const data = {
 
         const embed = new EmbedBuilder()
           .setTitle(`Emojis de ${guild.name} (${emojis.length})`)
-          .setDescription(emojis.join(" "))
+          .setDescription(emojis.reduce((acc, cur) => acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? ' ' : '') + cur, ''))
           .setColor(COLOR)
           .setTimestamp();
 
