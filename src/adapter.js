@@ -68,14 +68,27 @@ async function resolveMember(ctx, input) {
 }
 
 async function resolveMemberFlexible(ctx, input) {
-  if (!ctx?.guild) return null;
-  if (!input) return ctx.member ?? null;
+  if (!input) return ctx.member ?? ctx.user ?? ctx.author ?? null;
   if (typeof input === "object" && input?.id) return input;
 
-  const member = await resolveMember(ctx, input);
-  if (member) return member;
+  if (ctx?.guild) {
+    const member = await resolveMember(ctx, input);
+    if (member) return member;
+  }
 
-  const lower = String(input).toLowerCase();
+  const token = String(input).trim();
+  const idMatch = token.match(/^<@!?(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(token) ? token : null);
+  if (idMatch) {
+    const client = ctx.guild?.client ?? ctx.bot?.client ?? ctx.client ?? ctx.message?.client;
+    if (client?.users?.fetch) {
+      const user = await client.users.fetch(idMatch).catch(() => null);
+      if (user) return user;
+    }
+  }
+
+  if (!ctx?.guild) return null;
+
+  const lower = token.toLowerCase();
   return ctx.guild.members.cache.find((m) => {
     const username = m.user.username?.toLowerCase() ?? "";
     const globalName = m.user.globalName?.toLowerCase() ?? "";
@@ -153,6 +166,13 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
   const values = {};
   let missingRequired = false;
 
+  // Si es purge y se pasó @usuario antes de la cantidad, intercambiar
+  if (slashName === "purge" && args.length >= 2 && !/^\d{1,3}$/.test(args[0]) && /^\d{1,3}$/.test(args[1])) {
+    const temp = args[0];
+    args[0] = args[1];
+    args[1] = temp;
+  }
+
   for (let i = 0; i < defs.length; i++) {
     const def = defs[i];
     const isLast = i === defs.length - 1;
@@ -182,10 +202,24 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         value = replyMsg?.attachments?.values()?.next()?.value ?? null;
       }
       if (!ctx.message?.attachments?.size && value) args.shift();
+    } else if (def.type === 5) {
+      if (args.length) {
+        const raw = String(args.shift()).toLowerCase();
+        value = ["true", "si", "sí", "yes", "1", "s"].includes(raw) ? "true" : "false";
+      }
     } else if (def.type === 3) {
       if (args.length) {
         if (slashName === "translate" && def.name === "texto") {
           value = args.splice(0).join(" ");
+        } else if (def.name === "razon" && defs.some((d) => d.name === "dias") && args.length > 1) {
+          const lastArg = args[args.length - 1];
+          if (/^[0-7]$/.test(lastArg)) {
+            const daysArg = args.pop();
+            value = args.splice(0).join(" ");
+            args.push(daysArg);
+          } else {
+            value = args.splice(0).join(" ");
+          }
         } else if (isLast || slashName === "resume") {
           value = args.splice(0).join(" ");
         } else {
@@ -351,6 +385,7 @@ function wrapPrefixedCommands(log) {
             },
           });
         };
+        if (!ctx.reply) ctx.reply = ctx.send;
       }
 
       const prefixedName = command?.data?.name;

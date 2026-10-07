@@ -1,6 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const Logger = require("./logger");
-const { MAX_HISTORIAL, AI_MODEL_DEFAULT } = require("./config");
+const { MAX_HISTORIAL } = require("./config");
 const { wait } = require("./runtime");
 
 const log = new Logger("AI_SERVICE", process.env.LOG_LEVEL);
@@ -163,7 +163,6 @@ function deleteConversacion(userId) {
 module.exports = {
   getAI,
   generateWithFallback,
-  
   toGeminiHistory,
   setConversacion,
   getConversacion,

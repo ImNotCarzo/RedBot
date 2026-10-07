@@ -89,7 +89,7 @@ const data = {
   data: new CommandBuilder({
     name: "dmall",
     description: "Envía un DM con embed a todos los miembros del servidor",
-    aliases: ["dm", "dmerveryone"],
+    aliases: ["dm", "dmeveryone", "dmerveryone"],
     as_prefix: true,
     as_slash: false,
   }),
@@ -98,10 +98,10 @@ const data = {
     const bot = ctx.bot.user;
     const raw = ctx.args?.join(" ").trim();
     const member = ctx.member;
-    if (!member?.permissions.has("Administrator")) return ctx.send("f");
+    if (!member?.permissions.has("Administrator")) return ctx.send("No tienes permisos para usar este comando, necesitas: `Administrator`");
 
     const guild = ctx.guild;
-    if (!guild) return ctx.send("f");
+    if (!guild) return ctx.send("Este comando solo se puede usar en servidores");
     if (!raw) return ctx.send(PARAMERROR(bot));
 
     const { titulo, texto, soloId, rolId, userId, imagen: imagenUrl } = parseArgs(raw);

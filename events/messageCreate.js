@@ -3,7 +3,6 @@ const {
   setConversacion,
   getConversacion,
   generateWithFallback,
-  needsSearchAI,
   toGeminiHistory,
 } = require("../src/ai");
 const Logger = require("../src/logger");
@@ -11,9 +10,9 @@ const {
   MAX_HISTORIAL,
   SYSTEM_PROMPT,
   MAX_EMBED_DESCRIPTION,
-  AI_MODEL_DEFAULT,
   AI_MODEL_SEARCH,
 } = require("../src/config");
+const { RED } = require("../utils/colors");
 
 const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
@@ -73,7 +72,7 @@ const event = {
           iconURL: message.author.displayAvatarURL({ size: 128 }),
         })
         .setDescription(texto)
-        .setColor("#ff383d");
+        .setColor(RED);
 
       const botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
       setConversacion(message.author.id, historialFinal, botMsg.id);

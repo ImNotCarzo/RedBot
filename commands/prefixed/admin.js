@@ -23,10 +23,10 @@ const data = {
 
   async code(ctx) {
     const member = ctx.member;
-    if (!member?.permissions.has("Administrator")) return ctx.send("f");
+    if (!member?.permissions.has("Administrator")) return ctx.send("No tienes permisos para usar este comando, necesitas: `Administrator`");
 
     const guild = ctx.guild;
-    if (!guild) return ctx.send("f");
+    if (!guild) return ctx.send("Este comando solo se puede usar en servidores");
 
     const emojis = guild.emojis.cache.filter((e) => !e.animated);
     if (!emojis.size) return ctx.send("no emoji?");

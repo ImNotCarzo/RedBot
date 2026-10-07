@@ -33,18 +33,13 @@ const event = {
     };
 
     if (is(err, Errors.GuildOnly)) {
-      if (err.ctx) {
-        const isDM = !err.ctx.data?.guildId;
-        if (isDM) return;
-        return safeSend("Este comando solo se puede usar en servidores");
-      }
-      return;
+      return safeSend("Este comando solo se puede usar en servidores");
     }
 
     if (is(err, Errors.CommandNotFound)) return;
 
     if (is(err, Errors.NotOwner)) {
-      return safeSend("Only owner lol");
+      return safeSend("Este comando solo puede ser utilizado por el dueño del bot");
     }
 
     if (is(err, Errors.MissingPermission)) {
@@ -73,11 +68,11 @@ const event = {
 
     if (is(err, Errors.MissingRequiredParam)) {
       if (!err.ctx) return;
-      const bot = err.ctx.bot.user;
+      const bot = err.ctx?.bot?.user ?? _client?.user;
 
       if (commandName === "ask" || err.param?.name === "pregunta") {
         const paramerror = new EmbedBuilder()
-          .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
+          .setAuthor({ name: "Comando Ask", iconURL: bot?.displayAvatarURL?.() })
           .setDescription(
             `**Usos:**\nHazle una pregunta a la IA` +
             `\n\n**Aliases:**\n\`ia\`, \`ai\`` +

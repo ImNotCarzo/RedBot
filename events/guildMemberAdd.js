@@ -29,7 +29,7 @@ const event = {
       return;
     }
 
-    const me = member.guild.members.me;
+    const me = member.guild.members.me ?? await member.guild.members.fetchMe().catch(() => null);
     if (!me?.permissions?.has("ManageRoles")) {
       log.warn("Sin permisos para asignar rol automático", { event: "guildMemberAdd", guildId, userId, roleId: role.id });
       return;

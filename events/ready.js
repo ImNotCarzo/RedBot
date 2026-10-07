@@ -69,9 +69,6 @@ async function syncSlashAndContexts(client) {
 
   for (const cmd of commands) {
     setId(cmd.name, cmd.id);
-  }
-
-  for (const cmd of commands) {
     if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
 
     try {

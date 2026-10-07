@@ -214,6 +214,8 @@ function handleBot() {
   const client = botClient;
   const user = client?.user;
 
+  const clientId = user?.id ?? apiConfig?.CLIENT_ID ?? process.env.CLIENT_ID ?? "1020772849906098186";
+
   return {
     id: user?.id ?? null,
     username: user?.username ?? null,
@@ -227,7 +229,7 @@ function handleBot() {
     createdTimestamp: user?.createdTimestamp ?? null,
     bot: true,
     verified: user?.flags?.has?.("VerifiedBot") ?? false,
-    invite: "https://discord.com/oauth2/authorize?client_id=1020772849906098186&permissions=0&scope=bot",
+    invite: `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=0&scope=bot`,
     support: "https://discord.gg/b8AKKaNWU6",
     website: "https://redbot.me",
     defaultPrefix: ".",

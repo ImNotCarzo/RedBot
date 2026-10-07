@@ -142,7 +142,10 @@ async function sendLog(guild, embed, context = {}) {
     const channelId = await getLogChannelId(guild.id);
     if (!channelId) return false;
 
-    const channel = guild.channels.cache.get(channelId);
+    let channel = guild.channels.cache.get(channelId);
+    if (!channel) {
+      channel = await guild.channels.fetch(channelId).catch(() => null);
+    }
     if (!channel) {
       await cleanupBrokenLogChannel(guild.id).catch(() => {});
       return false;
