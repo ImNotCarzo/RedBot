@@ -1,25 +1,63 @@
 const { GroupBuilder, CommandBuilder } = require("gralonium");
 const {
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply, buildPagRow } = require("../_shared/runtime");
+const { createCommandLogger, clampPage, noGuildReply, buildPagRow, uniqueId } = require("../_shared/runtime");
 const { RED } = require("../../utils/colors");
+
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
-const COLOR = RED;
 const log = createCommandLogger("CMD_SERVER");
+
+function getServerView(guild, selected) {
+  if (selected === "logo") {
+    if (!guild.iconURL()) return { error: "Este servidor no tiene logo" };
+    const url = guild.iconURL({ size: 4096, extension: "png" });
+    return {
+      embed: new EmbedBuilder()
+        .setTitle(`Logo de ${guild.name}`)
+        .setURL(url)
+        .setImage(url)
+        .setColor(RED)
+        .setTimestamp(),
+    };
+  }
+  if (selected === "banner") {
+    const bannerURL = guild.bannerURL({ size: 4096, extension: "png" });
+    if (!bannerURL) return { error: "Este servidor no tiene banner" };
+    return {
+      embed: new EmbedBuilder()
+        .setTitle(`Banner de ${guild.name}`)
+        .setURL(bannerURL)
+        .setImage(bannerURL)
+        .setColor(RED)
+        .setTimestamp(),
+    };
+  }
+  if (selected === "emojis") {
+    const emojis = guild.emojis.cache.map((e) => e.toString());
+    if (!emojis.length) return { error: "Este servidor no tiene emojis" };
+    const desc = emojis.reduce((acc, cur) => (acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? " " : "") + cur), "");
+    return {
+      embed: new EmbedBuilder()
+        .setTitle(`Emojis de ${guild.name} (${emojis.length})`)
+        .setDescription(desc)
+        .setColor(RED)
+        .setTimestamp(),
+    };
+  }
+  return null;
+}
 
 const data = {
   data: new GroupBuilder({
     name: "server",
     description: "Comandos de información del servidor",
-    guildOnly: false,
+    guildOnly: true,
     as_prefix: false,
     as_slash: true,
   })
@@ -34,9 +72,11 @@ const data = {
     }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const guild = ctx.guild;
         if (!guild) return noGuildReply(ctx);
+
         const owner = await guild.fetchOwner().catch(() => null);
         const createdTs = Math.floor(guild.createdTimestamp / 1000);
         const roleCount = guild.roles.cache.filter((r) => r.id !== guild.id).size;
@@ -44,7 +84,7 @@ const data = {
         const infoEmbed = new EmbedBuilder()
           .setTitle(guild.name)
           .setThumbnail(guild.iconURL({ size: 1024, extension: "png" }))
-          .setColor(COLOR)
+          .setColor(RED)
           .addFields(
             {
               name: "General",
@@ -78,9 +118,9 @@ const data = {
         ];
         const allOptions = [{ label: "Info", value: "info", description: "Información del servidor" }, ...baseOptions];
 
-        const selectId = `server_select_${Date.now()}`;
-        const prevId = `srv_prev_${Date.now()}`;
-        const nextId = `srv_next_${Date.now()}`;
+        const selectId = uniqueId("srv_select");
+        const prevId = uniqueId("srv_prev");
+        const nextId = uniqueId("srv_next");
 
         const buildSelectRow = (includeInfo) =>
           new ActionRowBuilder().addComponents(
@@ -115,86 +155,49 @@ const data = {
           const selected = interaction.values?.[0];
           if (!selected) return;
 
-          // Detener paginación al navegar a otra sección
-          if (rolesPageCollector) { rolesPageCollector.stop(); rolesPageCollector = null; }
-
-          // ── Usuarios ajenos ──
-          if (!isAuthor) {
-            if (selected === "logo") {
-              if (!guild.iconURL()) return interaction.reply({ content: "Este servidor no tiene logo", flags: MessageFlags.Ephemeral });
-              return interaction.reply({
-                embeds: [new EmbedBuilder().setTitle(`Logo de ${guild.name}`).setImage(guild.iconURL({ size: 4096, extension: "png" })).setColor(COLOR).setTimestamp()],
-                flags: MessageFlags.Ephemeral,
-              });
-            }
-            if (selected === "banner") {
-              if (!guild.banner) return interaction.reply({ content: "Este servidor no tiene banner", flags: MessageFlags.Ephemeral });
-              return interaction.reply({
-                embeds: [new EmbedBuilder().setTitle(`Banner de ${guild.name}`).setImage(guild.bannerURL({ size: 4096 })).setColor(COLOR).setTimestamp()],
-                flags: MessageFlags.Ephemeral,
-              });
-            }
-            if (selected === "emojis") {
-              const emojis = guild.emojis.cache.map((e) => e.toString());
-              if (!emojis.length) return interaction.reply({ content: "Este servidor no tiene emojis", flags: MessageFlags.Ephemeral });
-              return interaction.reply({
-                embeds: [new EmbedBuilder().setTitle(`Emojis de ${guild.name} (${emojis.length})`).setDescription(emojis.reduce((acc, cur) => acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? ' ' : '') + cur, '')).setColor(COLOR).setTimestamp()],
-                flags: MessageFlags.Ephemeral,
-              });
-            }
-            if (selected === "roles") {
-              const roles = guild.roles.cache.filter((r) => r.id !== guild.id).sort((a, b) => b.position - a.position).map((r) => `<@&${r.id}>`);
-              if (!roles.length) return interaction.reply({ content: "Este servidor no tiene roles", flags: MessageFlags.Ephemeral });
-              return interaction.reply({
-                embeds: [new EmbedBuilder().setTitle(`Roles de ${guild.name}`).setDescription(roles.slice(0, 15).join("\n")).setColor(COLOR).setFooter({ text: `${roles.length} roles en total` }).setTimestamp()],
-                flags: MessageFlags.Ephemeral,
-              });
-            }
-            return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
+          if (rolesPageCollector) {
+            rolesPageCollector.stop();
+            rolesPageCollector = null;
           }
 
-          // ── Autor ──
-          if (selected === "info") return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
-
-          if (selected === "logo") {
-            if (!guild.iconURL()) return interaction.reply({ content: "Este servidor no tiene logo", flags: MessageFlags.Ephemeral });
-            return interaction.update({
-              embeds: [new EmbedBuilder().setTitle(`Logo de ${guild.name}`).setImage(guild.iconURL({ size: 4096, extension: "png" })).setColor(COLOR).setTimestamp()],
-              components: [buildSelectRow(true)],
-            });
+          if (selected === "info") {
+            if (!isAuthor) return interaction.reply({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
+            return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
           }
 
-          if (selected === "banner") {
-            if (!guild.banner) return interaction.reply({ content: "Este servidor no tiene banner", flags: MessageFlags.Ephemeral });
-            return interaction.update({
-              embeds: [new EmbedBuilder().setTitle(`Banner de ${guild.name}`).setImage(guild.bannerURL({ size: 4096 })).setColor(COLOR).setTimestamp()],
-              components: [buildSelectRow(true)],
-            });
-          }
-
-          if (selected === "emojis") {
-            const emojis = guild.emojis.cache.map((e) => e.toString());
-            if (!emojis.length) return interaction.reply({ content: "Este servidor no tiene emojis", flags: MessageFlags.Ephemeral });
-            return interaction.update({
-              embeds: [new EmbedBuilder().setTitle(`Emojis de ${guild.name} (${emojis.length})`).setDescription(emojis.reduce((acc, cur) => acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? ' ' : '') + cur, '')).setColor(COLOR).setTimestamp()],
-              components: [buildSelectRow(true)],
-            });
+          const view = getServerView(guild, selected);
+          if (view) {
+            if (view.error) return interaction.reply({ content: view.error, flags: MessageFlags.Ephemeral });
+            if (!isAuthor) return interaction.reply({ embeds: [view.embed], flags: MessageFlags.Ephemeral });
+            return interaction.update({ embeds: [view.embed], components: [buildSelectRow(true)] });
           }
 
           if (selected === "roles") {
-            const roles = guild.roles.cache.filter((r) => r.id !== guild.id).sort((a, b) => b.position - a.position).map((r) => `<@&${r.id}>`);
+            const roles = guild.roles.cache
+              .filter((r) => r.id !== guild.id)
+              .sort((a, b) => b.position - a.position)
+              .map((r) => `<@&${r.id}>`);
+
             if (!roles.length) return interaction.reply({ content: "Este servidor no tiene roles", flags: MessageFlags.Ephemeral });
 
             const pages = [];
             for (let i = 0; i < roles.length; i += 15) pages.push(roles.slice(i, i + 15));
             let page = 0;
 
-            const buildRolesEmbed = () => new EmbedBuilder()
-              .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
-              .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
-              .setColor(COLOR)
-              .setFooter({ text: `${roles.length} roles en total` })
-              .setTimestamp();
+            const buildRolesEmbed = () =>
+              new EmbedBuilder()
+                .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
+                .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
+                .setColor(RED)
+                .setFooter({ text: `${roles.length} roles en total` })
+                .setTimestamp();
+
+            if (!isAuthor) {
+              return interaction.reply({
+                embeds: [buildRolesEmbed()],
+                flags: MessageFlags.Ephemeral,
+              });
+            }
 
             await interaction.update({
               embeds: [buildRolesEmbed()],
@@ -229,7 +232,6 @@ const data = {
           if (rolesPageCollector) rolesPageCollector.stop();
           await reply.edit({ components: [] }).catch(() => {});
         });
-
       } catch (err) {
         log.error("Error en server info", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener la información del servidor");
@@ -247,16 +249,18 @@ const data = {
     }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const guild = ctx.guild;
-          if (!guild) return noGuildReply(ctx);
+        if (!guild) return noGuildReply(ctx);
         if (!guild.iconURL()) return ctx.send("Este servidor no tiene logo");
 
+        const url = guild.iconURL({ size: 4096, extension: "png" });
         const embed = new EmbedBuilder()
           .setTitle(`Logo de ${guild.name}`)
-          .setURL(guild.iconURL({ size: 4096, extension: "png" }))
-          .setImage(guild.iconURL({ size: 4096, extension: "png" }))
-          .setColor(COLOR)
+          .setURL(url)
+          .setImage(url)
+          .setColor(RED)
           .setTimestamp();
 
         await ctx.send({ embeds: [embed] });
@@ -266,7 +270,8 @@ const data = {
       }
     },
   })
-// ══════════════════════════════════════════
+
+  // ══════════════════════════════════════════
   // server banner
   // ══════════════════════════════════════════
   .addCommand({
@@ -276,9 +281,10 @@ const data = {
     }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const guild = ctx.guild;
-          if (!guild) return noGuildReply(ctx);
+        if (!guild) return noGuildReply(ctx);
         const bannerURL = guild.bannerURL({ size: 4096, extension: "png" });
         if (!bannerURL) return ctx.send("Este servidor no tiene banner");
 
@@ -286,7 +292,7 @@ const data = {
           .setTitle(`Banner de ${guild.name}`)
           .setURL(bannerURL)
           .setImage(bannerURL)
-          .setColor(COLOR)
+          .setColor(RED)
           .setTimestamp();
 
         await ctx.send({ embeds: [embed] });
@@ -296,6 +302,7 @@ const data = {
       }
     },
   })
+
   // ══════════════════════════════════════════
   // server emojis
   // ══════════════════════════════════════════
@@ -306,17 +313,18 @@ const data = {
     }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const guild = ctx.guild;
-          if (!guild) return noGuildReply(ctx);
+        if (!guild) return noGuildReply(ctx);
 
         const emojis = guild.emojis.cache.map((e) => e.toString());
         if (!emojis.length) return ctx.send("Este servidor no tiene emojis");
 
         const embed = new EmbedBuilder()
           .setTitle(`Emojis de ${guild.name} (${emojis.length})`)
-          .setDescription(emojis.reduce((acc, cur) => acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? ' ' : '') + cur, ''))
-          .setColor(COLOR)
+          .setDescription(emojis.reduce((acc, cur) => (acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? " " : "") + cur), ""))
+          .setColor(RED)
           .setTimestamp();
 
         await ctx.send({ embeds: [embed] });
@@ -337,9 +345,10 @@ const data = {
     }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const guild = ctx.guild;
-          if (!guild) return noGuildReply(ctx);
+        if (!guild) return noGuildReply(ctx);
 
         const roles = guild.roles.cache
           .filter((r) => r.id !== guild.id)
@@ -353,15 +362,16 @@ const data = {
         let page = 0;
 
         const authorId = ctx.user?.id ?? ctx.author?.id;
-        const prevId = `srv_roles_prev_${Date.now()}`;
-        const nextId = `srv_roles_next_${Date.now()}`;
+        const prevId = uniqueId("srv_roles_prev");
+        const nextId = uniqueId("srv_roles_next");
 
-        const buildEmbed = () => new EmbedBuilder()
-          .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
-              .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
-              .setColor(COLOR)
-              .setFooter({ text: `${roles.length} roles en total` })
-              .setTimestamp();
+        const buildEmbed = () =>
+          new EmbedBuilder()
+            .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
+            .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
+            .setColor(RED)
+            .setFooter({ text: `${roles.length} roles en total` })
+            .setTimestamp();
 
         const reply = await ctx.send({
           embeds: [buildEmbed()],
@@ -389,7 +399,6 @@ const data = {
         collector.on("end", async () => {
           await reply.edit({ components: [] }).catch(() => {});
         });
-
       } catch (err) {
         log.error("Error en server roles", { err: err?.message ?? String(err) });
         await ctx.send("No se pudo obtener los roles");

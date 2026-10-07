@@ -93,8 +93,6 @@ async function generateWithFallback(params, options = {}) {
   throw finalErr;
 }
 
-}
-
 function toGeminiHistory(history) {
   if (!Array.isArray(history)) return [];
   return history

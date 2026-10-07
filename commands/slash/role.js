@@ -1,16 +1,13 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ComponentType,
-  PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply, buildPagRow, formatPermissionName: formatPerm } = require("../_shared/runtime");
+const { createCommandLogger, clampPage, noGuildReply, buildPagRow, formatPermissionName: formatPerm, uniqueId } = require("../_shared/runtime");
 const JoinRole = require("../../models/JoinRole");
 const { sendLog } = require("../../src/guild");
  
@@ -30,8 +27,10 @@ const log = createCommandLogger("CMD_ROLE");
 function roleHierarchyCheck(ctx, role) {
   if (role.managed)      return "No puedo editar roles gestionados por integraciones";
   if (role.id === ctx.guild?.id) return "No puedo editar el rol @everyone";
-  if (role.position >= ctx.guild.members.me.roles.highest.position)
+  if (role.position >= ctx.guild?.members.me.roles.highest.position)
     return "No puedo actuar sobre ese rol porque está por encima del mío";
+  if (ctx.member?.id !== ctx.guild?.ownerId && ctx.member?.roles?.highest?.position != null && role.position >= ctx.member.roles.highest.position)
+    return "No puedes gestionar un rol con igual o mayor posición que tu rol más alto";
   return null;
 }
  
@@ -64,7 +63,7 @@ const data = {
   data: new GroupBuilder({
     name: "role",
     description: "Comandos relacionados con roles",
-    guildOnly: false,
+    guildOnly: true,
     as_prefix: false,
     as_slash: true,
   })
@@ -94,9 +93,9 @@ const data = {
     ];
     const allNavOptions = [{ label: "Info", value: "info", description: "Información del rol" }, ...navOptions];
 
-    const navId = `role_nav_${Date.now()}`;
-    const prevId = `role_prev_${Date.now()}`;
-    const nextId = `role_next_${Date.now()}`;
+    const navId = uniqueId("role_nav");
+    const prevId = uniqueId("role_prev");
+    const nextId = uniqueId("role_next");
 
     const buildNavRow = (includeInfo) =>
       new ActionRowBuilder().addComponents(
@@ -350,8 +349,8 @@ const data = {
       let page = 0;
 
       const authorId = ctx.user?.id ?? ctx.author?.id;
-      const prevId   = `role_users_prev_${Date.now()}`;
-      const nextId   = `role_users_next_${Date.now()}`;
+      const prevId = uniqueId("role_users_prev");
+      const nextId = uniqueId("role_users_next");
 
       const buildEmbed = () => new EmbedBuilder()
         .setTitle(`Usuarios con ${role.name} (${page + 1}/${pages.length})`)
@@ -709,12 +708,12 @@ const data = {
 
     for (const [, member] of targets) {
       try {
-        await member.roles.();
-          done++;
-        } catch {
-          failed++;
-        }
-        await new Promise(r => setTimeout(r, 1100));
+        await member.roles.add(role, `${modTag}: role all`);
+        done++;
+      } catch {
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 10 === 0 || done + failed === total) {
         await msg.edit({
@@ -816,12 +815,12 @@ const data = {
 
     for (const [, member] of targets) {
       try {
-        await member.roles.();
-          done++;
-        } catch {
-          failed++;
-        }
-        await new Promise(r => setTimeout(r, 1100));
+        await member.roles.remove(role, `${modTag}: role removeall`);
+        done++;
+      } catch {
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 10 === 0 || done + failed === total) {
         await msg.edit({
@@ -926,14 +925,16 @@ const data = {
 
     for (const [, member] of targets) {
       try {
-        accion === "add"
-          ? await member.roles.add(role, `${modTag}: role bots`)
-          : await member.roles.();
-          done++;
-        } catch {
-          failed++;
+        if (accion === "add") {
+          await member.roles.add(role, `${modTag}: role bots`);
+        } else {
+          await member.roles.remove(role, `${modTag}: role bots`);
         }
-        await new Promise(r => setTimeout(r, 1100));
+        done++;
+      } catch {
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 5 === 0 || done + failed === total) {
         await msg.edit({
@@ -1036,14 +1037,16 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
     for (const [, member] of targets) {
       try {
-        accion === "add"
-          ? await member.roles.add(role, `${modTag}: role humans`)
-          : await member.roles.();
-          done++;
-        } catch {
-          failed++;
+        if (accion === "add") {
+          await member.roles.add(role, `${modTag}: role humans`);
+        } else {
+          await member.roles.remove(role, `${modTag}: role humans`);
         }
-        await new Promise(r => setTimeout(r, 1100));
+        done++;
+      } catch {
+        failed++;
+      }
+      await new Promise(r => setTimeout(r, 1100));
 
       if ((done + failed) % 10 === 0 || done + failed === total) {
         await msg.edit({
@@ -1181,9 +1184,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
       const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
 
-      const perms = role.permissions.toArray().sort().map(p =>
-        `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}\``
-      );
+      const perms = role.permissions.toArray().sort().map(formatPerm);
 
       if (!perms.length) return ctx.send("Este rol no tiene permisos");
 
@@ -1194,8 +1195,8 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
       let page = 0;
 
-      const prevId = `role_perms_prev_${Date.now()}`;
-      const nextId = `role_perms_next_${Date.now()}`;
+      const prevId = uniqueId("role_perms_prev");
+      const nextId = uniqueId("role_perms_next");
 
       const buildEmbed = () => new EmbedBuilder()
         .setTitle(`Permisos de ${role.name}`)
@@ -1235,7 +1236,7 @@ if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
 
     } catch (err) {
       log.error("Error en role permissions", { err: err?.message ?? String(err) });
-      ctx.send("No se pudieron obtener los permisos del rol");
+      await ctx.send("No se pudieron obtener los permisos del rol");
     }
   }
 }),

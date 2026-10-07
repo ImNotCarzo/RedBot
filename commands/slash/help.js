@@ -9,7 +9,8 @@ const {
   EmbedBuilder,
 } = require("gralonium");
 const { getId } = require("../../src/commandIds");
-const { getPrefix, prefixCache } = require("../../src/guild");
+const { getPrefix } = require("../../src/guild");
+const { RED } = require("../../utils/colors");
 const { createCommandLogger, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
 const log = createCommandLogger("CMD_HELP");
 
@@ -103,6 +104,7 @@ const getCommands = () => ({
     bots:        { short: "rolebots",slash: "role bots",        id: IDS.role(), usage: ".rolebots <@rol> <add|remove>", aliases: ["botsrole"],               description: "Añade o quita un rol a todos los bots." },
     humans:      { short: "rolehumans", slash: "role humans",   id: IDS.role(), usage: ".rolehumans <@rol> <add|remove>", aliases: ["humansrole"],            description: "Añade o quita un rol a todos los usuarios." },
     join:        { short: "rolejoin",slash: "role join",        id: IDS.role(), usage: ".rolejoin <@rol>",          aliases: ["joinrole", "autorole"],        description: "Configura o desactiva el rol automático al entrar." },
+    permissions: { short: "roleperms", slash: "role permissions", id: IDS.role(), usage: ".roleperms <@rol>",     aliases: ["rperms"],                       description: "Muestra los permisos de un rol." },
   },
   canal: {
     info:     { short: "cinfo",  slash: "channel info",     id: IDS.channel(), usage: ".cinfo [#canal]",            aliases: ["chinfo", "channelinfo"],   description: "Muestra información de un canal." },
@@ -164,36 +166,6 @@ const data = {
       const buildCommandList = (category) =>
         Object.values(COMMANDS[category]).map(formatCommand).join("\n");
 
-      const buildCategoryRows = (active) => {
-        const rows = [];
-        for (let i = 0; i < CATEGORIES.length; i += 5) {
-          rows.push(
-            new ActionRowBuilder().addComponents(
-              CATEGORIES.slice(i, i + 5).map(cat =>
-                new ButtonBuilder()
-                  .setCustomId(`help_cat_${cat}`)
-                  .setLabel(CATEGORY_LABELS[cat])
-                  .setStyle(cat === active ? ButtonStyle.Danger : ButtonStyle.Secondary)
-                  .setDisabled(cat === active)
-              )
-            )
-          );
-        }
-        return rows;
-      };
-
-      const buildLinksRow = () =>
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setLabel("Invitar")
-            .setStyle(ButtonStyle.Link)
-            .setURL("https://discord.com/oauth2/authorize?client_id=1020772849906098186&permissions=0&scope=bot"),
-          new ButtonBuilder()
-            .setLabel("Soporte")
-            .setStyle(ButtonStyle.Link)
-            .setURL("https://discord.gg/b8AKKaNWU6"),
-        );
-
       const buildDeleteRow = () =>
         new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -246,21 +218,21 @@ const data = {
         allowedMentions: { repliedUser: false },
       });
 
-      const collectorFilter = (i) => i.user.id === authorId;
-
       const buttonCollector = message.createMessageComponentCollector({
         componentType: ComponentType.Button,
         time: COLLECTOR_TIMEOUT,
-        filter: collectorFilter,
       });
 
       const selectCollector = message.createMessageComponentCollector({
         componentType: ComponentType.StringSelect,
         time: COLLECTOR_TIMEOUT,
-        filter: collectorFilter,
       });
 
       buttonCollector.on("collect", async (i) => {
+        if (i.user.id !== authorId) {
+          return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
+        }
+
         if (i.customId === "help_delete") {
           buttonCollector.stop();
           selectCollector.stop();
@@ -289,7 +261,7 @@ const data = {
           : cmd.short ? `\`${cmd.usage}\`` : `</${cmd.slash}:${cmd.id}>`;
 
         const embed = new EmbedBuilder()
-          .setColor("#ff383d")
+          .setColor(RED)
           .setTitle(formatSelectLabel(cmd))
           .addFields(
             { name: "Uso",         value: usoValue },

@@ -1,8 +1,8 @@
-const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags, ChannelType } = require("discord.js");
+const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, MessageFlags, ChannelType } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { RED, GREEN, BLUE } = require("../../utils/colors");
+const { RED, GREEN } = require("../../utils/colors");
 const { sendLog } = require("../../src/guild");
-const { createCommandLogger, noGuildReply } = require("../_shared/runtime");
+const { createCommandLogger, noGuildReply, uniqueId } = require("../_shared/runtime");
 
 const log = createCommandLogger("CMD_CHANNEL");
 
@@ -181,6 +181,7 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`**${channel} fue cerrado**`)
           .setColor(RED)
+          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -224,6 +225,7 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`**${channel} fue abierto**`)
           .setColor(GREEN)
+          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -275,7 +277,8 @@ const data = {
               ? `El slowmode en ${channel} fue desactivado`
               : `El slowmode de ${channel} se estableció en **${formatted}**`
           )
-          .setColor(RED)
+          .setColor(seconds === 0 ? GREEN : RED)
+          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -322,8 +325,8 @@ const data = {
       return ctx.send({ content: "No se pudo obtener el canal", flags: MessageFlags.Ephemeral });
     }
 
-    const confirmId = `nuke_confirm_${Date.now()}`;
-    const cancelId  = `nuke_cancel_${Date.now()}`;
+    const confirmId = uniqueId("nuke_confirm");
+    const cancelId  = uniqueId("nuke_cancel");
 
     const confirmEmbed = new EmbedBuilder()
       .setTitle("¿Estás seguro?")
@@ -414,7 +417,7 @@ const data = {
                 .setColor(RED),
             ],
             components: [],
-          });
+          }).catch(() => {});
 
         } catch (err) {
           log.error("Error en nuke", { err: err?.message ?? String(err) });
@@ -450,6 +453,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -460,6 +464,7 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${channel} fue clonado → ${cloned}`)
           .setColor(GREEN)
+          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -493,6 +498,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
@@ -507,6 +513,7 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${member} ahora tiene acceso a ${channel}`)
           .setColor(GREEN)
+          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 
@@ -540,6 +547,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const member  = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
@@ -554,6 +562,8 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${member} ya no tiene acceso a ${channel}`)
           .setColor(RED)
+          .setTimestamp();
+
         await ctx.send({ embeds: [publicEmbed] });
 
         const logEmbed = new EmbedBuilder()
@@ -585,6 +595,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -597,6 +608,7 @@ const data = {
         const publicEmbed = new EmbedBuilder()
           .setDescription(`${channel} fue ocultado`)
           .setColor(RED)
+          .setTimestamp();
 
         await ctx.send({ embeds: [publicEmbed] });
 

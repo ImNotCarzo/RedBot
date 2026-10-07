@@ -4,8 +4,6 @@ const {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ComponentType,
   MessageFlags,
 } = require("discord.js");
@@ -19,6 +17,7 @@ const {
   paginateArray,
 } = require("../_shared/runtime");
 const { resolveMemberFlexible } = require("../../src/adapter");
+const { RED } = require("../../utils/colors");
 
 const log = createCommandLogger("CMD_USER");
 
@@ -180,6 +179,7 @@ const data = {
     params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const input   = ctx.get("usuario") ?? null;
         const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
@@ -195,7 +195,7 @@ const data = {
 
           const embed = new EmbedBuilder()
             .setThumbnail(fetched.displayAvatarURL({ size: 1024 }))
-            .setColor("#ff383d")
+            .setColor(RED)
             .setTitle(`${fetched.id}`)
             .addFields({
               name: "General",
@@ -236,7 +236,7 @@ const data = {
               const url = fetched.displayAvatarURL({ size: 4096, extension: "png" });
               const av  = new EmbedBuilder()
                 .setAuthor({ name: fetched.username, iconURL: fetched.displayAvatarURL({ size: 128 }) })
-                .setTitle("Avatar").setURL(url).setImage(url).setColor("#ff383d").setTimestamp();
+                .setTitle("Avatar").setURL(url).setImage(url).setColor(RED).setTimestamp();
               if (!isAuthor) return interaction.reply({ embeds: [av], flags: MessageFlags.Ephemeral });
               return interaction.update({ embeds: [av], components: [makeSelectRow(selectId, true, baseOptions)] });
             }
@@ -245,7 +245,7 @@ const data = {
               if (!bannerURL) return interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral });
               const bn = new EmbedBuilder()
                 .setAuthor({ name: fetched.username, iconURL: fetched.displayAvatarURL({ size: 128 }) })
-                .setTitle("Banner").setURL(bannerURL).setImage(bannerURL).setColor("#ff383d").setTimestamp();
+                .setTitle("Banner").setURL(bannerURL).setImage(bannerURL).setColor(RED).setTimestamp();
               if (!isAuthor) return interaction.reply({ embeds: [bn], flags: MessageFlags.Ephemeral });
               return interaction.update({ embeds: [bn], components: [makeSelectRow(selectId, true, baseOptions)] });
             }
@@ -505,6 +505,7 @@ const data = {
     params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const input   = ctx.get("usuario") ?? null;
         const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
@@ -525,7 +526,7 @@ const data = {
         const serverAvatar = member ? member.displayAvatarURL(avatarOpts) : user.displayAvatarURL(avatarOpts);
         const globalAvatar = user.displayAvatarURL(avatarOpts);
         const hasDistinct  = !!(member?.avatar && member.avatar !== user.avatar);
-        const color        = member?.displayHexColor || "#ff383d";
+        const color        = member?.displayHexColor || RED;
 
         const buildEmbed = (type) => new EmbedBuilder()
           .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
@@ -577,6 +578,7 @@ const data = {
     params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const input   = ctx.get("usuario") ?? null;
         const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
@@ -598,7 +600,7 @@ const data = {
         if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
 
         const hasDistinct = !!(serverBannerURL && serverBannerURL !== globalBannerURL);
-        const color       = member?.displayHexColor || "#ff383d";
+        const color       = member?.displayHexColor || RED;
 
         const buildEmbed = (type) => {
           const isServer = type === "server";
@@ -652,6 +654,7 @@ const data = {
     params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         if (!ctx.guild) return noGuildReply(ctx);
         const input   = ctx.get("usuario") ?? null;
@@ -708,6 +711,7 @@ const data = {
     params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         if (!ctx.guild) return noGuildReply(ctx);
         const input   = ctx.get("usuario") ?? null;

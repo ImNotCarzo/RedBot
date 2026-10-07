@@ -1,14 +1,14 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { getAI, generateWithFallback } = require("../../src/ai");
-const { createCommandLogger, fetchImageAsInlineData, prepareReply } = require("../_shared/runtime");
+const { generateWithFallback } = require("../../src/ai");
+const { AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
+const { createCommandLogger, fetchImageAsInlineData, prepareReply, noGuildReply } = require("../_shared/runtime");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
 // ─────────────────────────────────────────────
 
 const { RED } = require("../../utils/colors");
-const COLOR = RED;
 const log = createCommandLogger("CMD_FUN");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
@@ -21,21 +21,10 @@ RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 //  AI
 // ─────────────────────────────────────────────
 
-async function generateGemma(prompt) {
-  const response = await generateWithFallback({
-    model: "gemma-4-26b-a4b-it",
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      temperature: 1.0,
-    },
-  });
-  return response.text?.trim() ?? null;
-}
-
-async function generateGemmaVision(prompt, imageUrl) {
+async function generateVision(prompt, imageUrl) {
   const imagePart = await fetchImageAsInlineData(imageUrl);
   const response = await generateWithFallback({
-    model: "gemma-4-26b-a4b-it",
+    model: AI_MODEL_SEARCH,
     contents: [{
       role: "user",
       parts: [
@@ -44,7 +33,7 @@ async function generateGemmaVision(prompt, imageUrl) {
       ],
     }],
     config: {
-      temperature: 1.2,
+      temperature: 1.0,
     },
   });
   return response.text?.trim() ?? null;
@@ -52,7 +41,7 @@ async function generateGemmaVision(prompt, imageUrl) {
 
 async function generateGeminiFlash(prompt) {
   const response = await generateWithFallback({
-    model: "gemini-3.1-flash-lite",
+    model: AI_MODEL_DEFAULT,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
   return response.text?.trim() ?? null;
@@ -111,7 +100,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Mi opinión sobre: ${tema}`)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -149,7 +138,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Crítica de: ${tema}`)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });
@@ -194,7 +183,7 @@ const data = {
           new EmbedBuilder()
             .setTitle("Tu excusa profesional")
             .setDescription(texto)
-            .setColor(COLOR)
+            .setColor(RED)
             .setTimestamp(),
         ],
       });
@@ -236,7 +225,7 @@ const data = {
             new EmbedBuilder()
               .setTitle(`Teoría: ${tema}`)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setFooter({ text: "Esto es ficción... o quizás no." })
               .setTimestamp(),
           ],
@@ -262,12 +251,7 @@ const data = {
       }),
 
     async code(ctx) {
-      if (!ctx.guild) {
-        return ctx.send({
-          content: "Este comando solo funciona en servidores",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      if (!ctx.guild) return noGuildReply(ctx);
 
       const reply = await prepareReply(ctx);
 
@@ -321,7 +305,7 @@ Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos
 ${datosUsuario}`;
 
         const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
-        const texto     = (await generateGemmaVision(prompt, avatarUrl))?.slice(0, 4000)
+        const texto     = (await generateVision(prompt, avatarUrl))?.slice(0, 4000)
           ?? "Ocurrió un error con la IA, intenta de nuevo";
 
         await reply({
@@ -330,7 +314,7 @@ ${datosUsuario}`;
               .setTitle(`Roast de ${username}`)
               .setThumbnail(avatarUrl)
               .setDescription(texto)
-              .setColor(COLOR)
+              .setColor(RED)
               .setTimestamp(),
           ],
         });

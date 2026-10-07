@@ -1,50 +1,40 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { deleteConversacion, generateWithFallback, getAI } = require("../../src/ai");
+const { deleteConversacion, generateWithFallback } = require("../../src/ai");
+const { AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
 const { RED, GREEN } = require("../../utils/colors");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
 const { createCommandLogger, fetchWithTimeout, fetchImageAsInlineData, prepareReply, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const { version: botVersion } = require("../../package.json");
+
+let graloniumVersion = "0.2.0";
+try { graloniumVersion = require("gralonium/package.json").version; } catch {}
+
 const log = createCommandLogger("CMD_UTIL");
 
+// ─────────────────────────────────────────────
 //  AI
-async function generateGemma(messages) {
-  try {
-    const msg = messages?.[0];
-    if (!msg) return null;
+// ─────────────────────────────────────────────
 
-    let text = "";
-    let imageUrl = null;
-    if (Array.isArray(msg.content)) {
-      for (const part of msg.content) {
-        if (part.type === "text") text += part.text;
-        if (part.type === "image_url") imageUrl = part.image_url?.url ?? null;
-      }
-    } else {
-      text = msg.content;
-    }
-
-    if (!text && !imageUrl) throw new Error("Request requires either text or an image");
-    const parts = [{ text: text || "Describe la imagen." }];
-    if (imageUrl) {
-      parts.push(await fetchImageAsInlineData(imageUrl));
-    }
-
-    const response = await getAI().models.generateContent({
-      model: "gemma-4-31b-it",
-      contents: [{ role: "user", parts }],
-      config: { temperature: 1.0 },
-    });
-
-    return response.text?.trim() ?? null;
-  } catch (err) {
-    const msg = err?.message || "AI provider request failed";
-    throw new Error(msg);
-  }
+async function describeImage(imageUrl, prompt) {
+  const imagePart = await fetchImageAsInlineData(imageUrl);
+  const response = await generateWithFallback({
+    model: AI_MODEL_SEARCH,
+    contents: [{
+      role: "user",
+      parts: [
+        { text: prompt },
+        imagePart,
+      ],
+    }],
+    config: { temperature: 1.0 },
+  });
+  return response.text?.trim() ?? null;
 }
 
 async function generateGeminiText(prompt) {
   const response = await generateWithFallback({
-    model: "gemini-3.1-flash-lite-preview",
+    model: AI_MODEL_DEFAULT,
     contents: [{ role: "user", parts: [{ text: prompt }] }],
   });
   return response.text?.trim() ?? null;
@@ -132,11 +122,6 @@ const data = {
       try {
         const bot = ctx.bot;
         if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
-
-        const { version: djsVersion }   = require("discord.js");
-        const { version: botVersion }   = require("../../package.json");
-        let graloniumVersion = "0.2.0";
-        try { graloniumVersion = require("gralonium/package.json").version; } catch {}
 
         const formatUptime = (ms) => {
           const s = Math.floor(ms / 1000) % 60;
@@ -358,19 +343,8 @@ const data = {
       }
 
       try {
-        const texto = await generateGemma([{
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.",
-            },
-            {
-              type: "image_url",
-              image_url: { url: attachment.url },
-            },
-          ],
-        }]);
+        const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
+        const texto = await describeImage(attachment.url, prompt);
 
         await reply({
           embeds: [
@@ -510,22 +484,24 @@ const data = {
       const usuarioExcluido = ctx.get("excluir_usuario");
       const imagen          = ctx.get("imagen");
  
-      await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
- 
-      const author    = ctx.author;
+      const isSlash = Boolean(ctx.interaction);
+      if (isSlash) await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const sendStatus = isSlash ? (p) => ctx.interaction.editReply(p) : (p) => ctx.send(p);
+
+      const author    = ctx.user ?? ctx.author;
       const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
- 
+
       const embed = new EmbedBuilder()
         .setTitle(titulo)
         .setDescription(texto)
         .setColor(RED)
         .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
         .setThumbnail(ctx.guild.iconURL({ size: 512 }));
- 
+
       if (imagen) embed.setImage(imagen.url);
 
       await ctx.guild.members.fetch();
- 
+
       const members = [...ctx.guild.members.cache.values()].filter((m) => {
         if (m.user.bot) return false;
         if (soloRol         && !m.roles.cache.has(soloRol.id))         return false;
@@ -533,30 +509,30 @@ const data = {
         if (usuarioExcluido &&  m.id === usuarioExcluido.id)           return false;
         return true;
       });
- 
+
       const total = members.length;
-      await ctx.interaction.editReply({ content: `enviando... 0/${total}` });
- 
+      await sendStatus({ content: `enviando... 0/${total}` });
+
       let enviados = 0;
       let fallidos = 0;
- 
+
       for (let i = 0; i < members.length; i++) {
         const ok = await sendWithRetry(members[i], { embeds: [embed] });
         if (ok) enviados++; else fallidos++;
- 
+
         await sleep(500);
- 
+
         if (i % 10 === 0) {
-          await ctx.interaction.editReply({ content: `enviando... ${i + 1}/${total}` }).catch(() => null);
+          await sendStatus({ content: `enviando... ${i + 1}/${total}` }).catch(() => null);
         }
       }
- 
+
       const filtros = [
         soloRol         ? `Solo rol: ${soloRol} (\`${soloRol.id}\`)`                              : null,
         rolExcluido     ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)`                  : null,
         usuarioExcluido ? `Usuario excluido: ${usuarioExcluido.user.tag} (\`${usuarioExcluido.id}\`)` : null,
       ].filter(Boolean);
- 
+
       const logEmbed = new EmbedBuilder()
         .setTitle("DM masivo enviado")
         .setColor(RED)
@@ -569,10 +545,10 @@ const data = {
           ...(filtros.length ? [{ name: "Filtros", value: filtros.join("\n"), inline: false }] : []),
         )
         .setTimestamp();
- 
+
       await sendLog(ctx.guild, logEmbed);
- 
-      await ctx.interaction.editReply({
+
+      await sendStatus({
         content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`,
       });
     },

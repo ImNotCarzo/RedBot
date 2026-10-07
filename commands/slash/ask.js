@@ -1,7 +1,7 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback, needsSearchAI, toGeminiHistory, setConversacion, getConversacion } = require("../../src/ai");
-const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
+const { generateWithFallback, toGeminiHistory, setConversacion, getConversacion } = require("../../src/ai");
+const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_SEARCH } = require("../../src/config");
 const { RED } = require("../../utils/colors");
 const { sendThinkingReply, editThinkingReply } = require("../_shared/thinking");
 const { createCommandLogger } = require("../_shared/runtime");
@@ -82,7 +82,7 @@ const data = {
       const embed = new EmbedBuilder()
         .setAuthor({ name: username, iconURL: invoker?.displayAvatarURL({ size: 128 }) })
         .setDescription(texto)
-        .setColor("#ff383d");
+        .setColor(RED);
 
       if (isSlash) {
         await ctx.interaction.editReply({ embeds: [embed] });

@@ -1,14 +1,10 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   EmbedBuilder,
   ComponentType,
-  PermissionFlagsBits,
   MessageFlags,
 } = require("discord.js");
-const { clampPage, buildPagRow } = require("../_shared/runtime");
+const { clampPage, buildPagRow, uniqueId } = require("../_shared/runtime");
 
 const { RED, YELLOW, GREEN } = require("../../utils/colors");
 const {
@@ -553,6 +549,7 @@ const data = {
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const member = ctx.get("usuario");
       const reason = ctx.get("razon");
       const tag    = modTag(ctx);
@@ -610,6 +607,7 @@ const data = {
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const warnId = ctx.get("id").toUpperCase();
 
       try {
@@ -641,6 +639,7 @@ const data = {
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const member = ctx.get("usuario");
 
       try {
@@ -672,6 +671,7 @@ const data = {
     plugins: [Plugins.hasPerms("ModerateMembers")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const member   = ctx.get("usuario");
       const authorId = ctx.user?.id ?? ctx.author?.id;
 
@@ -685,8 +685,8 @@ const data = {
         for (let i = 0; i < warns.length; i += perPage) pages.push(warns.slice(i, i + perPage));
 
         let page = 0;
-        const prevId = `warns_prev_${Date.now()}`;
-        const nextId = `warns_next_${Date.now()}`;
+        const prevId = uniqueId("warns_prev");
+        const nextId = uniqueId("warns_next");
 
         const buildEmbed = () => {
           const embed = new EmbedBuilder()
@@ -738,7 +738,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageGuild")],
 
     async code(ctx) {
-
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       const channel = ctx.get("canal");
       if (!channel.isTextBased())
         return ctx.send({ content: "El canal debe ser de texto", flags: MessageFlags.Ephemeral });
@@ -764,7 +764,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageGuild")],
 
     async code(ctx) {
-
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       try {
         const removed = await clearLogChannel(ctx.guild.id);
         if (!removed)
