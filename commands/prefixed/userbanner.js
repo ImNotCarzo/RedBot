@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "ubanner",
     description: "Muestra el banner de un usuario",
-    aliases: ["userbanner"],
+    aliases: ["userbanner", "banner", "ub"],
     as_prefix: true,
     as_slash: false,
   }),

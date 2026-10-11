@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "lock",
     description: "Bloquea un canal para usuarios normales",
-    aliases: ["chlock", "lockdown", "channellock"],
+    aliases: ["chlock", "lockdown", "channellock", "cerrar"],
     as_prefix: true,
     as_slash: false,
   }),

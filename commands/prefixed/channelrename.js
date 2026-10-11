@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "rename",
     description: "Renombra un canal",
-    aliases: ["chrename", "channelrename"],
+    aliases: ["chrename", "channelrename", "crename", "chanrename"],
     as_prefix: true,
     as_slash: false,
   }),

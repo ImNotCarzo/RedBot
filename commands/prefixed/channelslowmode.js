@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "slowmode",
     description: "Establece el slowmode de un canal (0 para desactivar, máx 6h)",
-    aliases: ["sm", "chslowmode", "channelslowmode"],
+    aliases: ["sm", "chslowmode", "channelslowmode", "lento"],
     as_prefix: true,
     as_slash: false,
   }),

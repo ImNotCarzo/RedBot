@@ -1,11 +1,10 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 
 const data = {
   data: new CommandBuilder({
     name: "removelogs",
     description: "Desactiva los logs de RedBot en el servidor",
-    aliases: ["modremovelogs", "removelog", "unsetlogs"],
+    aliases: ["modremovelogs", "removelog", "unsetlogs", "dellogs", "nologs"],
     as_prefix: true,
     as_slash: false,
   }),

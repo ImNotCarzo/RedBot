@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "clone",
     description: "Clona un canal con su configuración",
-    aliases: ["chclone", "channelclone", "clonechannel"],
+    aliases: ["chclone", "channelclone", "clonechannel", "clonar", "duplicar"],
     as_prefix: true,
     as_slash: false,
   }),

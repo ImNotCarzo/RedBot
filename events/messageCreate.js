@@ -2,20 +2,18 @@ const { EmbedBuilder } = require("discord.js");
 const {
   setConversacion,
   getConversacion,
-  generateWithFallback,
-  toGeminiHistory,
+  generateChatReply,
 } = require("../src/ai");
 const Logger = require("../src/logger");
 const {
   MAX_HISTORIAL,
-  SYSTEM_PROMPT,
   MAX_EMBED_DESCRIPTION,
-  AI_MODEL_SEARCH,
 } = require("../src/config");
 const { RED } = require("../utils/colors");
 
 const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
+const SAFE_MENTIONS = { parse: [], repliedUser: false };
 
 const event = {
   name: "messageCreate",
@@ -30,6 +28,7 @@ const event = {
       
       const repliedMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
       if (!repliedMsg || repliedMsg.author.id !== _bot.user.id) return;
+      if (userData.lastBotMessageId && repliedMsg.id !== userData.lastBotMessageId) return;
 
       const pregunta = message.content.trim();
       if (!pregunta) return;
@@ -41,20 +40,7 @@ const event = {
         : [];
       historial.push({ role: "user", content: pregunta });
 
-      const model = AI_MODEL_SEARCH;
-      const config = { tools: [{ googleSearch: {} }] };
-
-      const response = await generateWithFallback({
-        model,
-        contents: [
-          { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-          { role: "model", parts: [{ text: "Entendido." }] },
-          ...toGeminiHistory(historial),
-        ],
-        config,
-      });
-
-      const respuesta = response.text?.trim() || "No pude generar una respuesta";
+      const respuesta = await generateChatReply(historial);
 
       historial.push({ role: "assistant", content: respuesta });
       const historialFinal = historial.length > MAX_HISTORIAL
@@ -76,10 +62,10 @@ const event = {
 
       let botMsg;
       try {
-        botMsg = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } });
+        botMsg = await message.reply({ embeds: [embed], allowedMentions: SAFE_MENTIONS });
       } catch (sendErr) {
         if (sendErr?.code === 50013 || sendErr?.code === 50006) {
-          botMsg = await message.reply({ content: texto, allowedMentions: { repliedUser: false } });
+          botMsg = await message.reply({ content: texto, allowedMentions: SAFE_MENTIONS });
         } else {
           throw sendErr;
         }

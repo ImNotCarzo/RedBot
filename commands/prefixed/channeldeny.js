@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "deny",
     description: "Quita el acceso a un usuario en un canal",
-    aliases: ["chdeny", "channeldeny"],
+    aliases: ["chdeny", "channeldeny", "block", "denegar"],
     as_prefix: true,
     as_slash: false,
   }),

@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "purge",
     description: "Elimina mensajes del canal",
-    aliases: ["modpurge", "clear", "prune"],
+    aliases: ["modpurge", "clear", "prune", "limpiar"],
     as_prefix: true,
     as_slash: false,
   }),

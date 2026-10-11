@@ -1,11 +1,10 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder } = require("discord.js");
 
 const data = {
   data: new CommandBuilder({
     name: "uroles",
     description: "Muestra los roles de un usuario",
-    aliases: ["useroles"],
+    aliases: ["userroles", "ur"],
     as_prefix: true,
     as_slash: false,
   }),

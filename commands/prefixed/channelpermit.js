@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "permit",
     description: "Da acceso a un usuario en un canal",
-    aliases: ["chpermit", "channelpermit"],
+    aliases: ["chpermit", "channelpermit", "allow", "acceso"],
     as_prefix: true,
     as_slash: false,
   }),

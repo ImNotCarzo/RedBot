@@ -3,8 +3,10 @@ const Logger = require("../../src/logger");
 const { RED } = require("../../utils/colors");
 const { clampPage, paginateArray, buildPaginationRow, buildPagRow, uniqueCollectorId } = require("./pagination");
 
-const INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1020772849906098186";
+const CLIENT_ID = process.env.CLIENT_ID || "1020772849906098186";
+const INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}`;
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function createCommandLogger(label) {
   return new Logger(label, process.env.LOG_LEVEL);
@@ -43,10 +45,16 @@ function noGuildReply(ctx, message = "Este comando solo funciona en servidores")
 async function fetchImageAsInlineData(url, timeoutMs = 10_000) {
   const res = await fetchWithTimeout(url, {}, timeoutMs);
   if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status})`);
+
+  const declared = Number(res.headers.get("content-length") ?? 0);
+  if (declared > MAX_IMAGE_BYTES) throw new Error("La imagen supera el tamaño máximo permitido");
+
   const buf = await res.arrayBuffer();
+  if (buf.byteLength > MAX_IMAGE_BYTES) throw new Error("La imagen supera el tamaño máximo permitido");
+
   return {
     inlineData: {
-      mimeType: res.headers.get("content-type") || "image/png",
+      mimeType: (res.headers.get("content-type") || "image/png").split(";")[0].trim(),
       data: Buffer.from(buf).toString("base64"),
     },
   };
@@ -62,6 +70,22 @@ function handleCommandError(ctx, err) {
   } else if (typeof bot?.emit === "function") {
     bot.emit("frameworkError", err, ctx);
   }
+}
+
+const commandErrorLog = createCommandLogger("CMD_ERROR");
+
+/**
+ * Cierre estándar de los `catch` de comandos: los errores de permisos de Discord
+ * (50013/50006) se delegan al handler del framework; el resto se loguea y se
+ * responde con `message`.
+ */
+function failWith(ctx, err, message, send = (payload) => ctx.send(payload)) {
+  if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
+  commandErrorLog.error(message, {
+    command: ctx?.command?.data?.name,
+    err: err?.stack || err?.message || String(err),
+  });
+  return send({ content: message, flags: MessageFlags.Ephemeral });
 }
 
 function checkBotPermissions(ctx, ...permissions) {
@@ -97,5 +121,6 @@ module.exports = {
   prepareReply,
   noGuildReply,
   handleCommandError,
+  failWith,
   checkBotPermissions,
 };

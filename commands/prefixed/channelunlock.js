@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "unlock",
     description: "Abre un canal bloqueado",
-    aliases: ["chunlock", "channelunlock", "cunlock"],
+    aliases: ["chunlock", "channelunlock", "cunlock", "abrir", "desbloquear"],
     as_prefix: true,
     as_slash: false,
   }),

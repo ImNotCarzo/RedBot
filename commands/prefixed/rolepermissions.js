@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "roleperms",
     description: "Muestra permisos de un rol",
-    aliases: ["roleperms"],
+    aliases: ["rperms"],
     as_prefix: true,
     as_slash: false,
   }),

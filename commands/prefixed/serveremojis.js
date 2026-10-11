@@ -1,11 +1,10 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder } = require("discord.js");
 
 const data = {
   data: new CommandBuilder({
     name: "emojis",
     description: "Muestra todos los emojis del servidor",
-    aliases: ["serveremojis"],
+    aliases: ["serveremojis", "emoji"],
     as_prefix: true,
     as_slash: false,
   }),

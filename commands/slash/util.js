@@ -1,67 +1,18 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { deleteConversacion, generateWithFallback } = require("../../src/ai");
-const { AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
+const { deleteConversacion } = require("../../src/ai");
 const { RED, GREEN } = require("../../utils/colors");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
-const { createCommandLogger, fetchWithTimeout, fetchImageAsInlineData, prepareReply, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const { createCommandLogger, fetchWithTimeout, prepareReply, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const { generateText, generateVision } = require("../_shared/ai");
+const { sendThinkingReply } = require("../_shared/thinking");
+const { broadcastDm, buildDmAllEmbed, buildDmAllLogEmbed } = require("../_shared/dmall");
 const { version: botVersion } = require("../../package.json");
 
 let graloniumVersion = "0.2.0";
 try { graloniumVersion = require("gralonium/package.json").version; } catch {}
 
 const log = createCommandLogger("CMD_UTIL");
-
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
-
-async function describeImage(imageUrl, prompt) {
-  const imagePart = await fetchImageAsInlineData(imageUrl);
-  const response = await generateWithFallback({
-    model: AI_MODEL_SEARCH,
-    contents: [{
-      role: "user",
-      parts: [
-        { text: prompt },
-        imagePart,
-      ],
-    }],
-    config: { temperature: 1.0 },
-  });
-  return response.text?.trim() ?? null;
-}
-
-async function generateGeminiText(prompt) {
-  const response = await generateWithFallback({
-    model: AI_MODEL_DEFAULT,
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-  });
-  return response.text?.trim() ?? null;
-}
-
-// ─────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function sendWithRetry(miembro, payload, maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      await miembro.send(payload);
-      return true;
-    } catch (err) {
-      if (err?.status === 429) {
-        const wait = (err?.rawError?.retry_after ?? 2) * 1000;
-        await sleep(wait);
-        continue;
-      }
-      return false;
-    }
-  }
-  return false;
-}
 
 // ─────────────────────────────────────────────
 //  DATA
@@ -87,8 +38,7 @@ const data = {
     async code(ctx) {
       try {
         const before  = Date.now();
-        const sent    = await ctx.send({ content: "<a:typing:1484407380291616778>  RedBot está pensando..." });
-        if (ctx && sent) ctx._thinkingMessage = sent;
+        const sent    = await sendThinkingReply(ctx);
         const msgPing = Date.now() - before;
         const apiPing = ctx.bot?.ws?.ping ?? 0;
 
@@ -345,7 +295,7 @@ const data = {
 
       try {
         const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
-        const texto = await describeImage(attachment.url, prompt);
+        const texto = await generateVision(prompt, attachment.url);
 
         await reply({
           embeds: [
@@ -489,69 +439,32 @@ const data = {
       if (isSlash) await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const sendStatus = isSlash ? (p) => ctx.interaction.editReply(p) : (p) => ctx.send(p);
 
-      const author    = ctx.user ?? ctx.author;
-      const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+      const author = ctx.user ?? ctx.author;
+      const embed  = buildDmAllEmbed({ titulo, texto, author, guild: ctx.guild, imagenUrl: imagen?.url });
 
-      const embed = new EmbedBuilder()
-        .setTitle(titulo)
-        .setDescription(texto)
-        .setColor(RED)
-        .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
-        .setThumbnail(ctx.guild.iconURL({ size: 512 }));
-
-      if (imagen) embed.setImage(imagen.url);
-
-      await ctx.guild.members.fetch();
-
-      const members = [...ctx.guild.members.cache.values()].filter((m) => {
-        if (m.user.bot) return false;
-        if (soloRol         && !m.roles.cache.has(soloRol.id))         return false;
-        if (rolExcluido     &&  m.roles.cache.has(rolExcluido.id))     return false;
-        if (usuarioExcluido &&  m.id === usuarioExcluido.id)           return false;
-        return true;
+      const result = await broadcastDm({
+        guild: ctx.guild,
+        embed,
+        soloRolId: soloRol?.id,
+        excluirRolId: rolExcluido?.id,
+        excluirUserId: usuarioExcluido?.id,
+        onProgress: (done, total) => sendStatus({ content: `enviando... ${done}/${total}` }).catch(() => null),
       });
 
-      const total = members.length;
-      await sendStatus({ content: `enviando... 0/${total}` });
+      if (!result) return sendStatus({ content: "Ya hay un DM masivo en curso en este servidor, espera a que termine" });
 
-      let enviados = 0;
-      let fallidos = 0;
-
-      for (let i = 0; i < members.length; i++) {
-        const ok = await sendWithRetry(members[i], { embeds: [embed] });
-        if (ok) enviados++; else fallidos++;
-
-        await sleep(500);
-
-        if (i % 10 === 0) {
-          await sendStatus({ content: `enviando... ${i + 1}/${total}` }).catch(() => null);
-        }
-      }
-
+      const { enviados, fallidos } = result;
       const filtros = [
         soloRol         ? `Solo rol: ${soloRol} (\`${soloRol.id}\`)`                              : null,
         rolExcluido     ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)`                  : null,
         usuarioExcluido ? `Usuario excluido: ${usuarioExcluido.user.tag} (\`${usuarioExcluido.id}\`)` : null,
       ].filter(Boolean);
 
-      const logEmbed = new EmbedBuilder()
-        .setTitle("DM masivo enviado")
-        .setColor(RED)
-        .addFields(
-          { name: "Moderador", value: author.tag ?? author.username, inline: true  },
-          { name: "Enviados",  value: `\`${enviados}\``,             inline: true  },
-          { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true  },
-          { name: "Título",    value: titulo,                         inline: false },
-          { name: "Texto",     value: texto,                          inline: false },
-          ...(filtros.length ? [{ name: "Filtros", value: filtros.join("\n"), inline: false }] : []),
-        )
-        .setTimestamp();
-
-      await sendLog(ctx.guild, logEmbed);
+      await sendLog(ctx.guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros })).catch(() => null);
 
       await sendStatus({
         content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`,
-      });
+      }).catch(() => null);
     },
   })
 
@@ -579,7 +492,7 @@ const data = {
       }
 
       try {
-        const resumen = await generateGeminiText(
+        const resumen = await generateText(
           `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
         );
 

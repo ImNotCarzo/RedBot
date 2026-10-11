@@ -1,11 +1,10 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder } = require("discord.js");
 
 const data = {
   data: new CommandBuilder({
     name: "userperms",
     description: "Muestra los permisos de un usuario en el servidor",
-    aliases: ["perms", "permissions", "uperms"],
+    aliases: ["perms", "permissions", "uperms", "up"],
     as_prefix: true,
     as_slash: false,
   }),

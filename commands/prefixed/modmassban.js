@@ -1,12 +1,12 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
     name: "massban",
     description: "Banea a múltiples usuarios a la vez (hasta 5 menciones o IDs)",
-    aliases: ["modmassban", "mban"],
+    aliases: ["modmassban", "mban", "mb"],
     as_prefix: true,
     as_slash: false,
   }),

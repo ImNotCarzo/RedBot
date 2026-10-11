@@ -1,12 +1,12 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
     name: "unmute",
     description: "Quita el timeout a un usuario",
-    aliases: ["modunmute", "untimeout"],
+    aliases: ["modunmute", "untimeout", "desmutear"],
     as_prefix: true,
     as_slash: false,
   }),

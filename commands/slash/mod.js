@@ -4,7 +4,7 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { clampPage, buildPagRow, uniqueId, handleCommandError } = require("../_shared/runtime");
+const { clampPage, buildPagRow, uniqueId, failWith } = require("../_shared/runtime");
 
 const { RED, YELLOW, GREEN } = require("../../utils/colors");
 const {
@@ -96,8 +96,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No pude banear al usuario", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No pude banear al usuario", send);
       }
     },
   })
@@ -139,8 +138,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudo desbanear al usuario, verifica que el ID sea correcto", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo desbanear al usuario, verifica que el ID sea correcto");
       }
     },
   })
@@ -192,8 +190,7 @@ const data = {
           .setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No pude softbanear al usuario", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No pude softbanear al usuario", send);
       }
     },
   })
@@ -260,8 +257,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No pude hacer el tempban", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No pude hacer el tempban", send);
       }
     },
   })
@@ -377,8 +373,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No se pudo expulsar al usuario", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo expulsar al usuario", send);
       }
     },
   })
@@ -438,8 +433,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No se pudo silenciar al usuario", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo silenciar al usuario", send);
       }
     },
   })
@@ -484,8 +478,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No se pudo quitar el timeout", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo quitar el timeout", send);
       }
     },
   })
@@ -504,12 +497,14 @@ const data = {
       if (isSlash) await ctx.interaction.deferReply();
       const send = makeSend(ctx, isSlash);
 
-      const amount = Math.min(100, Math.max(1, parseInt(ctx.get("cantidad")) || 0));
+      const parsedAmount = Number.parseInt(ctx.get("cantidad"), 10);
       const target = ctx.get("usuario") ?? null;
       const tag    = modTag(ctx);
 
-      if (!amount)
+      if (!Number.isInteger(parsedAmount) || parsedAmount < 1)
         return send({ content: "Ingresa un número válido entre 1 y 100", flags: MessageFlags.Ephemeral });
+
+      const amount = Math.min(100, parsedAmount);
 
       try {
         const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
@@ -541,8 +536,7 @@ const data = {
 
         setTimeout(() => reply.delete().catch(() => {}), 5000);
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await send({ content: "No pude eliminar los mensajes — pueden ser demasiado antiguos", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No pude eliminar los mensajes — pueden ser demasiado antiguos", send);
       }
     },
   })
@@ -601,8 +595,7 @@ const data = {
             )],
         }).catch(() => {});
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudo registrar la advertencia", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo registrar la advertencia");
       }
     },
   })
@@ -634,8 +627,7 @@ const data = {
         await ctx.send({ embeds: [embed] });
         await sendLog(ctx.guild, embed);
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudo eliminar la advertencia", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo eliminar la advertencia");
       }
     },
   })
@@ -667,8 +659,7 @@ const data = {
         await ctx.send({ embeds: [embed] });
         await sendLog(ctx.guild, embed);
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudieron limpiar las advertencias", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudieron limpiar las advertencias");
       }
     },
   })
@@ -735,8 +726,7 @@ const data = {
 
         collector.on("end", async () => msg.edit({ components: [] }).catch(() => {}));
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudieron obtener las advertencias", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudieron obtener las advertencias");
       }
     },
   })
@@ -763,8 +753,7 @@ const data = {
           .setDescription(`Los logs se enviarán a ${channel}`)
           .setColor(GREEN).setTimestamp()] });
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudo establecer el canal de logs", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo establecer el canal de logs");
       }
     },
   })
@@ -788,8 +777,7 @@ const data = {
           .setDescription("Ya no se enviarán logs en este servidor")
           .setColor(RED).setTimestamp()] });
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudo desactivar los logs", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo desactivar los logs");
       }
     },
   }),

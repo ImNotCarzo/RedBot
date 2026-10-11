@@ -5,6 +5,7 @@ const Logger = require("./logger");
 
 const log = new Logger("MODERATION_SERVICE", process.env.LOG_LEVEL);
 const tempBanTimers = new Map();
+const TEMPBAN_RETRY_MS = 5 * 60_000;
 
 function generateId(length = 6) {
   const size = Number.isFinite(length) ? Math.max(4, Math.min(12, Math.floor(length))) : 6;
@@ -147,23 +148,39 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
   clearScheduledTempBan(guildId, userId);
 
   const execute = async () => {
+    let retry = false;
     try {
       const stillPending = await hasTempBan({ guildId, userId });
       if (!stillPending) return;
 
-      const guild = await client.guilds.fetch(guildId).catch(() => null);
+      const guild = await client.guilds.fetch(guildId).catch((err) => (err?.code === 10004 ? null : undefined));
+      if (guild === undefined) {
+        retry = true;
+        log.warn("No se pudo obtener el servidor para expirar tempban; reintentando", { guildId, userId });
+        return;
+      }
       if (!guild) {
         await removeTempBan({ guildId, userId }).catch(() => {});
         return;
       }
 
-      await guild.members.unban(userId, "Tempban expirado").catch(() => {});
+      try {
+        await guild.members.unban(userId, "Tempban expirado");
+      } catch (err) {
+        // 10026 = Unknown Ban: el usuario ya no está baneado, se puede limpiar el registro
+        if (err?.code !== 10026) {
+          retry = true;
+          log.error("Fallo al desbanear; reintentando", { guildId, userId, err: err?.message ?? String(err) });
+          return;
+        }
+      }
       await removeTempBan({ guildId, userId }).catch(() => {});
     } catch (err) {
-      log.error("Fallo al expirar tempban", { guildId, userId, err: err?.message ?? String(err) });
-      await removeTempBan({ guildId, userId }).catch(() => {});
+      retry = true;
+      log.error("Fallo al expirar tempban; reintentando", { guildId, userId, err: err?.message ?? String(err) });
     } finally {
       tempBanTimers.delete(key);
+      if (retry) scheduleTempUnban(client, guildId, userId, new Date(Date.now() + TEMPBAN_RETRY_MS));
     }
   };
 

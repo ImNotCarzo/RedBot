@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "nuke",
     description: "Recrea el canal borrando todos sus mensajes",
-    aliases: ["chnuke", "channelnuke"],
+    aliases: ["chnuke", "channelnuke", "vaciar"],
     as_prefix: true,
     as_slash: false,
   }),

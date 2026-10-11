@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "hide",
     description: "Oculta un canal a @everyone",
-    aliases: ["chhide", "hidechannel", "channelhide"],
+    aliases: ["chhide", "hidechannel", "channelhide", "ocultar", "esconder"],
     as_prefix: true,
     as_slash: false,
   }),

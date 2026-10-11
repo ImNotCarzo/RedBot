@@ -1,11 +1,10 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder } = require("discord.js");
 
 const data = {
   data: new CommandBuilder({
     name: "server",
     description: "Muestra información del servidor",
-    aliases: ["sv"],
+    aliases: ["sv", "serverinfo", "si"],
     as_prefix: true,
     as_slash: false,
   }),

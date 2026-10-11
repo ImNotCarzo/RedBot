@@ -1,12 +1,12 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
     name: "clearwarns",
     description: "Borra todas las advertencias de un usuario",
-    aliases: ["warnsclear", "clearwarn"],
+    aliases: ["warnsclear", "clearwarn", "cwarns", "resetwarns"],
     as_prefix: true,
     as_slash: false,
   }),

@@ -2,7 +2,7 @@ const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, MessageFlags
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { RED, GREEN } = require("../../utils/colors");
 const { sendLog } = require("../../src/guild");
-const { createCommandLogger, noGuildReply, uniqueId, handleCommandError } = require("../_shared/runtime");
+const { createCommandLogger, noGuildReply, uniqueId, handleCommandError, failWith } = require("../_shared/runtime");
 
 const log = createCommandLogger("CMD_CHANNEL");
 
@@ -16,14 +16,15 @@ function formatSlowmode(seconds) {
 }
 
 function parseSlowmode(str) {
-  const match = str.match(/^(\d+)(s|m|h)?$/);
+  if (typeof str !== "string") str = String(str ?? "");
+  const match = str.trim().match(/^(\d+)(s|m|h)?$/i);
   if (!match) return null;
   const value = parseInt(match[1]);
-  const unit  = match[2] ?? "s";
+  const unit  = (match[2] ?? "s").toLowerCase();
   const multipliers = { s: 1, m: 60, h: 3600 };
   const seconds = value * multipliers[unit];
   // Discord permite 0 (desactivar) hasta 21600 (6h)
-  if (seconds < 0 || seconds > 21600) return null;
+  if (seconds > 21600) return null;
   return seconds;
 }
 
@@ -119,10 +120,13 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
-      const channel  = ctx.get("canal");
-      const newName  = ctx.get("nombre").toLowerCase().replace(/\s+/g, "-").slice(0, 100);
-      const modTag   = ctx.user?.tag ?? ctx.author?.tag;
+      const channel    = ctx.get("canal");
+      const rawName    = ctx.get("nombre");
+      const isTextLike = channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement;
+      const newName    = (isTextLike ? rawName.toLowerCase().replace(/\s+/g, "-") : rawName).trim().slice(0, 100);
+      const modTag     = ctx.user?.tag ?? ctx.author?.tag;
 
       try {
         const oldName = channel.name;
@@ -151,8 +155,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo renombrar el canal", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo renombrar el canal");
       }
     },
   })
@@ -169,6 +173,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -195,8 +200,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo bloquear el canal", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo bloquear el canal");
       }
     },
   })
@@ -213,6 +218,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -239,8 +245,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo desbloquear el canal", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo desbloquear el canal");
       }
     },
   })
@@ -258,6 +264,7 @@ const data = {
     plugins: [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")],
 
     async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
       const modTag  = ctx.user?.tag ?? ctx.author?.tag;
@@ -284,16 +291,17 @@ const data = {
 
         const logEmbed = new EmbedBuilder()
           .setTitle("Slowmode actualizado")
-          .setColor(RED)
+          .setColor(seconds === 0 ? GREEN : RED)
           .addFields(
             { name: "Canal",     value: `${channel} (\`${channel.id}\`)`, inline: true },
             { name: "Moderador", value: modTag,                            inline: true },
             { name: "Slowmode",  value: formatted,                         inline: true },
           )
+          .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo cambiar el slowmode", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo cambiar el slowmode");
       }
     },
   })
@@ -373,16 +381,17 @@ const data = {
               .setColor(RED),
           ],
           components: [],
-        });
+        }).catch(() => {});
       }
 
       if (interaction.customId === confirmId) {
         collector.stop();
 
+        let newChannel;
         try {
           const position = channel.position;
 
-          const newChannel = await channel.clone({
+          newChannel = await channel.clone({
             reason: `${modTag}: channel nuke`,
           });
 
@@ -396,7 +405,7 @@ const data = {
                 .setDescription("Canal nukeado")
                 .setColor(RED),
             ],
-          });
+          }).catch(() => {});
 
           const logEmbed = new EmbedBuilder()
             .setTitle("Canal nukeado")
@@ -408,7 +417,7 @@ const data = {
             )
             .setTimestamp();
 
-          await sendLog(guild, logEmbed);
+          await sendLog(guild, logEmbed).catch(() => {});
 
           await interaction.update({
             embeds: [
@@ -421,6 +430,9 @@ const data = {
 
         } catch (err) {
           log.error("Error en nuke", { err: err?.message ?? String(err) });
+          if (newChannel && !channel.deleted) {
+            await newChannel.delete("Rollback: channel nuke failed").catch(() => {});
+          }
 
           await interaction.update({
             embeds: [
@@ -430,7 +442,7 @@ const data = {
                 .setTimestamp(),
             ],
             components: [],
-          });
+          }).catch(() => {});
         }
       }
     });
@@ -480,8 +492,7 @@ const data = {
 
         await sendLog(ctx.guild, logEmbed);
       } catch (err) {
-        if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
-        await ctx.send({ content: "No se pudo clonar el canal", flags: MessageFlags.Ephemeral });
+        return failWith(ctx, err, "No se pudo clonar el canal");
       }
     },
   })
@@ -529,8 +540,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo dar acceso al usuario", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo dar acceso al usuario");
       }
     },
   })
@@ -578,8 +589,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo quitar el acceso al usuario", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo quitar el acceso al usuario");
       }
     },
   })
@@ -623,8 +634,8 @@ const data = {
           .setTimestamp();
 
         await sendLog(ctx.guild, logEmbed);
-      } catch {
-        await ctx.send({ content: "No se pudo ocultar el canal", flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        return failWith(ctx, err, "No se pudo ocultar el canal");
       }
     },
   }),

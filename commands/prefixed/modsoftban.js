@@ -1,12 +1,12 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
     name: "softban",
     description: "Expulsa a un usuario borrando sus mensajes (ban + unban inmediato)",
-    aliases: ["modsoftban", "sban"],
+    aliases: ["modsoftban", "sban", "sb"],
     as_prefix: true,
     as_slash: false,
   }),

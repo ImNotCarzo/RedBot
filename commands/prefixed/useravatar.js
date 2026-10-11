@@ -4,7 +4,7 @@ const data = {
   data: new CommandBuilder({
     name: "avatar",
     description: "Muestra el avatar de un usuario",
-    aliases: ["av", "useravatar"],
+    aliases: ["av", "useravatar", "pfp"],
     as_prefix: true,
     as_slash: false,
   }),

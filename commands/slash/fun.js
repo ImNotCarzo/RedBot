@@ -1,8 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { generateWithFallback } = require("../../src/ai");
-const { AI_MODEL_DEFAULT, AI_MODEL_SEARCH } = require("../../src/config");
-const { createCommandLogger, fetchImageAsInlineData, prepareReply, noGuildReply, handleCommandError } = require("../_shared/runtime");
+const { createCommandLogger, prepareReply, noGuildReply, handleCommandError } = require("../_shared/runtime");
+const { generateText, generateVision } = require("../_shared/ai");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -16,36 +15,6 @@ Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
 Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!".
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
-
-// ─────────────────────────────────────────────
-//  AI
-// ─────────────────────────────────────────────
-
-async function generateVision(prompt, imageUrl) {
-  const imagePart = await fetchImageAsInlineData(imageUrl);
-  const response = await generateWithFallback({
-    model: AI_MODEL_SEARCH,
-    contents: [{
-      role: "user",
-      parts: [
-        { text: prompt },
-        imagePart,
-      ],
-    }],
-    config: {
-      temperature: 1.0,
-    },
-  });
-  return response.text?.trim() ?? null;
-}
-
-async function generateGeminiFlash(prompt) {
-  const response = await generateWithFallback({
-    model: AI_MODEL_DEFAULT,
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-  });
-  return response.text?.trim() ?? null;
-}
 
 function msATexto(ms) {
   const min  = Math.floor(ms / 60000);
@@ -91,7 +60,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGeminiFlash(
+        const texto = (await generateText(
           `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`
         ))?.slice(0, 4000) ?? "No pude generar una opinión";
 
@@ -129,7 +98,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGeminiFlash(
+        const texto = (await generateText(
           `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`
         ))?.slice(0, 4000) ?? "No pude generar una crítica";
 
@@ -175,7 +144,7 @@ const data = {
           : `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`;
 
       const texto =
-        (await generateGeminiFlash(prompt))?.slice(0, 4000) ||
+        (await generateText(prompt))?.slice(0, 4000) ||
         "No pude generar una excusa";
 
       await reply({
@@ -212,7 +181,7 @@ const data = {
       const tema  = ctx.get("tema");
 
       try {
-        const texto = (await generateGeminiFlash(
+        const texto = (await generateText(
           `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`
         ))?.slice(0, 4000) ?? "No pude generar una teoría";
 

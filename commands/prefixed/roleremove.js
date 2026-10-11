@@ -1,12 +1,12 @@
 const { CommandBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
     name: "roleremove",
     description: "Quita un rol a un usuario",
-    aliases: ["removerole", "rremove"],
+    aliases: ["removerole", "rremove", "delrole"],
     as_prefix: true,
     as_slash: false,
   }),

@@ -253,17 +253,11 @@ const data = {
       try {
         const guild = ctx.guild;
         if (!guild) return noGuildReply(ctx);
-        if (!guild.iconURL()) return ctx.send("Este servidor no tiene logo");
 
-        const url = guild.iconURL({ size: 4096, extension: "png" });
-        const embed = new EmbedBuilder()
-          .setTitle(`Logo de ${guild.name}`)
-          .setURL(url)
-          .setImage(url)
-          .setColor(RED)
-          .setTimestamp();
+        const view = getServerView(guild, "logo");
+        if (view.error) return ctx.send(view.error);
 
-        await ctx.send({ embeds: [embed] });
+        await ctx.send({ embeds: [view.embed] });
       } catch (err) {
         log.error("Error en server logo", { err: err?.message ?? String(err) });
         return handleCommandError(ctx, err);
@@ -285,17 +279,11 @@ const data = {
       try {
         const guild = ctx.guild;
         if (!guild) return noGuildReply(ctx);
-        const bannerURL = guild.bannerURL({ size: 4096, extension: "png" });
-        if (!bannerURL) return ctx.send("Este servidor no tiene banner");
 
-        const embed = new EmbedBuilder()
-          .setTitle(`Banner de ${guild.name}`)
-          .setURL(bannerURL)
-          .setImage(bannerURL)
-          .setColor(RED)
-          .setTimestamp();
+        const view = getServerView(guild, "banner");
+        if (view.error) return ctx.send(view.error);
 
-        await ctx.send({ embeds: [embed] });
+        await ctx.send({ embeds: [view.embed] });
       } catch (err) {
         log.error("Error en server banner", { err: err?.message ?? String(err) });
         return handleCommandError(ctx, err);
@@ -318,16 +306,10 @@ const data = {
         const guild = ctx.guild;
         if (!guild) return noGuildReply(ctx);
 
-        const emojis = guild.emojis.cache.map((e) => e.toString());
-        if (!emojis.length) return ctx.send("Este servidor no tiene emojis");
+        const view = getServerView(guild, "emojis");
+        if (view.error) return ctx.send(view.error);
 
-        const embed = new EmbedBuilder()
-          .setTitle(`Emojis de ${guild.name} (${emojis.length})`)
-          .setDescription(emojis.reduce((acc, cur) => (acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? " " : "") + cur), ""))
-          .setColor(RED)
-          .setTimestamp();
-
-        await ctx.send({ embeds: [embed] });
+        await ctx.send({ embeds: [view.embed] });
       } catch (err) {
         log.error("Error en server emojis", { err: err?.message ?? String(err) });
         return handleCommandError(ctx, err);

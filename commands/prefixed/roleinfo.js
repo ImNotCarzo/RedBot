@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "role",
     description: "Muestra información de un rol",
-    aliases: ["roleinfo", "inforole"],
+    aliases: ["roleinfo", "inforole", "ri"],
     as_prefix: true,
     as_slash: false,
   }),

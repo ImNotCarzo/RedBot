@@ -1,5 +1,4 @@
-const { CommandBuilder, ParamsBuilder } = require("gralonium");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { CommandBuilder } = require("gralonium");
 
 const data = {
   data: new CommandBuilder({

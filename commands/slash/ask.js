@@ -1,7 +1,7 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { generateWithFallback, toGeminiHistory, setConversacion, getConversacion } = require("../../src/ai");
-const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_SEARCH } = require("../../src/config");
+const { generateChatReply, setConversacion, getConversacion } = require("../../src/ai");
+const { MAX_HISTORIAL } = require("../../src/config");
 const { RED } = require("../../utils/colors");
 const { sendThinkingReply, editThinkingReply } = require("../_shared/thinking");
 const { createCommandLogger, handleCommandError } = require("../_shared/runtime");
@@ -55,23 +55,10 @@ const data = {
       }
 
       const prev = getConversacion(userId);
-      const historial = prev?.historial ?? [];
+      const historial = [...(prev?.historial ?? [])];
       historial.push({ role: "user", content: pregunta });
 
-      const model = AI_MODEL_SEARCH;
-      const config = { tools: [{ googleSearch: {} }] };
-
-      const response = await generateWithFallback({
-        model,
-        contents: [
-          { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-          { role: "model", parts: [{ text: "Entendido." }] },
-          ...toGeminiHistory(historial),
-        ],
-        config,
-      });
-
-      const respuesta = response.text ?? "No pude generar una respuesta";
+      const respuesta = await generateChatReply(historial);
       historial.push({ role: "assistant", content: respuesta });
       if (historial.length > MAX_HISTORIAL) historial.splice(0, historial.length - MAX_HISTORIAL);
 

@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "NODE_ENV=development LOG_LEVEL=debug node src/index.js",
+    "dev": "node scripts/dev.js",
     "audit": "npm audit fix"
   },
   "dependencies": {

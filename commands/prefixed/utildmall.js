@@ -1,30 +1,12 @@
-const { CommandBuilder, ParamsBuilder } = require("gralonium");
+const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 const { sendLog } = require("../../src/guild");
+const { broadcastDm, buildDmAllEmbed, buildDmAllLogEmbed } = require("../_shared/dmall");
 
 // ─────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function sendWithRetry(miembro, payload, maxRetries = 3) {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      await miembro.send(payload);
-      return true;
-    } catch (err) {
-      if (err?.status === 429) {
-        const wait = (err?.rawError?.retry_after ?? 2) * 1000;
-        await sleep(wait);
-        continue;
-      }
-      return false;
-    }
-  }
-  return false;
-}
 function parseArgs(raw) {
   let str    = raw;
   let soloId = null;
@@ -108,70 +90,38 @@ const data = {
 
     if (!titulo || !texto) return ctx.send(PARAMERROR(bot));
 
-    const author    = ctx.author;
-    const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+    const author = ctx.author;
 
     // --imagen tiene prioridad; si no, usa el primer adjunto del mensaje
     const imagen = imagenUrl ?? ctx.message.attachments.first()?.url ?? null;
+    const embed = buildDmAllEmbed({ titulo, texto, author, guild, imagenUrl: imagen });
 
-    const embed = new EmbedBuilder()
-      .setTitle(titulo)
-      .setDescription(texto)
-      .setColor(RED)
-      .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
-      .setThumbnail(guild.iconURL({ size: 512 }));
-
-    if (imagen) embed.setImage(imagen);
-
-    await guild.members.fetch();
-
-    const members = [...guild.members.cache.values()].filter((m) => {
-      if (m.user.bot) return false;
-      if (soloId && !m.roles.cache.has(soloId))  return false;
-      if (rolId  &&  m.roles.cache.has(rolId))   return false;
-      if (userId &&  m.id === userId)             return false;
-      return true;
+    let progressMsg = null;
+    const result = await broadcastDm({
+      guild,
+      embed,
+      soloRolId: soloId,
+      excluirRolId: rolId,
+      excluirUserId: userId,
+      onProgress: async (done, total) => {
+        const text = `enviando... ${done}/${total}`;
+        if (!progressMsg) progressMsg = await ctx.send(text);
+        else await progressMsg.edit(text).catch(() => null);
+      },
     });
 
-    const total       = members.length;
-    const progressMsg = await ctx.send(`enviando... 0/${total}`);
+    if (!result) return ctx.send("Ya hay un DM masivo en curso en este servidor, espera a que termine");
 
-    let enviados = 0;
-    let fallidos = 0;
-
-    for (let i = 0; i < members.length; i++) {
-      const ok = await sendWithRetry(members[i], { embeds: [embed] });
-      if (ok) enviados++; else fallidos++;
-
-      await sleep(500);
-
-      if (i % 10 === 0) {
-        await progressMsg.edit(`enviando... ${i + 1}/${total}`).catch(() => null);
-      }
-    }
-
+    const { enviados, fallidos } = result;
     const exclusiones = [
-      soloId ? `Solo rol: \`${soloId}\``            : null,
-      rolId  ? `Rol excluido: \`${rolId}\``         : null,
-      userId ? `Usuario excluido: \`${userId}\``    : null,
+      soloId ? `Solo rol: \`${soloId}\`` : null,
+      rolId  ? `Rol excluido: \`${rolId}\`` : null,
+      userId ? `Usuario excluido: \`${userId}\`` : null,
     ].filter(Boolean);
 
-    const logEmbed = new EmbedBuilder()
-      .setTitle("DM masivo enviado")
-      .setColor(RED)
-      .addFields(
-        { name: "Moderador", value: author.tag ?? author.username, inline: true  },
-        { name: "Enviados",  value: `\`${enviados}\``,             inline: true  },
-        { name: "Fallidos",  value: `\`${fallidos}\``,             inline: true  },
-        { name: "Título",    value: titulo,                         inline: false },
-        { name: "Texto",     value: texto,                         inline: false },
-        ...(exclusiones.length ? [{ name: "Filtros", value: exclusiones.join("\n"), inline: false }] : []),
-      )
-      .setTimestamp();
+    await sendLog(guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros: exclusiones })).catch(() => null);
 
-    await sendLog(guild, logEmbed);
-
-    return progressMsg.edit(`hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`);
+    return progressMsg.edit(`hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`).catch(() => null);
   },
 };
 

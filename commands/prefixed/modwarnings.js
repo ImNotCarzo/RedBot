@@ -6,7 +6,7 @@ const data = {
   data: new CommandBuilder({
     name: "warnings",
     description: "Muestra las advertencias de un usuario",
-    aliases: ["warns", "modwarnings"],
+    aliases: ["warns", "modwarnings", "infracciones"],
     as_prefix: true,
     as_slash: false,
   }),

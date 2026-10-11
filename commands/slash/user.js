@@ -18,7 +18,7 @@ const {
   handleCommandError,
 } = require("../_shared/runtime");
 const { resolveMemberFlexible } = require("../../src/adapter");
-const { RED } = require("../../utils/colors");
+const { RED, DARK } = require("../../utils/colors");
 
 const log = createCommandLogger("CMD_USER");
 
@@ -32,8 +32,8 @@ async function resolveUser(ctx, input) {
   const invoker = ctx.user ?? ctx.author;
   if (!input) return invoker ?? null;
   if (typeof input === "object") return input.user ?? input;
-  const id = String(input).replace(/\D/g, "");
-  if (id) return ctx.bot.users.fetch(id).catch(() => null);
+  const match = String(input).trim().match(/^(?:<@!?)?(\d{17,20})>?$/);
+  if (match) return (ctx.client ?? ctx.bot).users.fetch(match[1]).catch(() => null);
   return null;
 }
 
@@ -42,7 +42,7 @@ function buildRolesEmbed(member, user, username, roles, page, totalPages) {
   const embed = new EmbedBuilder()
     .setAuthor({ name: username, iconURL: user.displayAvatarURL({ size: 128 }) })
     .setDescription(numbered.join("\n"))
-    .setColor(member.displayHexColor || "#2b2d31")
+    .setColor(member.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : DARK)
     .setTimestamp();
   if (totalPages > 1) embed.setFooter({ text: `Página ${page + 1}/${totalPages}` });
   return embed;
@@ -52,7 +52,7 @@ function buildPermsEmbed(user, perms, page, totalPages, color) {
   const embed = new EmbedBuilder()
     .setAuthor({ name: `Permisos de ${user.username}`, iconURL: user.displayAvatarURL({ size: 128 }) })
     .setDescription(perms.join("\n"))
-    .setColor(color || "#2b2d31")
+    .setColor(color || DARK)
     .setTimestamp();
   if (totalPages > 1) embed.setFooter({ text: `Página ${page + 1}/${totalPages}` });
   return embed;
@@ -263,7 +263,7 @@ const data = {
         // fetch() fuerza la carga de banner, accentColor, primaryGuild, collectibles y avatarDecorationData
         const user        = await member.user.fetch().catch(() => member.user);
         const insignias   = user.flags?.toArray().map(f => `\`${f}\``).join(", ") || "Sin insignias";
-        const colorRol    = member.displayHexColor || "#2b2d31";
+        const colorRol    = member.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : DARK;
         const createdTs   = Math.floor(user.createdTimestamp / 1000);
         const joinedTs    = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
         const hasBanner   = !!user.banner;
@@ -319,10 +319,11 @@ const data = {
           const isAuthor = interaction.user.id === authorId;
           const selected = interaction.values[0];
 
-          cm.stopAll();
-
           // ── Respuesta efímera para no-autores ──
           if (!isAuthor) {
+            if (selected === "info") {
+              return interaction.reply({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
+            }
             if (selected === "avatar") {
               const url = member.displayAvatarURL({ extension: "png", size: 4096 });
               const av  = new EmbedBuilder()
@@ -344,23 +345,29 @@ const data = {
                 .sort((a, b) => b.position - a.position)
                 .map((r, i) => `${i + 1}. <@&${r.id}>`);
               if (!roles.length) return interaction.reply({ content: "Este usuario no tiene roles", flags: MessageFlags.Ephemeral });
+              let desc = roles.join("\n");
+              if (desc.length > 4000) desc = desc.slice(0, 3990) + "\n...";
               const embed = new EmbedBuilder()
                 .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                .setDescription(roles.join("\n")).setColor(colorRol).setTimestamp();
+                .setDescription(desc).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
             if (selected === "permissions") {
               const perms = member.permissions.toArray().sort().map(formatPermName);
               if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
+              let desc = perms.join("\n");
+              if (desc.length > 4000) desc = desc.slice(0, 3990) + "\n...";
               const embed = new EmbedBuilder()
                 .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                .setDescription(perms.join("\n")).setColor(colorRol).setTimestamp();
+                .setDescription(desc).setColor(colorRol).setTimestamp();
               return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
             }
             return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
           }
 
           // ── Respuestas del autor ──
+          cm.stopAll();
+
           if (selected === "info") {
             return interaction.update({ embeds: [infoEmbed], components: [makeSelectRow(selectId, false, baseOptions)] });
           }
@@ -527,7 +534,7 @@ const data = {
         const serverAvatar = member ? member.displayAvatarURL(avatarOpts) : user.displayAvatarURL(avatarOpts);
         const globalAvatar = user.displayAvatarURL(avatarOpts);
         const hasDistinct  = !!(member?.avatar && member.avatar !== user.avatar);
-        const color        = member?.displayHexColor || RED;
+        const color        = member?.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : (member ? DARK : RED);
 
         const buildEmbed = (type) => new EmbedBuilder()
           .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
@@ -601,7 +608,7 @@ const data = {
         if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
 
         const hasDistinct = !!(serverBannerURL && serverBannerURL !== globalBannerURL);
-        const color       = member?.displayHexColor || RED;
+        const color       = member?.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : (member ? DARK : RED);
 
         const buildEmbed = (type) => {
           const isServer = type === "server";
@@ -721,7 +728,7 @@ const data = {
         if (!member) return ctx.send("No pude encontrar al usuario");
 
         const user  = member.user;
-        const color = member.displayHexColor || "#2b2d31";
+        const color = member.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : DARK;
         const perms = member.permissions.toArray().sort().map(formatPermName);
 
         if (!perms.length) return ctx.send("Este usuario no tiene permisos");
