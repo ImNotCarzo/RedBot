@@ -72,7 +72,8 @@ async function generateWithFallback(params, options = {}) {
     } catch (err) {
       lastErr = err;
       const status = Number(err?.status ?? err?.code ?? 0);
-      const canRotate = status === 429 && GEMINI_KEYS.length > 1;
+      const is429 = status === 429 || (err?.message ?? "").includes("429");
+      const canRotate = is429 && GEMINI_KEYS.length > 1;
       const canRetry = attempt < maxAttempts && (canRotate || isRetriableAIError(err));
 
       if (!canRetry) break;
@@ -84,7 +85,7 @@ async function generateWithFallback(params, options = {}) {
         log.warn("Error transitorio en IA; reintentando", { attempt, err: err?.message ?? String(err) });
       }
 
-      await wait(Math.min(1500 * (2 ** (attempt - 1)), 6000));
+      await wait(Math.min(1000 * (2 ** (attempt - 1)), 4000));
     }
   }
 
@@ -103,32 +104,76 @@ function toGeminiHistory(history) {
     }));
 }
 
-/** Respuesta de chat con persona + historial + Google Search. Si falla la búsqueda, responde sin herramientas. */
+/** Búsqueda web ligera vía DuckDuckGo para enriquecer el contexto con información actual. */
+async function performWebSearch(query) {
+  if (!query || typeof query !== "string") return [];
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query.slice(0, 150))}`;
+    const res = await withAITimeout(
+      fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        },
+      }),
+      4000
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const snippets = [];
+    const regex = /<a class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+    let match;
+    while ((match = regex.exec(html)) && snippets.length < 4) {
+      const text = match[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+      if (text) snippets.push(text);
+    }
+    return snippets;
+  } catch {
+    return [];
+  }
+}
+
+/** Detecta heurísticamente si una consulta pide información reciente/actual o datos en vivo. */
+function needsWebSearch(text) {
+  if (!text || typeof text !== "string") return false;
+  const t = text.toLowerCase();
+  const searchTriggers = [
+    "noticia", "noticias", "quien gano", "quién ganó", "campeon", "campeón",
+    "partido", "resultado", "hoy", "ayer", "precio", "clima", "estreno",
+    "actual", "actualidad", "cuando sale", "cuándo sale", "quien es", "quién es",
+    "año 202", "versión", "version", "nuevo", "nueva", "busca", "buscar"
+  ];
+  return searchTriggers.some((kw) => t.includes(kw));
+}
+
+/** Respuesta de chat con persona + historial + Web Search en vivo integrado. */
 async function generateChatReply(historial) {
+  const lastUserMsg = Array.isArray(historial)
+    ? [...historial].reverse().find((m) => m && m.role === "user")?.content ?? ""
+    : "";
+
+  let systemPromptWithContext = SYSTEM_PROMPT;
+
+  // Si la pregunta requiere datos actuales, buscamos en la web e inyectamos la información
+  if (needsWebSearch(lastUserMsg)) {
+    const webSnippets = await performWebSearch(lastUserMsg);
+    if (webSnippets.length > 0) {
+      systemPromptWithContext += `\n\n[Información web reciente en vivo encontrada]:\n${webSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}\nUsa estos datos si son relevantes para contestar con certeza.`;
+    }
+  }
+
   const contents = [
-    { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
+    { role: "user", parts: [{ text: systemPromptWithContext }] },
     { role: "model", parts: [{ text: "Entendido." }] },
     ...toGeminiHistory(historial),
   ];
 
-  try {
-    const response = await generateWithFallback({
-      model: AI_MODEL_CHAT,
-      contents,
-      config: { tools: [{ googleSearch: {} }] },
-    });
-    return response.text?.trim() || "No pude generar una respuesta";
-  } catch (err) {
-    log.warn("Error en chat con búsqueda web; intentando sin herramientas", {
-      err: err?.message ?? String(err),
-    });
+  const response = await generateWithFallback({
+    model: AI_MODEL_CHAT,
+    contents,
+  });
 
-    const response = await generateWithFallback({
-      model: AI_MODEL_CHAT,
-      contents,
-    });
-    return response.text?.trim() || "No pude generar una respuesta";
-  }
+  return response.text?.trim() || "No pude generar una respuesta";
 }
 
 function assertUserId(userId) {
