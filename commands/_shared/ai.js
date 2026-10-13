@@ -7,7 +7,7 @@ const {
 } = require("../../src/config");
 const { fetchImageAsInlineData } = require("./runtime");
 
-/** Texto simple de respuesta rápida (resúmenes, diversión) usando Gemma 4 31B (14.4k RPD). */
+/** Texto simple de respuesta rápida (resúmenes, diversión) usando Gemini 3.1 Flash Lite. */
 async function generateText(prompt) {
   const response = await generateWithFallback(
     {

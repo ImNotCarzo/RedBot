@@ -88,16 +88,20 @@ async function generateWithFallback(params, options = {}) {
       lastErr = err;
       const status = Number(err?.status ?? err?.code ?? 0);
       const is429 = status === 429 || (err?.message ?? "").includes("429");
-      const isOverloaded =
+      const isErrorRequiringFallback =
         status === 503 ||
+        status === 500 ||
+        is429 ||
         (err?.message ?? "").includes("503") ||
+        (err?.message ?? "").includes("500") ||
         (err?.message ?? "").includes("UNAVAILABLE") ||
+        (err?.message ?? "").includes("INTERNAL") ||
         (err?.message ?? "").includes("high demand") ||
         (err?.message ?? "").includes("overloaded");
 
-      // Si el modelo actual está saturado (503/high demand) o con 429 y tenemos fallbackModel, alternamos inmediatamente
-      if (fallbackModel && (isOverloaded || is429) && requestParams.model !== fallbackModel) {
-        log.warn(`Modelo ${requestParams.model} con sobrecarga/límite; alternando a fallback: ${fallbackModel}`);
+      // Si el modelo actual está saturado (503/high demand), con 500 INTERNAL o con 429 y tenemos fallbackModel, alternamos inmediatamente
+      if (fallbackModel && isErrorRequiringFallback && requestParams.model !== fallbackModel) {
+        log.warn(`Modelo ${requestParams.model} falló (${status || "error"}); alternando a fallback: ${fallbackModel}`);
         requestParams.model = fallbackModel;
         continue;
       }
@@ -133,6 +137,77 @@ function toGeminiHistory(history) {
     }));
 }
 
+/** Obtiene anclaje temporal exacto para eliminar el sesgo de knowledge cutoff de 2024. */
+function getTemporalPrompt() {
+  const now = new Date();
+  const opciones = {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "America/Mexico_City",
+  };
+  const fechaHoy = now.toLocaleDateString("es-ES", opciones);
+  const ayer = new Date(now.getTime() - 24 * 60 * 60 * 1000).toLocaleDateString("es-ES", opciones);
+  const anio = now.getFullYear();
+
+  return `\n\n[Contexto temporal del sistema]:
+- Hoy es: ${fechaHoy}.
+- Ayer fue: ${ayer}.
+- Año en curso: ${anio}.
+- IMPORTANTE: Usa siempre este marco temporal como presente real. Si te preguntan qué fecha es hoy, qué fecha fue ayer o en qué año estamos, responde con certeza usando esta información.`;
+}
+
+/** Limpia saludos, menciones y muletillas conversacionales para obtener una búsqueda limpia. */
+function extractSearchQuery(text) {
+  if (!text || typeof text !== "string") return null;
+  const t = text.trim();
+  if (t.length < 3) return null;
+
+  let cleaned = t
+    .replace(/<@!?\d+>/g, "")
+    .replace(/^(hola|buenas|hey|oye|ey|bot|redbot|dime|sabes|por favor|me dices|busca|buscar|que sabes de|que paso con)[\s,:]+/gi, "")
+    .replace(/[¿?]/g, "")
+    .trim();
+
+  return cleaned.length >= 3 ? cleaned : null;
+}
+
+/** Detecta de forma inteligente si la consulta se beneficia de búsqueda web en DuckDuckGo. */
+function shouldSearchWeb(text) {
+  if (!text || typeof text !== "string") return false;
+  const t = text.toLowerCase().trim();
+
+  // Charla casual o saludos simples no requieren búsqueda
+  if (/^(hola|buenas|hey|que tal|como estas|quien eres|gracias|chau|adios|jaja|xd|ok|dale|bueno)[\s!.,?]*$/i.test(t)) {
+    return false;
+  }
+
+  // Consultas sobre fecha y hora ya las resuelve el contexto temporal
+  if (/que (dia|fecha|hora) (es|era|fue|sera) (hoy|ayer|manana)/i.test(t)) {
+    return false;
+  }
+
+  // Palabras clave de actualidad, eventos, entidades o noticias
+  const triggerWords = [
+    "busca", "buscar", "noticia", "noticias", "quien gano", "quién ganó", "campeon", "campeón",
+    "partido", "resultado", "precio", "clima", "estreno", "lanzamiento", "actual", "actualidad",
+    "cuando sale", "cuándo sale", "quien es", "quién es", "año 202", "versión", "version",
+    "nuevo", "nueva", "último", "ultimos", "falleció", "murió", "presidente", "gobierno",
+    "dolar", "dólar", "bitcoin", "cripto", "elon musk", "spacex", "openai", "guerra",
+    "conflicto", "champions", "mundial", "copa", "liga", "fichaje", "update", "actualizacion"
+  ];
+  if (triggerWords.some((kw) => t.includes(kw))) return true;
+
+  // Preguntas interrogativas
+  if (t.includes("?") || t.includes("¿")) {
+    const questionWords = ["quien", "quién", "que", "qué", "cuando", "cuándo", "donde", "dónde", "como", "cómo", "cual", "cuál", "cuanto", "cuánto"];
+    if (questionWords.some((qw) => t.includes(qw))) return true;
+  }
+
+  return false;
+}
+
 /** Búsqueda web ligera vía DuckDuckGo para enriquecer el contexto con información actual. */
 async function performWebSearch(query) {
   if (!query || typeof query !== "string") return [];
@@ -162,32 +237,20 @@ async function performWebSearch(query) {
   }
 }
 
-/** Detecta heurísticamente si una consulta pide información reciente/actual o datos en vivo. */
-function needsWebSearch(text) {
-  if (!text || typeof text !== "string") return false;
-  const t = text.toLowerCase();
-  const searchTriggers = [
-    "noticia", "noticias", "quien gano", "quién ganó", "campeon", "campeón",
-    "partido", "resultado", "hoy", "ayer", "precio", "clima", "estreno",
-    "actual", "actualidad", "cuando sale", "cuándo sale", "quien es", "quién es",
-    "año 202", "versión", "version", "nuevo", "nueva", "busca", "buscar"
-  ];
-  return searchTriggers.some((kw) => t.includes(kw));
-}
-
-/** Respuesta de chat con persona + historial + Web Search en vivo integrado. */
+/** Respuesta de chat con persona + temporalidad + Web Search en vivo integrado. */
 async function generateChatReply(historial) {
   const lastUserMsg = Array.isArray(historial)
     ? [...historial].reverse().find((m) => m && m.role === "user")?.content ?? ""
     : "";
 
-  let systemPromptWithContext = SYSTEM_PROMPT;
+  let systemPromptWithContext = SYSTEM_PROMPT + getTemporalPrompt();
 
-  // Si la pregunta requiere datos actuales, buscamos en la web e inyectamos la información
-  if (needsWebSearch(lastUserMsg)) {
-    const webSnippets = await performWebSearch(lastUserMsg);
+  // Si la pregunta requiere datos actuales o investigación, buscamos en DuckDuckGo con query limpia
+  if (shouldSearchWeb(lastUserMsg)) {
+    const searchQuery = extractSearchQuery(lastUserMsg) || lastUserMsg;
+    const webSnippets = await performWebSearch(searchQuery);
     if (webSnippets.length > 0) {
-      systemPromptWithContext += `\n\n[Información web reciente en vivo encontrada]:\n${webSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}\nUsa estos datos si son relevantes para contestar con certeza.`;
+      systemPromptWithContext += `\n\n[Información web reciente en vivo encontrada en DuckDuckGo para "${searchQuery}"]:\n${webSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}\nUsa estos datos web si son relevantes para contestar con certeza y datos actuales.`;
     }
   }
 

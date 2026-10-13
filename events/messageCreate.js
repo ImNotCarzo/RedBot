@@ -23,21 +23,31 @@ const event = {
       if (message.author.bot) return;
       if (!message.reference?.messageId) return;
 
-      const userData = getConversacion(message.author.id);
-      if (!userData) return;
-      
-      const repliedMsg = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+      const repliedMsg =
+        message.channel.messages.cache.get(message.reference.messageId) ??
+        (await message.channel.messages.fetch(message.reference.messageId).catch(() => null));
+
+      // Solo procesar si el mensaje al que se responde es de este bot
       if (!repliedMsg || repliedMsg.author.id !== _bot.user.id) return;
-      if (userData.lastBotMessageId && repliedMsg.id !== userData.lastBotMessageId) return;
 
       const pregunta = message.content.trim();
       if (!pregunta) return;
 
       await message.channel.sendTyping().catch(() => {});
 
-      const historial = Array.isArray(userData.historial)
-        ? userData.historial.slice(-MAX_HISTORIAL)
+      const userData = getConversacion(message.author.id);
+      let historial = Array.isArray(userData?.historial)
+        ? [...userData.historial.slice(-MAX_HISTORIAL)]
         : [];
+
+      // Si no había sesión activa (por reinicio o expiración de TTL), reconstruimos el contexto con el mensaje previo del bot
+      if (historial.length === 0) {
+        const prevTexto = repliedMsg.embeds?.[0]?.description || repliedMsg.content;
+        if (prevTexto) {
+          historial.push({ role: "assistant", content: prevTexto.slice(0, 1000) });
+        }
+      }
+
       historial.push({ role: "user", content: pregunta });
 
       const respuesta = await generateChatReply(historial);
@@ -72,16 +82,15 @@ const event = {
       }
       setConversacion(message.author.id, historialFinal, botMsg.id);
     } catch (err) {
-      const isRateLimit = err?.status === 429 || err?.message?.includes("429");
-      if (isRateLimit) {
-        log.warn("messageCreate IA: límite de tasa alcanzado", { err: err.message });
-        await message.reply({
-          content: "Se acabaron los tokens",
-          allowedMentions: { repliedUser: false },
-        }).catch(() => {});
-      } else {
-        log.error("messageCreate IA", { err: err.message });
-      }
+      log.error("messageCreate IA", { err: err?.message ?? String(err) });
+      const isRateLimit = err?.status === 429 || (err?.message ?? "").includes("429");
+      const errorMsg = isRateLimit
+        ? "Se agotó el límite de consultas de la IA por ahora. Intenta en unos minutos."
+        : "Ocurrió un error al procesar tu respuesta con la IA.";
+      await message.reply({
+        content: errorMsg,
+        allowedMentions: SAFE_MENTIONS,
+      }).catch(() => {});
     }
   },
 };
