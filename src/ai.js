@@ -1,6 +1,12 @@
 const { GoogleGenAI } = require("@google/genai");
 const Logger = require("./logger");
-const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_CHAT, AI_MODEL_FAST } = require("./config");
+const {
+  MAX_HISTORIAL,
+  SYSTEM_PROMPT,
+  AI_MODEL_CHAT,
+  AI_MODEL_CHAT_FALLBACK,
+  AI_MODEL_FAST,
+} = require("./config");
 const { wait } = require("./runtime");
 
 const log = new Logger("AI_SERVICE", process.env.LOG_LEVEL);
@@ -39,7 +45,14 @@ function isRetriableAIError(err) {
   if (status === 429) return true;
   if (status >= 500) return true;
   const msg = (err?.message ?? "").toLowerCase();
-  return msg.includes("timeout") || msg.includes("timed out") || msg.includes("econnreset");
+  return (
+    msg.includes("timeout") ||
+    msg.includes("timed out") ||
+    msg.includes("econnreset") ||
+    msg.includes("unavailable") ||
+    msg.includes("high demand") ||
+    msg.includes("overloaded")
+  );
 }
 
 async function withAITimeout(promise, timeoutMs) {
@@ -64,15 +77,31 @@ async function generateWithFallback(params, options = {}) {
 
   const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : DEFAULT_TIMEOUT_MS;
   const maxAttempts = Math.max(1, Number.isFinite(options.maxAttempts) ? options.maxAttempts : DEFAULT_ATTEMPTS);
+  const fallbackModel = options.fallbackModel || null;
 
+  let requestParams = { ...params };
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await withAITimeout(getAI().models.generateContent(params), timeoutMs);
+      return await withAITimeout(getAI().models.generateContent(requestParams), timeoutMs);
     } catch (err) {
       lastErr = err;
       const status = Number(err?.status ?? err?.code ?? 0);
       const is429 = status === 429 || (err?.message ?? "").includes("429");
+      const isOverloaded =
+        status === 503 ||
+        (err?.message ?? "").includes("503") ||
+        (err?.message ?? "").includes("UNAVAILABLE") ||
+        (err?.message ?? "").includes("high demand") ||
+        (err?.message ?? "").includes("overloaded");
+
+      // Si el modelo actual está saturado (503/high demand) o con 429 y tenemos fallbackModel, alternamos inmediatamente
+      if (fallbackModel && (isOverloaded || is429) && requestParams.model !== fallbackModel) {
+        log.warn(`Modelo ${requestParams.model} con sobrecarga/límite; alternando a fallback: ${fallbackModel}`);
+        requestParams.model = fallbackModel;
+        continue;
+      }
+
       const canRotate = is429 && GEMINI_KEYS.length > 1;
       const canRetry = attempt < maxAttempts && (canRotate || isRetriableAIError(err));
 
@@ -168,10 +197,13 @@ async function generateChatReply(historial) {
     ...toGeminiHistory(historial),
   ];
 
-  const response = await generateWithFallback({
-    model: AI_MODEL_CHAT,
-    contents,
-  });
+  const response = await generateWithFallback(
+    {
+      model: AI_MODEL_CHAT,
+      contents,
+    },
+    { fallbackModel: AI_MODEL_CHAT_FALLBACK }
+  );
 
   return response.text?.trim() || "No pude generar una respuesta";
 }

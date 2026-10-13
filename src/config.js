@@ -52,11 +52,18 @@ const dbOptions = {
 const MAX_HISTORIAL = 10;
 const MAX_EMBED_DESCRIPTION = 4096;
 
-// Asignación estratégica de modelos: usando gemini-3.5-flash-lite (500 RPD, 15 RPM)
-// Evita los topes estrictos de 20 RPD y los errores 503 por sobrecarga de gemini-3.8-flash.
-const AI_MODEL_CHAT = "gemini-3.5-flash-lite";     // Soporta Google Search Grounding y chat conversacional
-const AI_MODEL_VISION = "gemini-3.5-flash-lite";   // Visión multimodal estable y rápida
-const AI_MODEL_FAST = "gemini-3.5-flash-lite";     // Resúmenes y personalidad /fun
+// Asignación estratégica de modelos:
+// - Gemma 4 31B (14,400 RPD, 30 RPM): Puro texto, sin saturación ni spikes de 503 (/fun, /util resume).
+// - Gemini 3.1 Flash Lite (500 RPD, 15 RPM): Visión multimodal y chat conversacional con web search.
+const AI_MODEL_FAST = "gemma-4-31b-it";
+const AI_MODEL_FAST_FALLBACK = "gemini-3.1-flash-lite";
+
+const AI_MODEL_CHAT = "gemini-3.1-flash-lite";
+const AI_MODEL_CHAT_FALLBACK = "gemma-4-31b-it";
+
+const AI_MODEL_VISION = "gemini-3.1-flash-lite";
+const AI_MODEL_VISION_FALLBACK = "gemini-3.5-flash-lite";
+
 const AI_MODEL_DEFAULT = AI_MODEL_FAST;
 const AI_MODEL_SEARCH = AI_MODEL_CHAT;
 
@@ -82,8 +89,11 @@ module.exports = {
   MAX_HISTORIAL,
   MAX_EMBED_DESCRIPTION,
   AI_MODEL_CHAT,
+  AI_MODEL_CHAT_FALLBACK,
   AI_MODEL_VISION,
+  AI_MODEL_VISION_FALLBACK,
   AI_MODEL_FAST,
+  AI_MODEL_FAST_FALLBACK,
   AI_MODEL_DEFAULT,
   AI_MODEL_SEARCH,
   COMMANDS_TO_UPDATE,
