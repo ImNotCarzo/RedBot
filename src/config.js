@@ -52,10 +52,11 @@ const dbOptions = {
 const MAX_HISTORIAL = 10;
 const MAX_EMBED_DESCRIPTION = 4096;
 
-// Asignación estratégica de modelos según capacidad y cuotas
-const AI_MODEL_CHAT = "gemini-3.8-flash";       // Máxima inteligencia + Google Search en vivo (/ask y chat)
-const AI_MODEL_VISION = "gemini-3.8-flash";     // Multimodal de alta fidelidad (/util describe y roast)
-const AI_MODEL_FAST = "gemini-3.5-flash-lite";   // Baja latencia y alta cuota (/util resume y /fun)
+// Asignación estratégica de modelos: usando gemini-3.5-flash-lite (500 RPD, 15 RPM)
+// Evita los topes estrictos de 20 RPD y los errores 503 por sobrecarga de gemini-3.8-flash.
+const AI_MODEL_CHAT = "gemini-3.5-flash-lite";     // Soporta Google Search Grounding y chat conversacional
+const AI_MODEL_VISION = "gemini-3.5-flash-lite";   // Visión multimodal estable y rápida
+const AI_MODEL_FAST = "gemini-3.5-flash-lite";     // Resúmenes y personalidad /fun
 const AI_MODEL_DEFAULT = AI_MODEL_FAST;
 const AI_MODEL_SEARCH = AI_MODEL_CHAT;
 

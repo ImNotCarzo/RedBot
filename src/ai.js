@@ -1,6 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const Logger = require("./logger");
-const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_CHAT } = require("./config");
+const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_CHAT, AI_MODEL_FAST } = require("./config");
 const { wait } = require("./runtime");
 
 const log = new Logger("AI_SERVICE", process.env.LOG_LEVEL);
@@ -103,18 +103,32 @@ function toGeminiHistory(history) {
     }));
 }
 
-/** Respuesta de chat con persona + historial + Google Search. Usada por /ask y por las respuestas encadenadas. */
+/** Respuesta de chat con persona + historial + Google Search. Si falla la búsqueda, responde sin herramientas. */
 async function generateChatReply(historial) {
-  const response = await generateWithFallback({
-    model: AI_MODEL_CHAT,
-    contents: [
-      { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-      { role: "model", parts: [{ text: "Entendido." }] },
-      ...toGeminiHistory(historial),
-    ],
-    config: { tools: [{ googleSearch: {} }] },
-  });
-  return response.text?.trim() || "No pude generar una respuesta";
+  const contents = [
+    { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
+    { role: "model", parts: [{ text: "Entendido." }] },
+    ...toGeminiHistory(historial),
+  ];
+
+  try {
+    const response = await generateWithFallback({
+      model: AI_MODEL_CHAT,
+      contents,
+      config: { tools: [{ googleSearch: {} }] },
+    });
+    return response.text?.trim() || "No pude generar una respuesta";
+  } catch (err) {
+    log.warn("Error en chat con búsqueda web; intentando sin herramientas", {
+      err: err?.message ?? String(err),
+    });
+
+    const response = await generateWithFallback({
+      model: AI_MODEL_CHAT,
+      contents,
+    });
+    return response.text?.trim() || "No pude generar una respuesta";
+  }
 }
 
 function assertUserId(userId) {
