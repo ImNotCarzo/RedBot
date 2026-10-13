@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const COLOR = "#ff383d";
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -21,7 +21,7 @@ const data = {
               `\n\n**Aliases:**\n\`describir\`` +
               `\n\n\`\`\`js\n.describe <adjunto>\nEjemplo: .describe <Subeunaimagenwe.png> \`\`\``
             )
-            .setColor(COLOR),
+            .setColor(RED),
         ],
       });
     },

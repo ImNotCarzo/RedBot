@@ -7,15 +7,26 @@ const { Errors } = require("gralonium");
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 
 const PREFIXED_TO_SLASH_MAP = {
+  admin: "admin",
+  avatar: "user/avatar",
+  banner: "server/banner",
+  botinfo: "util/botinfo",
   channel: "channel/info",
   channelinfo: "channel/info",
   channelclone: "channel/clone",
   channelunlock: "channel/unlock",
+  clone: "channel/clone",
+  color: "role/color",
+  dmall: "util/dm",
+  emojis: "server/emojis",
+  logo: "server/logo",
+  permissions: "role/permissions",
   rename: "channel/rename",
   role: "role/info",
   roleadd: "role/add",
   roleall: "role/all",
   rolebots: "role/bots",
+  rolecolor: "role/color",
   rolehoist: "role/hoist",
   rolehumans: "role/humans",
   roleicon: "role/icon",
@@ -30,9 +41,12 @@ const PREFIXED_TO_SLASH_MAP = {
   server: "server/info",
   serverroles: "server/roles",
   serverbanner: "server/banner",
+  serverlogo: "server/logo",
   sroles: "server/roles",
   ubanner: "user/banner",
+  unlock: "channel/unlock",
   user: "user/info",
+  useravatar: "user/avatar",
   userbanner: "user/banner",
   uroles: "user/roles",
   userperms: "user/permissions",
@@ -127,7 +141,7 @@ async function resolveChannelFlexible(ctx, input) {
   return ctx.guild.channels.cache.find((c) => c.name?.toLowerCase?.().includes(lower)) ?? null;
 }
 
-function buildAttachmentFromUrl(input) {
+function buildAttachmentFromUrl(input, paramName = "") {
   if (!input || !/^https?:\/\//i.test(input)) return null;
 
   const name = input.split("/").pop()?.split("?")[0] ?? "archivo";
@@ -135,18 +149,23 @@ function buildAttachmentFromUrl(input) {
   const imageTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
   const audioTypes = { mp3: "audio/mpeg", mp4: "video/mp4", wav: "audio/wav", ogg: "audio/ogg", webm: "video/webm", m4a: "audio/mp4", flac: "audio/flac" };
 
+  let contentType = imageTypes[ext] ?? audioTypes[ext] ?? null;
+  if (!contentType) {
+    contentType = paramName === "audio" ? "audio/mpeg" : "image/png";
+  }
+
   return {
     name,
     url: input,
-    contentType: imageTypes[ext] ?? audioTypes[ext] ?? null,
+    contentType,
     size: 0,
   };
 }
 
-function resolveAttachmentInput(ctx, input) {
+function resolveAttachmentInput(ctx, input, paramName = "") {
   const attached = ctx.message?.attachments?.first?.();
   if (attached) return attached;
-  return buildAttachmentFromUrl(input);
+  return buildAttachmentFromUrl(input, paramName);
 }
 
 async function getReferencedMessage(ctx) {
@@ -197,7 +216,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         if (value) args.shift();
       }
     } else if (def.type === 11) {
-      value = resolveAttachmentInput(ctx, token);
+      value = resolveAttachmentInput(ctx, token, def.name);
       if (!value) {
         value = replyMsg?.attachments?.values()?.next()?.value ?? null;
       }

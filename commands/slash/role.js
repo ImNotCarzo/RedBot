@@ -191,7 +191,9 @@ const data = {
       if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     if (!ctx.guild) return noGuildReply(ctx);
 
-    await ctx.guild.members.fetch();
+    if (ctx.guild.memberCount < 500 && ctx.guild.members.cache.size !== ctx.guild.memberCount) {
+      await ctx.guild.members.fetch().catch(() => {});
+    }
 
     const role = ctx.get("rol");
     if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });

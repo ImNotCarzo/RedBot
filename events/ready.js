@@ -71,6 +71,10 @@ async function syncSlashAndContexts(client) {
     setId(cmd.name, cmd.id);
     if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
 
+    const hasIntegrationTypes = cmd.integration_types?.includes(0) && cmd.integration_types?.includes(1);
+    const hasContexts = cmd.contexts?.includes(0) && cmd.contexts?.includes(1) && cmd.contexts?.includes(2);
+    if (hasIntegrationTypes && hasContexts) continue;
+
     try {
       await runWithRetry(
         () => withTimeout(

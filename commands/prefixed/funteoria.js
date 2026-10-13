@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const COLOR = "#ff383d";
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -21,7 +21,7 @@ const data = {
               `\n\n**Aliases:**\n\`conspira\`, \`conspiracion\`, \`theory\`` +
               `\n\n\`\`\`js\n.teoria <tema>\nEjemplo: .teoria las palomas son drones\`\`\``
             )
-            .setColor(COLOR),
+            .setColor(RED),
         ],
       });
     },

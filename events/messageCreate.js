@@ -4,6 +4,7 @@ const {
   getConversacion,
   generateChatReply,
 } = require("../src/ai");
+const { getPrefix, DEFAULT_PREFIX } = require("../src/guild");
 const Logger = require("../src/logger");
 const {
   MAX_HISTORIAL,
@@ -23,6 +24,13 @@ const event = {
       if (message.author.bot) return;
       if (!message.reference?.messageId) return;
 
+      const pregunta = message.content?.trim();
+      if (!pregunta) return;
+
+      // Evitar conflicto si el usuario está ejecutando un comando con prefijo mientras hace reply
+      const prefix = message.guildId ? await getPrefix(message.guildId) : DEFAULT_PREFIX;
+      if (pregunta.startsWith(prefix)) return;
+
       const repliedMsg =
         message.channel.messages.cache.get(message.reference.messageId) ??
         (await message.channel.messages.fetch(message.reference.messageId).catch(() => null));
@@ -30,8 +38,8 @@ const event = {
       // Solo procesar si el mensaje al que se responde es de este bot
       if (!repliedMsg || repliedMsg.author.id !== _bot.user.id) return;
 
-      const pregunta = message.content.trim();
-      if (!pregunta) return;
+      // Ignorar replies a embeds interactivos de menús (como /help, /user info, /server info) que tienen componentes activos
+      if (repliedMsg.components?.length > 0 && !repliedMsg.embeds?.[0]?.author) return;
 
       await message.channel.sendTyping().catch(() => {});
 
@@ -40,11 +48,17 @@ const event = {
         ? [...userData.historial.slice(-MAX_HISTORIAL)]
         : [];
 
-      // Si no había sesión activa (por reinicio o expiración de TTL), reconstruimos el contexto con el mensaje previo del bot
-      if (historial.length === 0) {
-        const prevTexto = repliedMsg.embeds?.[0]?.description || repliedMsg.content;
-        if (prevTexto) {
-          historial.push({ role: "assistant", content: prevTexto.slice(0, 1000) });
+      // Si no había sesión activa o el usuario responde a un mensaje distinto al último guardado,
+      // inyectamos el texto del mensaje respondido para que la IA sepa exactamente de qué le hablan
+      const prevTexto = repliedMsg.embeds?.[0]?.description || repliedMsg.content;
+      if (prevTexto) {
+        const cleanPrev = prevTexto.slice(0, 1200);
+        const alreadyInHistory = historial.some(
+          (m) => m.role === "assistant" && m.content.includes(cleanPrev.slice(0, 80))
+        );
+        if (!alreadyInHistory) {
+          historial.push({ role: "user", content: "(Continuación sobre tu mensaje anterior)" });
+          historial.push({ role: "assistant", content: cleanPrev });
         }
       }
 
@@ -80,6 +94,7 @@ const event = {
           throw sendErr;
         }
       }
+
       setConversacion(message.author.id, historialFinal, botMsg.id);
     } catch (err) {
       log.error("messageCreate IA", { err: err?.message ?? String(err) });
@@ -87,6 +102,7 @@ const event = {
       const errorMsg = isRateLimit
         ? "Se agotó el límite de consultas de la IA por ahora. Intenta en unos minutos."
         : "Ocurrió un error al procesar tu respuesta con la IA.";
+
       await message.reply({
         content: errorMsg,
         allowedMentions: SAFE_MENTIONS,

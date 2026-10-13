@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const RED  = "#ff383d";
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({

@@ -108,10 +108,22 @@ async function setPrefix(guildId, prefix) {
   return normalized;
 }
 
+const logChannelCacheStore = new Map();
+const LOG_CACHE_TTL_MS = 15 * 60 * 1000;
+
 async function getLogChannelId(guildId) {
   assertGuildId(guildId);
+  const cached = logChannelCacheStore.get(guildId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.channelId;
+  }
   const doc = await Log.findOne({ guildId }).lean();
-  return doc?.channelId ?? null;
+  const channelId = doc?.channelId ?? null;
+  logChannelCacheStore.set(guildId, {
+    channelId,
+    expiresAt: Date.now() + LOG_CACHE_TTL_MS,
+  });
+  return channelId;
 }
 
 async function setLogChannel(guildId, channelId) {
@@ -122,18 +134,27 @@ async function setLogChannel(guildId, channelId) {
     { channelId },
     { upsert: true, setDefaultsOnInsert: true }
   );
+  logChannelCacheStore.set(guildId, {
+    channelId,
+    expiresAt: Date.now() + LOG_CACHE_TTL_MS,
+  });
   return channelId;
 }
 
 async function clearLogChannel(guildId) {
   assertGuildId(guildId);
   const removed = await Log.findOneAndDelete({ guildId });
+  logChannelCacheStore.set(guildId, {
+    channelId: null,
+    expiresAt: Date.now() + LOG_CACHE_TTL_MS,
+  });
   return Boolean(removed);
 }
 
 async function cleanupBrokenLogChannel(guildId) {
   assertGuildId(guildId);
   await Log.deleteOne({ guildId });
+  logChannelCacheStore.delete(guildId);
 }
 
 async function sendLog(guild, embed, context = {}) {

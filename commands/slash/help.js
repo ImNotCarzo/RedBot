@@ -57,6 +57,7 @@ const getCommands = () => ({
     describe:  { short: "describe",  slash: "util describe",  id: IDS.util(), usage: ".describe <url | adjunto>",  aliases: ["describir"],                    description: "Describe el contenido de una imagen." },
     transcribe:{ short: "transcribe",slash: "util transcribe",id: IDS.util(), usage: ".transcribe <url | adjunto>",aliases: ["transcribir"],                  description: "Transcribe un audio o video a texto." },
     resumir:   { short: "resume",   slash: "util resume",   id: IDS.util(), usage: ".resume <texto>",           aliases: ["resumir", "summarize"],          description: "Resume un texto largo de 100 caracteres o más." },
+    dm:        { short: "dmall",    slash: "util dm",       id: IDS.util(), usage: ".dmall <mensaje>",          aliases: ["dm"],                            description: "Envía un mensaje privado a miembros del servidor." },
   },
   usuario: {
     info:        { short: "user",   slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",   aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
@@ -124,6 +125,7 @@ const getCommands = () => ({
     excusa:  { short: "excusa",  slash: "fun excusa",  id: IDS.fun(), usage: ".excusa [situacion]",aliases: ["coartada"],    description: "Genera una excusa ridícula pero creativa." },
     teoria:  { short: "teoria",  slash: "fun teoria",  id: IDS.fun(), usage: ".teoria <tema>",   aliases: ["conspira"],      description: "Una teoría conspirativa sobre cualquier cosa." },
     roast:   { short: "roast",   slash: "fun roast",   id: IDS.fun(), usage: ".roast [@usuario]", aliases: ["burn"],         description: "Critica despiadadamente a un usuario." },
+    lol:     { short: "lol",     slash: "fun lol",     id: IDS.fun(), usage: ".lol",              aliases: [],                description: "Ríete de algo así bien jaja." },
   },
 });
 

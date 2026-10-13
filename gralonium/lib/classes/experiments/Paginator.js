@@ -58,7 +58,7 @@ class Paginator {
   static Buttons(options) {
     const nextButton = new discord_js_1.ButtonBuilder()
       .setCustomId("continueButton")
-      .setStyle(options?.previous?.style || discord_js_1.ButtonStyle.Primary)
+      .setStyle(options?.next?.style || discord_js_1.ButtonStyle.Primary)
       .setLabel(options?.next?.label || "Next");
 
     const previousButton = new discord_js_1.ButtonBuilder()

@@ -1,6 +1,6 @@
 const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const COLOR = "#ff383d";
+const { RED } = require("../../utils/colors");
 
 const data = {
   data: new CommandBuilder({
@@ -21,7 +21,7 @@ const data = {
               `\n\n**Aliases:**\n\`resumir\`, \`summarize\`` +
               `\n\n\`\`\`js\n.resume <texto>\nEjemplo: .resume en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...\`\`\``
             )
-            .setColor(COLOR),
+            .setColor(RED),
         ],
       });
     },
