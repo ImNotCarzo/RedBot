@@ -14,6 +14,17 @@ function is(err, Type) {
   }
 }
 
+function isDiscordPermError(err) {
+  return (
+    err?.code === 50013 ||
+    err?.code === 50006 ||
+    (typeof err?.message === "string" && (
+      err.message.includes("Missing Permissions") ||
+      err.message.includes("Cannot send an empty message")
+    ))
+  );
+}
+
 function resolveMissingBotPermissions(ctx, err, client) {
   const missing = [];
   if (err?.permissions && Array.isArray(err.permissions)) {
@@ -34,15 +45,7 @@ function resolveMissingBotPermissions(ctx, err, client) {
     }
   }
 
-  const isDiscordPermError =
-    err?.code === 50013 ||
-    err?.code === 50006 ||
-    (typeof err?.message === "string" && (
-      err.message.includes("Missing Permissions") ||
-      err.message.includes("Cannot send an empty message")
-    ));
-
-  if (!missing.length && isDiscordPermError) {
+  if (!missing.length && isDiscordPermError(err)) {
     missing.push("EmbedLinks");
   }
 
@@ -107,18 +110,10 @@ const event = {
       return safeSend(`No tienes permisos para usar este comando, necesitas: \`${permisos}\``);
     }
 
-    const isDiscordPermError =
-      err?.code === 50013 ||
-      err?.code === 50006 ||
-      (typeof err?.message === "string" && (
-        err.message.includes("Missing Permissions") ||
-        err.message.includes("Cannot send an empty message")
-      ));
-
     if (
       is(err, Errors.MissingBotPermission) ||
       is(err, Errors.MissingBotChannelPermission) ||
-      isDiscordPermError
+      isDiscordPermError(err)
     ) {
       const missing = resolveMissingBotPermissions(ctx, err, _client);
       const permisos = missing.length ? missing.join(", ") : "los requeridos";

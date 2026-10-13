@@ -5,6 +5,10 @@ const {
   SYSTEM_PROMPT,
   AI_MODEL_CHAT,
   AI_MODEL_CHAT_FALLBACK,
+  AI_MODEL_FAST,
+  AI_MODEL_FAST_FALLBACK,
+  AI_MODEL_VISION,
+  AI_MODEL_VISION_FALLBACK,
 } = require("./config");
 const { wait } = require("./runtime");
 
@@ -402,10 +406,62 @@ function deleteConversacion(userId) {
   sessions.delete(userId);
 }
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+async function fetchImageAsInlineData(url, timeoutMs = 10_000) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status})`);
+
+  const declared = Number(res.headers.get("content-length") ?? 0);
+  if (declared > MAX_IMAGE_BYTES) throw new Error("La imagen supera el tamaño máximo permitido");
+
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength > MAX_IMAGE_BYTES) throw new Error("La imagen supera el tamaño máximo permitido");
+
+  return {
+    inlineData: {
+      mimeType: (res.headers.get("content-type") || "image/png").split(";")[0].trim(),
+      data: Buffer.from(buf).toString("base64"),
+    },
+  };
+}
+
+async function generateText(prompt, systemInstruction = undefined) {
+  const response = await generateWithFallback(
+    {
+      model: AI_MODEL_FAST,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.9,
+        ...(systemInstruction ? { systemInstruction } : {}),
+      },
+    },
+    { fallbackModel: AI_MODEL_FAST_FALLBACK }
+  );
+  return response.text?.trim() || null;
+}
+
+async function generateVision(prompt, imageUrl) {
+  const imagePart = await fetchImageAsInlineData(imageUrl);
+  const response = await generateWithFallback(
+    {
+      model: AI_MODEL_VISION,
+      contents: [{ role: "user", parts: [{ text: prompt }, imagePart] }],
+      config: { temperature: 1.0 },
+    },
+    { fallbackModel: AI_MODEL_VISION_FALLBACK }
+  );
+  return response.text?.trim() || null;
+}
+
 module.exports = {
   getAI,
   generateWithFallback,
   generateChatReply,
+  generateText,
+  generateVision,
+  fetchImageAsInlineData,
   toGeminiHistory,
   setConversacion,
   getConversacion,

@@ -2,7 +2,7 @@ const { CommandBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("../../utils/colors");
 const { sendLog } = require("../../src/guild");
-const { broadcastDm, buildDmAllEmbed, buildDmAllLogEmbed } = require("../_shared/dmall");
+const { broadcastDm, buildDmAllEmbed, buildDmAllLogEmbed } = require("../_shared/runtime");
 
 // ─────────────────────────────────────────────
 //  HELPERS

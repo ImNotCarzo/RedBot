@@ -6,8 +6,6 @@ const { createCommandLogger, noGuildReply, uniqueId, handleCommandError, failWit
 
 const log = createCommandLogger("CMD_CHANNEL");
 
-
-
 function formatSlowmode(seconds) {
   if (seconds === 0)    return "desactivado";
   if (seconds < 60)     return `${seconds}s`;
@@ -53,8 +51,8 @@ const data = {
   })
 
   // ── INFO ──────────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
+  .addCommand({
+    data: new CommandBuilder({
     name: "info",
     description: "Muestra información de un canal",
   }),
@@ -307,8 +305,8 @@ const data = {
   })
 
   // ── NUKE ──────────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
+  .addCommand({
+    data: new CommandBuilder({
     name: "nuke",
     description: "Recrea el canal borrando todos sus mensajes",
   }),
@@ -359,9 +357,9 @@ const data = {
     });
 
     const collector = msg.createMessageComponentCollector({
-  time: 5 * 60 * 1000,
-  filter: (i) => [confirmId, cancelId].includes(i.customId),
-});
+      time: 5 * 60 * 1000,
+      filter: (i) => [confirmId, cancelId].includes(i.customId),
+    });
 
     collector.on("collect", async (interaction) => {
       if (interaction.user.id !== authorId) {

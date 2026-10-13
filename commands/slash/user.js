@@ -21,12 +21,7 @@ const { resolveMemberFlexible } = require("../../src/adapter");
 const { RED, DARK } = require("../../utils/colors");
 
 const log = createCommandLogger("CMD_USER");
-
-
-
-async function resolveMember(ctx, input) {
-  return resolveMemberFlexible(ctx, input);
-}
+const resolveMember = resolveMemberFlexible;
 
 async function resolveUser(ctx, input) {
   const invoker = ctx.user ?? ctx.author;

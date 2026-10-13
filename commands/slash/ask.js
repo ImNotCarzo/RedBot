@@ -10,7 +10,6 @@ const {
   editThinkingReply,
 } = require("../_shared/runtime");
 
-
 const log = createCommandLogger("CMD_ASK");
 
 const data = {

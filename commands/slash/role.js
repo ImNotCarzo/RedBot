@@ -21,9 +21,7 @@ const log = createCommandLogger("CMD_ROLE");
 // ─────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────
- 
 
- 
 function roleHierarchyCheck(ctx, role) {
   if (!ctx.guild) return "Este comando solo funciona en servidores";
   if (!role) return "Rol no encontrado";

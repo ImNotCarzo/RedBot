@@ -65,9 +65,6 @@ const AI_MODEL_CHAT_FALLBACK = "gemini-3.5-flash-lite";
 const AI_MODEL_VISION = "gemini-3.1-flash-lite";
 const AI_MODEL_VISION_FALLBACK = "gemini-3.5-flash-lite";
 
-const AI_MODEL_DEFAULT = AI_MODEL_FAST;
-const AI_MODEL_SEARCH = AI_MODEL_CHAT;
-
 const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
@@ -95,8 +92,6 @@ module.exports = {
   AI_MODEL_VISION_FALLBACK,
   AI_MODEL_FAST,
   AI_MODEL_FAST_FALLBACK,
-  AI_MODEL_DEFAULT,
-  AI_MODEL_SEARCH,
   COMMANDS_TO_UPDATE,
   SYSTEM_PROMPT,
 };

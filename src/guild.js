@@ -8,61 +8,35 @@ const PREFIX_QUERY_TIMEOUT_MS = parsePositiveInt(process.env.PREFIX_QUERY_TIMEOU
 const PREFIX_CACHE_MAX = 2000;
 const PREFIX_CACHE_TTL_MS = 30 * 60 * 1000;
 
-const prefixCacheStore = new Map();
-const log = new Logger("GUILD_LOG", process.env.LOG_LEVEL);
-
-function isExpired(entry) {
-  return !entry || entry.expiresAt <= Date.now();
-}
-
-function prunePrefixCache() {
-  for (const [key, entry] of prefixCacheStore.entries()) {
-    if (isExpired(entry)) prefixCacheStore.delete(key);
-  }
-}
-
-function evictPrefixCache() {
-  prunePrefixCache();
-  while (prefixCacheStore.size >= PREFIX_CACHE_MAX) {
-    const oldestKey = prefixCacheStore.keys().next().value;
-    if (!oldestKey) break;
-    prefixCacheStore.delete(oldestKey);
-  }
-}
-
 const prefixCache = {
+  store: new Map(),
   get(key) {
-    const entry = prefixCacheStore.get(key);
+    const entry = this.store.get(key);
     if (!entry) return undefined;
-    if (isExpired(entry)) {
-      prefixCacheStore.delete(key);
+    if (entry.expiresAt <= Date.now()) {
+      this.store.delete(key);
       return undefined;
     }
-    prefixCacheStore.delete(key);
-    prefixCacheStore.set(key, entry);
     return entry.value;
   },
   has(key) {
-    return prefixCache.get(key) !== undefined;
+    return this.get(key) !== undefined;
   },
   set(key, value) {
-    evictPrefixCache();
-    prefixCacheStore.set(key, { value, expiresAt: Date.now() + PREFIX_CACHE_TTL_MS });
+    if (this.store.size >= PREFIX_CACHE_MAX) {
+      const oldest = this.store.keys().next().value;
+      if (oldest) this.store.delete(oldest);
+    }
+    this.store.set(key, { value, expiresAt: Date.now() + PREFIX_CACHE_TTL_MS });
   },
   delete(key) {
-    return prefixCacheStore.delete(key);
+    return this.store.delete(key);
   },
 };
 
-function assertGuildId(guildId) {
-  if (!guildId || typeof guildId !== "string") {
-    throw new TypeError("guildId inválido");
-  }
-}
-
-function assertChannelId(channelId) {
-  if (!channelId || typeof channelId !== "string") {
-    throw new TypeError("channelId inválido");
+function assertSnowflake(value, field) {
+  if (!value || typeof value !== "string") {
+    throw new TypeError(`${field} inválido`);
   }
 }
 
@@ -75,8 +49,9 @@ function normalizePrefix(prefix) {
 }
 
 async function getPrefix(guildId) {
-  assertGuildId(guildId);
-  if (prefixCache.has(guildId)) return prefixCache.get(guildId);
+  assertSnowflake(guildId, "guildId");
+  const cached = prefixCache.get(guildId);
+  if (cached !== undefined) return cached;
   try {
     const doc = await withTimeout(
       GuildConfig.findOne({ guildId }).lean(),
@@ -93,7 +68,7 @@ async function getPrefix(guildId) {
 }
 
 async function setPrefix(guildId, prefix) {
-  assertGuildId(guildId);
+  assertSnowflake(guildId, "guildId");
   const normalized = normalizePrefix(prefix);
   await withTimeout(
     GuildConfig.findOneAndUpdate(
@@ -112,7 +87,7 @@ const logChannelCacheStore = new Map();
 const LOG_CACHE_TTL_MS = 15 * 60 * 1000;
 
 async function getLogChannelId(guildId) {
-  assertGuildId(guildId);
+  assertSnowflake(guildId, "guildId");
   const cached = logChannelCacheStore.get(guildId);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.channelId;
@@ -127,8 +102,8 @@ async function getLogChannelId(guildId) {
 }
 
 async function setLogChannel(guildId, channelId) {
-  assertGuildId(guildId);
-  assertChannelId(channelId);
+  assertSnowflake(guildId, "guildId");
+  assertSnowflake(channelId, "channelId");
   await Log.findOneAndUpdate(
     { guildId },
     { channelId },
@@ -142,7 +117,7 @@ async function setLogChannel(guildId, channelId) {
 }
 
 async function clearLogChannel(guildId) {
-  assertGuildId(guildId);
+  assertSnowflake(guildId, "guildId");
   const removed = await Log.findOneAndDelete({ guildId });
   logChannelCacheStore.set(guildId, {
     channelId: null,
@@ -152,7 +127,7 @@ async function clearLogChannel(guildId) {
 }
 
 async function cleanupBrokenLogChannel(guildId) {
-  assertGuildId(guildId);
+  assertSnowflake(guildId, "guildId");
   await Log.deleteOne({ guildId });
   logChannelCacheStore.delete(guildId);
 }

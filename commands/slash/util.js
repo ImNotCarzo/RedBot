@@ -1,6 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { deleteConversacion } = require("../../src/ai");
+const { deleteConversacion, generateText, generateVision } = require("../../src/ai");
 const { RED, GREEN } = require("../../utils/colors");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
 const {
@@ -12,10 +12,10 @@ const {
   sendThinkingReply,
   INVITE_URL,
   SUPPORT_URL,
+  broadcastDm,
+  buildDmAllEmbed,
+  buildDmAllLogEmbed,
 } = require("../_shared/runtime");
-const { generateText, generateVision } = require("../_shared/ai");
-
-const { broadcastDm, buildDmAllEmbed, buildDmAllLogEmbed } = require("../_shared/dmall");
 const { version: botVersion } = require("../../package.json");
 
 let graloniumVersion = "0.2.0";
@@ -392,14 +392,12 @@ const data = {
   })
 
 
-    // DMALL
-
-   .addCommand({
+  // ── DMALL ─────────────────────────────────────
+  .addCommand({
     data: new CommandBuilder({
       name: "dm",
       description: "Envía un DM con embed a todos los miembros del servidor",
     }),
- 
     params: new ParamsBuilder()
       .addString({
         name: "titulo",

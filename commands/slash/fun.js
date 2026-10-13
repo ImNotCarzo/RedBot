@@ -1,7 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const { createCommandLogger, prepareReply, noGuildReply, handleCommandError } = require("../_shared/runtime");
-const { generateText, generateVision } = require("../_shared/ai");
+const { generateText, generateVision } = require("../../src/ai");
 
 // ─────────────────────────────────────────────
 //  CONSTANTS
@@ -119,8 +119,8 @@ const data = {
   })
 
   // ── EXCUSA ────────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
+  .addCommand({
+    data: new CommandBuilder({
     name: "excusa",
     description: "Genera una excusa ridícula pero creativa",
   }),
