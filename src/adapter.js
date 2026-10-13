@@ -1,7 +1,6 @@
 const path = require("path");
 const fs = require("fs");
 const { isPromise } = require("util/types");
-const { PermissionFlagsBits } = require("discord.js");
 const { Errors } = require("gralonium");
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
@@ -11,10 +10,7 @@ const PREFIXED_TO_SLASH_MAP = {
   avatar: "user/avatar",
   banner: "server/banner",
   botinfo: "util/botinfo",
-  channel: "channel/info",
   channelinfo: "channel/info",
-  channelclone: "channel/clone",
-  channelunlock: "channel/unlock",
   clone: "channel/clone",
   color: "role/color",
   dmall: "util/dm",
@@ -39,22 +35,17 @@ const PREFIXED_TO_SLASH_MAP = {
   roleusers: "role/users",
   roleperms: "role/permissions",
   server: "server/info",
-  serverroles: "server/roles",
   serverbanner: "server/banner",
-  serverlogo: "server/logo",
-  sroles: "server/roles",
   ubanner: "user/banner",
   unlock: "channel/unlock",
   user: "user/info",
   useravatar: "user/avatar",
-  userbanner: "user/banner",
   uroles: "user/roles",
   userperms: "user/permissions",
 };
 
 const wrappedOriginalCodes = new WeakSet();
 const slashCommandMap = new Map();
-const inferredPermissionsCache = new Map();
 
 function normalizeReplyPayload(payload) {
   if (typeof payload === "string") return { content: payload };
@@ -65,7 +56,6 @@ function normalizeReplyPayload(payload) {
 
 async function resolveMember(ctx, input) {
   if (!ctx?.guild || !input) return null;
-
   if (ctx.message?.mentions?.members?.size) {
     return ctx.message.mentions.members.first() ?? null;
   }
@@ -77,8 +67,7 @@ async function resolveMember(ctx, input) {
   }
 
   const byQuery = await ctx.guild.members.fetch({ query: token, limit: 1 }).catch(() => null);
-  if (byQuery?.size) return byQuery.first();
-  return null;
+  return byQuery?.first() ?? null;
 }
 
 async function resolveMemberFlexible(ctx, input) {
@@ -94,10 +83,8 @@ async function resolveMemberFlexible(ctx, input) {
   const idMatch = token.match(/^<@!?(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(token) ? token : null);
   if (idMatch) {
     const client = ctx.guild?.client ?? ctx.bot?.client ?? ctx.client ?? ctx.message?.client;
-    if (client?.users?.fetch) {
-      const user = await client.users.fetch(idMatch).catch(() => null);
-      if (user) return user;
-    }
+    const user = await client?.users?.fetch?.(idMatch).catch(() => null);
+    if (user) return user;
   }
 
   if (!ctx?.guild) return null;
@@ -114,9 +101,7 @@ async function resolveMemberFlexible(ctx, input) {
 async function resolveRoleFlexible(ctx, input) {
   if (!ctx?.guild || !input) return null;
 
-  const mention = input.match(/^<@&(\d{17,20})>$/)?.[1];
-  const roleId = mention ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
-
+  const roleId = input.match(/^<@&(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
   if (roleId) {
     const byId = await ctx.guild.roles.fetch(roleId).catch(() => null);
     if (byId) return byId;
@@ -129,9 +114,7 @@ async function resolveRoleFlexible(ctx, input) {
 async function resolveChannelFlexible(ctx, input) {
   if (!ctx?.guild || !input) return null;
 
-  const mention = input.match(/^<#(\d{17,20})>$/)?.[1];
-  const channelId = mention ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
-
+  const channelId = input.match(/^<#(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
   if (channelId) {
     const byId = await ctx.guild.channels.fetch(channelId).catch(() => null);
     if (byId) return byId;
@@ -146,10 +129,12 @@ function buildAttachmentFromUrl(input, paramName = "") {
 
   const name = input.split("/").pop()?.split("?")[0] ?? "archivo";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const imageTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
-  const audioTypes = { mp3: "audio/mpeg", mp4: "video/mp4", wav: "audio/wav", ogg: "audio/ogg", webm: "video/webm", m4a: "audio/mp4", flac: "audio/flac" };
+  const mimeTypes = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+    mp3: "audio/mpeg", mp4: "video/mp4", wav: "audio/wav", ogg: "audio/ogg", webm: "video/webm", m4a: "audio/mp4", flac: "audio/flac",
+  };
 
-  let contentType = imageTypes[ext] ?? audioTypes[ext] ?? null;
+  let contentType = mimeTypes[ext] ?? null;
   if (!contentType) {
     contentType = paramName === "audio" ? "audio/mpeg" : "image/png";
   }
@@ -163,19 +148,12 @@ function buildAttachmentFromUrl(input, paramName = "") {
 }
 
 function resolveAttachmentInput(ctx, input, paramName = "") {
-  const attached = ctx.message?.attachments?.first?.();
-  if (attached) return attached;
-  return buildAttachmentFromUrl(input, paramName);
+  return ctx.message?.attachments?.first?.() ?? buildAttachmentFromUrl(input, paramName);
 }
 
 async function getReferencedMessage(ctx) {
-  const message = ctx?.message;
-  if (!message?.reference?.messageId) return null;
-  try {
-    return await message.fetchReference();
-  } catch {
-    return null;
-  }
+  if (!ctx?.message?.reference?.messageId) return null;
+  return ctx.message.fetchReference().catch(() => null);
 }
 
 async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
@@ -185,11 +163,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
   const values = {};
   let missingRequired = false;
 
-  // Si es purge y se pasó @usuario antes de la cantidad, intercambiar
   if (slashName === "purge" && args.length >= 2 && !/^\d{1,3}$/.test(args[0]) && /^\d{1,3}$/.test(args[1])) {
-    const temp = args[0];
-    args[0] = args[1];
-    args[1] = temp;
+    [args[0], args[1]] = [args[1], args[0]];
   }
 
   for (let i = 0; i < defs.length; i++) {
@@ -216,10 +191,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         if (value) args.shift();
       }
     } else if (def.type === 11) {
-      value = resolveAttachmentInput(ctx, token, def.name);
-      if (!value) {
-        value = replyMsg?.attachments?.values()?.next()?.value ?? null;
-      }
+      value = resolveAttachmentInput(ctx, token, def.name) ?? replyMsg?.attachments?.first?.() ?? null;
       if (!ctx.message?.attachments?.size && value) args.shift();
     } else if (def.type === 5) {
       if (args.length) {
@@ -251,9 +223,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       value = args.shift();
     }
 
-    const normalizedValue = value ?? null;
-    values[def.name] = normalizedValue;
-    if (def.required && normalizedValue === null) missingRequired = true;
+    values[def.name] = value ?? null;
+    if (def.required && values[def.name] === null) missingRequired = true;
   }
 
   return { values, missingRequired };
@@ -263,31 +234,23 @@ function loadSlashCommandMap(log) {
   if (slashCommandMap.size) return;
 
   const slashDir = path.join(__dirname, "../commands/slash");
-  const fallbackDir = path.join(__dirname, "../commands");
-  const targetDir = fs.existsSync(slashDir) ? slashDir : fallbackDir;
+  const targetDir = fs.existsSync(slashDir) ? slashDir : path.join(__dirname, "../commands");
   const entries = fs.readdirSync(targetDir, { withFileTypes: true });
 
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
-    if (entry.name.startsWith("_")) continue;
-
+    if (!entry.isFile() || !entry.name.endsWith(".js") || entry.name.startsWith("_")) continue;
     const file = entry.name.slice(0, -3);
 
     try {
-      const mod = require(path.join(targetDir, entry.name));
-      const exported = mod?.data;
+      const exported = require(path.join(targetDir, entry.name))?.data;
       const rootData = exported?.data;
 
       if (Array.isArray(rootData?.commands)) {
         const groupName = rootData?.name ?? file;
         for (const cmd of rootData.commands) {
-          const name = cmd?.data?.name;
-          if (name) slashCommandMap.set(`${groupName}/${name}`, cmd);
+          if (cmd?.data?.name) slashCommandMap.set(`${groupName}/${cmd.data.name}`, cmd);
         }
-        continue;
-      }
-
-      if (rootData?.name && typeof exported?.code === "function") {
+      } else if (rootData?.name && typeof exported?.code === "function") {
         slashCommandMap.set(`${rootData.name}/${rootData.name}`, exported);
       }
     } catch (err) {
@@ -297,55 +260,11 @@ function loadSlashCommandMap(log) {
 }
 
 function resolveSlashKeyForPrefixedName(command, prefixedName) {
-  const explicitGroup = command?.data?.slashGroup;
-  if (explicitGroup) return `${explicitGroup}/${prefixedName}`;
-
-  const mapped = PREFIXED_TO_SLASH_MAP[prefixedName];
-  if (mapped) return mapped;
+  if (command?.data?.slashGroup) return `${command.data.slashGroup}/${prefixedName}`;
+  if (PREFIXED_TO_SLASH_MAP[prefixedName]) return PREFIXED_TO_SLASH_MAP[prefixedName];
 
   const candidates = [...slashCommandMap.keys()].filter((key) => key.endsWith(`/${prefixedName}`));
-  if (candidates.length === 1) return candidates[0];
-
-  return null;
-}
-
-function inferPermissionChecks(slashKey, slashCommand) {
-  if (!slashKey || !slashCommand?.code) return { userPerms: [], botPerms: [] };
-  if (inferredPermissionsCache.has(slashKey)) return inferredPermissionsCache.get(slashKey);
-
-  const src = String(slashCommand.code);
-  const userPerms = new Set();
-  const botPerms = new Set();
-
-  let match;
-  const userRegex = /ctx\.member\.permissions\.has\(\s*PermissionFlagsBits\.(\w+)\s*\)/g;
-  while ((match = userRegex.exec(src)) !== null) userPerms.add(match[1]);
-
-  const botRegex = /(?:ctx\.guild|guild)\.members\.me\.permissions\.has\(\s*PermissionFlagsBits\.(\w+)\s*\)/g;
-  while ((match = botRegex.exec(src)) !== null) botPerms.add(match[1]);
-
-  const value = { userPerms: [...userPerms], botPerms: [...botPerms] };
-  inferredPermissionsCache.set(slashKey, value);
-  return value;
-}
-
-async function handleMissingPermissionsFirst(ctx, inferred) {
-  if (!ctx?.guild || !ctx?.member) return false;
-  const { userPerms = [], botPerms = [] } = inferred ?? {};
-  const userBits = userPerms.map((name) => PermissionFlagsBits[name]).filter(Boolean);
-  const botBits = botPerms.map((name) => PermissionFlagsBits[name]).filter(Boolean);
-
-  if (userBits.length && !ctx.member.permissions.has(userBits, true)) {
-    await ctx.send(`No tienes permisos para usar este comando, necesitas: \`${userPerms.join(", ")}\``);
-    return true;
-  }
-
-  if (botBits.length && !ctx.guild.members.me?.permissions?.has(botBits, true)) {
-    await ctx.send(`No tengo permisos suficientes, necesito: \`${botPerms.join(", ")}\``);
-    return true;
-  }
-
-  return false;
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function assertCommandDataPermissions(ctx, slashCommand) {
@@ -357,24 +276,95 @@ function assertCommandDataPermissions(ctx, slashCommand) {
   if (userPerms.length && !ctx.member.permissions.has(userPerms, true)) {
     throw new Errors.MissingPermission(ctx, userPerms);
   }
-
   if (botPerms.length && !ctx.guild.members.me?.permissions?.has(botPerms, true)) {
     throw new Errors.MissingBotPermission(ctx, botPerms);
   }
 }
 
 async function runCommandPlugins(ctx, slashCommand) {
-  if (!slashCommand) return;
+  if (!slashCommand) return true;
   const plugins = [...(slashCommand.plugins ?? []), ...(ctx?.bot?.loader?.globalPlugins ?? [])];
   for (const plugin of plugins) {
-    if (isPromise(plugin)) {
-      const resolved = await plugin;
-      if (!(await resolved(ctx))) return false;
-      continue;
-    }
-    if (!(await plugin(ctx))) return false;
+    const fn = isPromise(plugin) ? await plugin : plugin;
+    if (!(await fn(ctx))) return false;
   }
   return true;
+}
+
+function wrapSingleCommand(command, file, log) {
+  const originalCode = command?.code;
+  if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
+
+  command.code = async function (ctx, ...args) {
+    const originalReply = ctx?.message?.reply?.bind(ctx.message);
+    if (originalReply) {
+      ctx.send = (payload) => {
+        const normalized = normalizeReplyPayload(payload);
+        return originalReply({
+          ...normalized,
+          allowedMentions: { ...normalized.allowedMentions, repliedUser: false },
+        });
+      };
+      if (!ctx.reply) ctx.reply = ctx.send;
+    }
+
+    const prefixedName = command?.data?.name;
+    const slashKey = resolveSlashKeyForPrefixedName(command, prefixedName);
+    const slashName = slashKey?.split("/")[1];
+    const slashCommand = slashKey ? slashCommandMap.get(slashKey) : null;
+
+    if (slashCommand?.code) {
+      try {
+        assertCommandDataPermissions(ctx, slashCommand);
+
+        const prevCommand = ctx.command;
+        ctx.command = slashCommand;
+        try {
+          if (!(await runCommandPlugins(ctx, slashCommand))) return;
+        } finally {
+          ctx.command = prevCommand;
+        }
+
+        const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
+        if (!parsedValues) return;
+
+        if (parsedValues.missingRequired) {
+          const fallbackResult = await originalCode.call(this, ctx, ...args);
+          if (fallbackResult !== undefined) return fallbackResult;
+          return ctx.send("Faltan parámetros requeridos para ejecutar este comando.");
+        }
+
+        const prevGet = ctx.get;
+        const prevUser = ctx.user;
+        ctx.get = (name) => parsedValues.values[name] ?? null;
+        if (!ctx.user && ctx.author) ctx.user = ctx.author;
+        ctx.command = slashCommand;
+
+        try {
+          return await slashCommand.code(ctx, ...args);
+        } finally {
+          ctx.get = prevGet;
+          ctx.user = prevUser;
+          ctx.command = prevCommand;
+        }
+      } catch (err) {
+        if (err && typeof err === "object" && !err.ctx) err.ctx = ctx;
+        log?.error(`[adapter:${slashName ?? prefixedName ?? "unknown"}]`, {
+          err: err?.stack || err?.message || String(err),
+        });
+        throw err;
+      }
+    }
+
+    try {
+      return await originalCode.call(this, ctx, ...args);
+    } catch (err) {
+      log?.error(`[${command?.data?.name ?? file}]`, { err: err.message });
+      return ctx.send("Ocurrió un error ejecutando el comando");
+    }
+  };
+
+  wrappedOriginalCodes.add(originalCode);
 }
 
 function wrapPrefixedCommands(log) {
@@ -384,96 +374,11 @@ function wrapPrefixedCommands(log) {
   const prefixedFiles = fs.readdirSync(prefixedPath).filter((f) => f.endsWith(".js"));
 
   for (const file of prefixedFiles) {
-    const commandModule = require(path.join(prefixedPath, file));
-    const command = commandModule?.data;
-    const originalCode = command?.code;
-
-    if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) continue;
-
-    command.code = async function (ctx, ...args) {
-      const originalReply = ctx?.message?.reply?.bind(ctx.message);
-
-      if (originalReply) {
-        ctx.send = (payload) => {
-          const normalized = normalizeReplyPayload(payload);
-          return originalReply({
-            ...normalized,
-            allowedMentions: {
-              ...normalized.allowedMentions,
-              repliedUser: false,
-            },
-          });
-        };
-        if (!ctx.reply) ctx.reply = ctx.send;
-      }
-
-      const prefixedName = command?.data?.name;
-      const slashKey = resolveSlashKeyForPrefixedName(command, prefixedName);
-      const slashName = slashKey?.split("/")[1];
-      const slashCommand = slashKey ? slashCommandMap.get(slashKey) : null;
-
-      if (slashCommand?.code) {
-        try {
-          assertCommandDataPermissions(ctx, slashCommand);
-
-          const hadCommand = Object.prototype.hasOwnProperty.call(ctx, "command");
-          const originalCommand = ctx.command;
-          ctx.command = slashCommand;
-          try {
-            const canRunPlugins = await runCommandPlugins(ctx, slashCommand);
-            if (!canRunPlugins) return;
-          } finally {
-            if (hadCommand) ctx.command = originalCommand; else delete ctx.command;
-          }
-
-          const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
-          if (!parsedValues) return;
-          if (parsedValues.missingRequired) {
-            const inferred = inferPermissionChecks(slashKey, slashCommand);
-            const blocked = await handleMissingPermissionsFirst(ctx, inferred);
-            if (blocked) return;
-          }
-          if (parsedValues.missingRequired) {
-            const fallbackResult = await originalCode.call(this, ctx, ...args);
-            if (fallbackResult !== undefined) return fallbackResult;
-            return ctx.send("Faltan parámetros requeridos para ejecutar este comando.");
-          }
-
-          const originalGet = ctx.get?.bind(ctx);
-          const hadUser = Object.prototype.hasOwnProperty.call(ctx, "user");
-          const originalUser = ctx.user;
-          const hadCommandForCode = Object.prototype.hasOwnProperty.call(ctx, "command");
-          const originalCommandForCode = ctx.command;
-
-          ctx.get = (name) => parsedValues.values[name] ?? null;
-          if (!ctx.user && ctx.author) ctx.user = ctx.author;
-          ctx.command = slashCommand;
-
-          try {
-            return await slashCommand.code(ctx, ...args);
-          } finally {
-            if (originalGet) ctx.get = originalGet; else delete ctx.get;
-            if (hadUser) ctx.user = originalUser; else delete ctx.user;
-            if (hadCommandForCode) ctx.command = originalCommandForCode; else delete ctx.command;
-          }
-        } catch (err) {
-          if (err && typeof err === "object" && !err.ctx) err.ctx = ctx;
-          log?.error(`[adapter:${slashName ?? prefixedName ?? "unknown"}]`, {
-            err: err?.stack || err?.message || String(err),
-          });
-          throw err;
-        }
-      }
-
-      try {
-        return await originalCode.call(this, ctx, ...args);
-      } catch (err) {
-        log?.error(`[${command?.data?.name ?? file}]`, { err: err.message });
-        return ctx.send("Ocurrió un error ejecutando el comando");
-      }
-    };
-
-    wrappedOriginalCodes.add(originalCode);
+    const exported = require(path.join(prefixedPath, file))?.data;
+    const list = Array.isArray(exported) ? exported : [exported];
+    for (const cmd of list) {
+      if (cmd) wrapSingleCommand(cmd, file, log);
+    }
   }
 }
 

@@ -3,8 +3,13 @@ const { EmbedBuilder } = require("discord.js");
 const { generateChatReply, setConversacion, getConversacion } = require("../../src/ai");
 const { MAX_HISTORIAL } = require("../../src/config");
 const { RED } = require("../../utils/colors");
-const { sendThinkingReply, editThinkingReply } = require("../_shared/thinking");
-const { createCommandLogger, handleCommandError } = require("../_shared/runtime");
+const {
+  createCommandLogger,
+  handleCommandError,
+  sendThinkingReply,
+  editThinkingReply,
+} = require("../_shared/runtime");
+
 
 const log = createCommandLogger("CMD_ASK");
 

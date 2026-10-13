@@ -3,9 +3,18 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralon
 const { deleteConversacion } = require("../../src/ai");
 const { RED, GREEN } = require("../../utils/colors");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
-const { createCommandLogger, fetchWithTimeout, prepareReply, noGuildReply, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
+const {
+  createCommandLogger,
+  fetchWithTimeout,
+  prepareReply,
+  noGuildReply,
+  handleCommandError,
+  sendThinkingReply,
+  INVITE_URL,
+  SUPPORT_URL,
+} = require("../_shared/runtime");
 const { generateText, generateVision } = require("../_shared/ai");
-const { sendThinkingReply } = require("../_shared/thinking");
+
 const { broadcastDm, buildDmAllEmbed, buildDmAllLogEmbed } = require("../_shared/dmall");
 const { version: botVersion } = require("../../package.json");
 

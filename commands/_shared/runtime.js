@@ -1,12 +1,60 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
 const Logger = require("../../src/logger");
 const { RED } = require("../../utils/colors");
-const { clampPage, paginateArray, buildPaginationRow, buildPagRow, uniqueCollectorId } = require("./pagination");
-
 const CLIENT_ID = process.env.CLIENT_ID || "1020772849906098186";
 const INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}`;
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const THINKING_TEXT = "<a:typing:1484407380291616778>  RedBot está pensando...";
+
+function clampPage(page, totalPages) {
+  if (!Number.isFinite(page) || !Number.isFinite(totalPages) || totalPages <= 0) return 0;
+  if (page < 0) return 0;
+  if (page >= totalPages) return totalPages - 1;
+  return page;
+}
+
+function paginateArray(arr, size = 15) {
+  if (!Array.isArray(arr) || size <= 0) return [];
+  const pages = [];
+  for (let i = 0; i < arr.length; i += size) {
+    pages.push(arr.slice(i, i + size));
+  }
+  return pages;
+}
+
+function buildPaginationRow(prevId, nextId, page, totalPages) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(prevId)
+      .setLabel("◀")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page <= 0),
+    new ButtonBuilder()
+      .setCustomId(nextId)
+      .setLabel("▶")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= totalPages - 1)
+  );
+}
+
+function uniqueCollectorId(prefix = "collector") {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function sendThinkingReply(ctx) {
+  const msg = await ctx.send({
+    content: THINKING_TEXT,
+    allowedMentions: { repliedUser: false },
+  });
+  if (ctx && msg) ctx._thinkingMessage = msg;
+  return msg;
+}
+
+async function editThinkingReply(thinking, payload) {
+  if (!thinking) return null;
+  return thinking.edit(payload);
+}
 
 function createCommandLogger(label) {
   return new Logger(label, process.env.LOG_LEVEL);
@@ -108,13 +156,16 @@ function checkBotPermissions(ctx, ...permissions) {
 module.exports = {
   INVITE_URL,
   SUPPORT_URL,
+  THINKING_TEXT,
   createCommandLogger,
   clampPage,
   paginateArray,
   buildPaginationRow,
-  buildPagRow,
+  buildPagRow: buildPaginationRow,
   uniqueCollectorId,
   uniqueId: uniqueCollectorId,
+  sendThinkingReply,
+  editThinkingReply,
   formatPermissionName,
   fetchWithTimeout,
   fetchImageAsInlineData,
@@ -124,3 +175,4 @@ module.exports = {
   failWith,
   checkBotPermissions,
 };
+
