@@ -1,5 +1,4 @@
 const { CommandBuilder } = require("gralonium");
-const COLOR = "#ff383d";
 
 const data = {
   data: new CommandBuilder({

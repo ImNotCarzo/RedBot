@@ -2,6 +2,13 @@ const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const intervals = new Map(); // guildId → intervalId
 
 async function rotarIcono(guild) {
+  // Si el bot salió del servidor, detener el intervalo para no dejarlo huérfano
+  if (!guild.client.guilds.cache.has(guild.id)) {
+    clearInterval(intervals.get(guild.id));
+    intervals.delete(guild.id);
+    return;
+  }
+
   const emojis = [...guild.emojis.cache.filter((e) => !e.animated).values()];
   if (!emojis.length) return;
 
