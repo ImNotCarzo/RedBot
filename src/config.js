@@ -51,8 +51,14 @@ const dbOptions = {
 
 const MAX_HISTORIAL = 10;
 const MAX_EMBED_DESCRIPTION = 4096;
-const AI_MODEL_DEFAULT = "gemini-3.1-flash-lite";
-const AI_MODEL_SEARCH = "gemini-2.5-flash";
+
+// Asignación estratégica de modelos según capacidad y cuotas
+const AI_MODEL_CHAT = "gemini-3.8-flash";       // Máxima inteligencia + Google Search en vivo (/ask y chat)
+const AI_MODEL_VISION = "gemini-3.8-flash";     // Multimodal de alta fidelidad (/util describe y roast)
+const AI_MODEL_FAST = "gemini-3.5-flash-lite";   // Baja latencia y alta cuota (/util resume y /fun)
+const AI_MODEL_DEFAULT = AI_MODEL_FAST;
+const AI_MODEL_SEARCH = AI_MODEL_CHAT;
+
 const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
@@ -74,6 +80,9 @@ module.exports = {
   dbOptions,
   MAX_HISTORIAL,
   MAX_EMBED_DESCRIPTION,
+  AI_MODEL_CHAT,
+  AI_MODEL_VISION,
+  AI_MODEL_FAST,
   AI_MODEL_DEFAULT,
   AI_MODEL_SEARCH,
   COMMANDS_TO_UPDATE,

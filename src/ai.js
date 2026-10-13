@@ -1,6 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const Logger = require("./logger");
-const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_SEARCH } = require("./config");
+const { MAX_HISTORIAL, SYSTEM_PROMPT, AI_MODEL_CHAT } = require("./config");
 const { wait } = require("./runtime");
 
 const log = new Logger("AI_SERVICE", process.env.LOG_LEVEL);
@@ -106,7 +106,7 @@ function toGeminiHistory(history) {
 /** Respuesta de chat con persona + historial + Google Search. Usada por /ask y por las respuestas encadenadas. */
 async function generateChatReply(historial) {
   const response = await generateWithFallback({
-    model: AI_MODEL_SEARCH,
+    model: AI_MODEL_CHAT,
     contents: [
       { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
       { role: "model", parts: [{ text: "Entendido." }] },
