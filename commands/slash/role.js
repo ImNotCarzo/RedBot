@@ -189,10 +189,6 @@ const data = {
       if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
     if (!ctx.guild) return noGuildReply(ctx);
 
-    if (ctx.guild.memberCount < 500 && ctx.guild.members.cache.size !== ctx.guild.memberCount) {
-      await ctx.guild.members.fetch().catch(() => {});
-    }
-
     const role = ctx.get("rol");
     if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
 
@@ -262,6 +258,9 @@ const data = {
           return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`Permisos de ${role.name}`).setDescription(perms.join("\n")).setColor(color).setTimestamp()], flags: MessageFlags.Ephemeral });
         }
         if (selected === "users") {
+          if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+            await ctx.guild.members.fetch().catch(() => {});
+          }
           const members = role.members.map((m, i) => `${i + 1}. ${m}`);
           if (!members.length) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
           return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`Usuarios con ${role.name}`).setDescription(members.slice(0, 15).join("\n")).setColor(color).setTimestamp()], flags: MessageFlags.Ephemeral });
@@ -328,6 +327,9 @@ const data = {
       }
 
       if (selected === "users") {
+        if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+          await ctx.guild.members.fetch().catch(() => {});
+        }
         const sortedMembers = role.members.sort((a, b) => b.joinedTimestamp - a.joinedTimestamp);
 
         if (!sortedMembers.size) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
@@ -452,6 +454,10 @@ const data = {
       if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
       if (!ctx.guild) return noGuildReply(ctx);
 
+      if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+        await ctx.guild.members.fetch().catch(() => {});
+      }
+
       const role = ctx.get("rol");
       if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
 
@@ -468,9 +474,8 @@ const data = {
 
       const buildEmbed = () => new EmbedBuilder()
         .setTitle(`Usuarios con ${role.name} (${page + 1}/${pages.length})`)
-        .setDescription(
-  pages[page].map((u, i) => `${i + 1}. ${u}`).join("\n")
-)
+        .setDescription(pages[page].map((u, i) => `${page * 15 + i + 1}. ${u}`).join("\n"))
+        .setColor(role.color || DARK)
         .setFooter({ text: `${members.length} usuarios en total` })
         .setTimestamp();
 

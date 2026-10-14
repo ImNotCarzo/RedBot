@@ -29,11 +29,14 @@ function makeSend(ctx, isSlash) {
 }
 
 function hierarchyChecks(ctx, member, action = "actuar sobre") {
+  if (!member?.roles) return "No pude obtener al miembro en el servidor";
   if (member.id === ctx.guild.ownerId)
     return `No puedo ${action} al dueño del servidor`;
+  if (member.id === ctx.guild.members.me?.id)
+    return `No puedo ${action} a mí mismo`;
   if (member.roles.highest.position >= ctx.guild.members.me.roles.highest.position)
     return `No puedo ${action} alguien con igual o mayor rango que el mío`;
-  if (member.roles.highest.position >= ctx.member.roles.highest.position)
+  if (ctx.member.id !== ctx.guild.ownerId && member.roles.highest.position >= ctx.member.roles.highest.position)
     return `No puedes ${action} alguien con igual o mayor rango que el tuyo`;
   return null;
 }
@@ -111,13 +114,16 @@ const data = {
     plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
     async code(ctx) {
+      const isSlash = !!ctx.interaction;
+      if (isSlash) await ctx.interaction.deferReply();
+      const send = makeSend(ctx, isSlash);
       const userId = ctx.get("id");
       const reason = ctx.get("razon") ?? "Sin razón";
       const tag    = modTag(ctx);
 
       try {
         const ban = await ctx.guild.bans.fetch(userId).catch(() => null);
-        if (!ban) return ctx.send({ content: "Ese usuario no está baneado", flags: MessageFlags.Ephemeral });
+        if (!ban) return send({ content: "Ese usuario no está baneado", flags: MessageFlags.Ephemeral });
 
         await ban.user.send({
           embeds: [new EmbedBuilder().setColor(GREEN).setDescription(`Fuiste desbaneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
@@ -127,7 +133,7 @@ const data = {
 
         const username = ban.user.globalName || ban.user.username;
 
-        await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue desbaneado`).setColor(GREEN)] });
+        await send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue desbaneado`).setColor(GREEN)] });
 
         await sendLog(ctx.guild, new EmbedBuilder()
           .setTitle("Usuario desbaneado").setColor(GREEN)
@@ -138,7 +144,7 @@ const data = {
           ).setTimestamp()
         );
       } catch (err) {
-        return failWith(ctx, err, "No se pudo desbanear al usuario, verifica que el ID sea correcto");
+        return failWith(ctx, err, "No se pudo desbanear al usuario, verifica que el ID sea correcto", send);
       }
     },
   })
@@ -557,7 +563,7 @@ const data = {
       const tag    = modTag(ctx);
       if (member.user.bot)
         return ctx.send({ content: "No puedes advertir a un bot", flags: MessageFlags.Ephemeral });
-      if (member.roles.highest.position >= ctx.member.roles.highest.position)
+      if (ctx.member.id !== ctx.guild.ownerId && member.roles.highest.position >= ctx.member.roles.highest.position)
         return ctx.send({ content: "No puedes advertir a alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
 
       try {

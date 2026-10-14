@@ -56,38 +56,44 @@ function normalizeReplyPayload(payload) {
 
 async function resolveMember(ctx, input) {
   if (!ctx?.guild || !input) return null;
-  if (ctx.message?.mentions?.members?.size) {
-    return ctx.message.mentions.members.first() ?? null;
-  }
 
   const token = String(input).trim();
-  if (DISCORD_ID_PATTERN.test(token)) {
-    const byId = await ctx.guild.members.fetch(token).catch(() => null);
-    if (byId) return byId;
+  const mentionId = token.match(/^<@!?(\d{17,20})>$/)?.[1];
+  const targetId = mentionId ?? (DISCORD_ID_PATTERN.test(token) ? token : null);
+
+  if (targetId) {
+    return (
+      ctx.message?.mentions?.members?.get(targetId) ??
+      ctx.guild.members.cache.get(targetId) ??
+      (await ctx.guild.members.fetch(targetId).catch(() => null))
+    );
   }
 
   const byQuery = await ctx.guild.members.fetch({ query: token, limit: 1 }).catch(() => null);
   return byQuery?.first() ?? null;
 }
 
-async function resolveMemberFlexible(ctx, input) {
+async function resolveMemberFlexible(ctx, input, { strictMentionOrId = false } = {}) {
   if (!input) return ctx.member ?? ctx.user ?? ctx.author ?? null;
   if (typeof input === "object" && input?.id) return input;
 
+  const token = String(input).trim();
+  const idMatch = token.match(/^<@!?(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(token) ? token : null);
+
+  if (strictMentionOrId && !idMatch) return null;
+
   if (ctx?.guild) {
-    const member = await resolveMember(ctx, input);
+    const member = await resolveMember(ctx, token);
     if (member) return member;
   }
 
-  const token = String(input).trim();
-  const idMatch = token.match(/^<@!?(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(token) ? token : null);
-  if (idMatch) {
-    const client = ctx.guild?.client ?? ctx.bot?.client ?? ctx.client ?? ctx.message?.client;
+  if (!ctx?.guild && idMatch) {
+    const client = ctx.bot?.client ?? ctx.client ?? ctx.message?.client;
     const user = await client?.users?.fetch?.(idMatch).catch(() => null);
     if (user) return user;
   }
 
-  if (!ctx?.guild) return null;
+  if (!ctx?.guild || strictMentionOrId) return null;
 
   const lower = token.toLowerCase();
   return ctx.guild.members.cache.find((m) => {
@@ -174,10 +180,11 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     let value = null;
 
     if (def.type === 6) {
+      const isOptionalMassbanSlot = slashName === "massban" && !def.required;
       if (token) {
-        value = await resolveMemberFlexible(ctx, token);
+        value = await resolveMemberFlexible(ctx, token, { strictMentionOrId: isOptionalMassbanSlot });
         if (value) args.shift();
-      } else if (replyMsg?.author?.id) {
+      } else if (def.required && replyMsg?.author?.id) {
         value = await resolveMemberFlexible(ctx, replyMsg.author.id);
       }
     } else if (def.type === 8) {
@@ -189,6 +196,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
       if (token) {
         value = await resolveChannelFlexible(ctx, token);
         if (value) args.shift();
+      } else if (def.required && slashName === "rename" && ctx.channel) {
+        value = ctx.channel;
       }
     } else if (def.type === 11) {
       value = resolveAttachmentInput(ctx, token, def.name) ?? replyMsg?.attachments?.first?.() ?? null;
@@ -196,12 +205,21 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     } else if (def.type === 5) {
       if (args.length) {
         const raw = String(args.shift()).toLowerCase();
-        value = ["true", "si", "sí", "yes", "1", "s"].includes(raw) ? "true" : "false";
+        value = ["true", "si", "sí", "yes", "1", "s", "bots"].includes(raw) ? "true" : "false";
       }
     } else if (def.type === 3) {
       if (args.length) {
-        if (slashName === "translate" && def.name === "texto") {
-          value = args.splice(0).join(" ");
+        if (def.name === "incluir_bots" || def.name === "ignorar_bots") {
+          const raw = String(args.shift()).toLowerCase();
+          value = ["true", "si", "sí", "yes", "1", "s", "bots"].includes(raw) ? "true" : "false";
+        } else if (slashName === "translate" && def.name === "texto") {
+          if (args.length > 1 && /^[a-z]{2,5}(-[a-z]{2,4})?$/i.test(args[args.length - 1])) {
+            const langArg = args.pop();
+            value = args.splice(0).join(" ");
+            args.push(langArg);
+          } else {
+            value = args.splice(0).join(" ");
+          }
         } else if (def.name === "razon" && defs.some((d) => d.name === "dias") && args.length > 1) {
           const lastArg = args[args.length - 1];
           if (/^[0-7]$/.test(lastArg)) {

@@ -192,14 +192,17 @@ const data = {
           const embed = new EmbedBuilder()
             .setThumbnail(fetched.displayAvatarURL({ size: 1024 }))
             .setColor(RED)
-            .setTitle(`${fetched.id}`)
-            .addFields({
-              name: "General",
-              value:
-                `> **ID:** \`${fetched.id}\`\n` +
-                `> **Insignias:** ${insignias}\n` +
-                `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
-            })
+            .setTitle(`${fetched.username}`)
+            .addFields(
+              {
+                name: "General",
+                value:
+                  `> **ID:** \`${fetched.id}\`\n` +
+                  `> **Insignias:** ${insignias}\n` +
+                  `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
+              },
+              ...buildExtendedFields(null, fetched)
+            )
             .setTimestamp();
 
           const hasBanner   = !!fetched.banner;
@@ -375,7 +378,7 @@ const data = {
 
             const buildAv = (type) => new EmbedBuilder()
               .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-              .setTitle(type === "server" ? "Avatar del servidor" : "Avatar global")
+              .setTitle(hasDistinct ? (type === "server" ? "Avatar del servidor" : "Avatar global") : "Avatar")
               .setURL(type === "server" ? serverAvatar : globalAvatar)
               .setImage(type === "server" ? serverAvatar : globalAvatar)
               .setColor(colorRol).setTimestamp();

@@ -185,7 +185,7 @@ async function broadcastDm({ guild, embed, soloRolId, excluirRolId, excluirUserI
       else fallidos++;
 
       await sleep(500);
-      if (i % 10 === 0) await onProgress?.(i + 1, total);
+      if ((i + 1) % 10 === 0 || i + 1 === total) await onProgress?.(i + 1, total);
     }
 
     return { enviados, fallidos, total };
