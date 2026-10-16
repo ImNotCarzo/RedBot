@@ -181,7 +181,7 @@ const data = {
 
         for (const cat of CATEGORIES) {
           builder.addButton(
-            cat === category ? `• ${CATEGORY_LABELS[cat]}` : CATEGORY_LABELS[cat],
+            cat === category ? `${CATEGORY_LABELS[cat]}` : CATEGORY_LABELS[cat],
             `help_cat_${cat}`,
             cat === category ? "danger" : "secondary"
           );
