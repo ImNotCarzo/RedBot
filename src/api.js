@@ -1,14 +1,13 @@
 const http = require("http");
 const mongoose = require("mongoose");
 const { ChannelType } = require("discord.js");
-const Logger = require("./logger");
+const { Logger } = require("./runtime");
+const { version: PACKAGE_VERSION } = require("../package.json");
 
 let server = null;
 let botClient = null;
 let apiConfig = null;
 let log = null;
-
-// ─── Rate limiting ────────────────────────────────────────────────────────────
 
 const rateStore = new Map();
 const RATE_WINDOW_MS = 60_000;
@@ -29,8 +28,6 @@ function checkRate(ip) {
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function json(res, status, data) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
@@ -42,8 +39,7 @@ function json(res, status, data) {
 }
 
 function setCors(res) {
-  const origin = apiConfig?.API_CORS_ORIGIN || "*";
-  res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Access-Control-Allow-Origin", apiConfig?.API_CORS_ORIGIN || "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.setHeader("Access-Control-Max-Age", "86400");
@@ -53,8 +49,7 @@ function setCors(res) {
 function isAuthorized(req) {
   const key = apiConfig?.API_KEY;
   if (!key) return true;
-  const auth = req.headers.authorization ?? "";
-  const [scheme, token] = auth.split(" ");
+  const [scheme, token] = (req.headers.authorization ?? "").split(" ");
   return scheme?.toLowerCase() === "bearer" && token === key;
 }
 
@@ -72,20 +67,10 @@ function formatUptime(ms) {
   return parts.join(" ");
 }
 
-function getPackageVersion() {
-  try {
-    return require("../package.json").version;
-  } catch {
-    return "unknown";
-  }
-}
-
-// ─── Route Handlers ───────────────────────────────────────────────────────────
-
 function handleRoot() {
   return {
     name: "RedBot API",
-    version: getPackageVersion(),
+    version: PACKAGE_VERSION,
     endpoints: [
       { path: "/api/stats", description: "Estadísticas generales del bot" },
       { path: "/api/commands", description: "Catálogo completo de comandos" },
@@ -101,7 +86,6 @@ function handleStats() {
 
   const guilds = client.guilds?.cache;
   const channels = client.channels?.cache;
-
   const totalUsers = guilds?.reduce((acc, g) => acc + (g.memberCount ?? 0), 0) ?? 0;
 
   let textChannels = 0;
@@ -134,10 +118,6 @@ function handleStats() {
     }
   }
 
-  const totalEmojis = guilds?.reduce((acc, g) => acc + (g.emojis?.cache?.size ?? 0), 0) ?? 0;
-  const totalRoles = guilds?.reduce((acc, g) => acc + (g.roles?.cache?.size ?? 0), 0) ?? 0;
-  const totalStickers = guilds?.reduce((acc, g) => acc + (g.stickers?.cache?.size ?? 0), 0) ?? 0;
-
   let commandInfo = { total: 0, categories: 0 };
   try {
     const { getCommands, CATEGORIES } = require("../commands/slash/help");
@@ -145,7 +125,7 @@ function handleStats() {
     let total = 0;
     for (const cat of Object.values(cmds)) total += Object.keys(cat).length;
     commandInfo = { total, categories: CATEGORIES.length };
-  } catch { /* ignore */ }
+  } catch {}
 
   return {
     guilds: guilds?.size ?? 0,
@@ -159,61 +139,55 @@ function handleStats() {
       forum: forumChannels,
       categories: categoryChannels,
     },
-    emojis: totalEmojis,
-    roles: totalRoles,
-    stickers: totalStickers,
+    emojis: guilds?.reduce((acc, g) => acc + (g.emojis?.cache?.size ?? 0), 0) ?? 0,
+    roles: guilds?.reduce((acc, g) => acc + (g.roles?.cache?.size ?? 0), 0) ?? 0,
+    stickers: guilds?.reduce((acc, g) => acc + (g.stickers?.cache?.size ?? 0), 0) ?? 0,
     commands: commandInfo,
     uptime: client.uptime ?? 0,
     uptimeFormatted: formatUptime(client.uptime ?? 0),
     readyAt: client.readyAt?.toISOString() ?? null,
     ping: client.ws?.ping ?? -1,
-    version: getPackageVersion(),
+    version: PACKAGE_VERSION,
     nodeVersion: process.version,
   };
 }
 
 function handleCommands() {
-  let COMMANDS, CATEGORIES, CATEGORY_LABELS;
   try {
-    const help = require("../commands/slash/help");
-    COMMANDS = help.getCommands();
-    CATEGORIES = help.CATEGORIES;
-    CATEGORY_LABELS = help.CATEGORY_LABELS;
+    const { getCommands, CATEGORIES, CATEGORY_LABELS } = require("../commands/slash/help");
+    const COMMANDS = getCommands();
+    const categories = {};
+    let total = 0;
+
+    for (const catKey of CATEGORIES) {
+      const catCmds = COMMANDS[catKey];
+      if (!catCmds) continue;
+
+      const commands = Object.entries(catCmds).map(([key, cmd]) => ({
+        name: key,
+        slash: cmd.slash,
+        short: cmd.short,
+        usage: cmd.usage,
+        aliases: cmd.aliases ?? [],
+        description: cmd.description,
+      }));
+
+      total += commands.length;
+      categories[catKey] = {
+        label: CATEGORY_LABELS?.[catKey] ?? catKey,
+        count: commands.length,
+        commands,
+      };
+    }
+
+    return { total, categories };
   } catch {
     return { total: 0, categories: {} };
   }
-
-  const categories = {};
-  let total = 0;
-
-  for (const catKey of CATEGORIES) {
-    const catCmds = COMMANDS[catKey];
-    if (!catCmds) continue;
-
-    const commands = Object.entries(catCmds).map(([key, cmd]) => ({
-      name: key,
-      slash: cmd.slash,
-      short: cmd.short,
-      usage: cmd.usage,
-      aliases: cmd.aliases ?? [],
-      description: cmd.description,
-    }));
-
-    total += commands.length;
-    categories[catKey] = {
-      label: CATEGORY_LABELS?.[catKey] ?? catKey,
-      count: commands.length,
-      commands,
-    };
-  }
-
-  return { total, categories };
 }
 
 function handleBot() {
-  const client = botClient;
-  const user = client?.user;
-
+  const user = botClient?.user;
   const clientId = user?.id ?? apiConfig?.CLIENT_ID ?? process.env.CLIENT_ID ?? "1020772849906098186";
 
   return {
@@ -233,7 +207,7 @@ function handleBot() {
     support: "https://discord.gg/b8AKKaNWU6",
     website: "https://redbot.me",
     defaultPrefix: ".",
-    version: getPackageVersion(),
+    version: PACKAGE_VERSION,
   };
 }
 
@@ -241,7 +215,6 @@ function handleHealth() {
   const client = botClient;
   const mem = process.memoryUsage();
   const dbStates = { 0: "disconnected", 1: "connected", 2: "connecting", 3: "disconnecting" };
-
   const isReady = Boolean(client?.readyAt);
 
   return {
@@ -266,7 +239,7 @@ function handleHealth() {
     },
     database: dbStates[mongoose.connection.readyState] ?? "unknown",
     versions: {
-      bot: getPackageVersion(),
+      bot: PACKAGE_VERSION,
       node: process.version,
       platform: process.platform,
       arch: process.arch,
@@ -275,8 +248,6 @@ function handleHealth() {
     timestamp: new Date().toISOString(),
   };
 }
-
-// ─── Router ───────────────────────────────────────────────────────────────────
 
 const routes = new Map([
   ["/api", handleRoot],
@@ -289,18 +260,15 @@ const routes = new Map([
 function handleRequest(req, res) {
   setCors(res);
 
-  // Preflight CORS
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     return res.end();
   }
 
-  // Solo GET
   if (req.method !== "GET") {
     return json(res, 405, { error: "Method not allowed" });
   }
 
-  // Rate limiting
   const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
     || req.socket?.remoteAddress
     || "unknown";
@@ -313,12 +281,10 @@ function handleRequest(req, res) {
     return json(res, 429, { error: "Too many requests", retryAfter: 60 });
   }
 
-  // Auth
   if (!isAuthorized(req)) {
     return json(res, 401, { error: "Unauthorized" });
   }
 
-  // Route
   let pathname;
   try {
     pathname = new URL(req.url, `http://${req.headers.host ?? "localhost"}`).pathname;
@@ -326,7 +292,6 @@ function handleRequest(req, res) {
     pathname = req.url?.split("?")[0] ?? "/";
   }
   pathname = pathname.replace(/\/+$/, "") || "/api";
-
   if (pathname === "/") pathname = "/api";
 
   const handler = routes.get(pathname);
@@ -338,24 +303,20 @@ function handleRequest(req, res) {
   }
 
   try {
-    const data = handler();
-    json(res, 200, data);
+    json(res, 200, handler());
   } catch (err) {
     log?.error("Error en endpoint de API", { endpoint: pathname, err: err?.message ?? String(err) });
     json(res, 500, { error: "Internal server error" });
   }
 }
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
-
 function startApi(client, config, logger) {
   return new Promise((resolve) => {
     botClient = client;
     apiConfig = config;
-    log = logger ?? new Logger("API", process.env.LOG_LEVEL);
+    log = logger ?? new Logger("API");
 
     const port = Number(config?.API_PORT) || 3000;
-
     server = http.createServer(handleRequest);
 
     server.on("error", (err) => {
@@ -369,11 +330,12 @@ function startApi(client, config, logger) {
     });
 
     server.listen(port, () => {
-      const authMode = config?.API_KEY ? "API key" : "pública (sin key)";
-      const corsOrigin = config?.API_CORS_ORIGIN || "*";
-      log.info(`API iniciada`, { port, auth: authMode, cors: corsOrigin });
+      log.info("API iniciada", {
+        port,
+        auth: config?.API_KEY ? "API key" : "pública (sin key)",
+        cors: config?.API_CORS_ORIGIN || "*",
+      });
 
-      // Limpiar rate limit entries expiradas cada 5 minutos
       ratePruneTimer = setInterval(() => {
         const now = Date.now();
         for (const [ip, entry] of rateStore) {

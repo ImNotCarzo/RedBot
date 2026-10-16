@@ -8,11 +8,10 @@ const {
   ComponentType,
   EmbedBuilder,
 } = require("gralonium");
-const { getId } = require("../../src/commandIds");
+const { getId, RED } = require("../../src/config");
 const { getPrefix } = require("../../src/guild");
-const { RED } = require("../../utils/colors");
-const { createCommandLogger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../_shared/runtime");
-const log = createCommandLogger("CMD_HELP");
+const { Logger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../../src/runtime");
+const log = new Logger("CMD_HELP", process.env.LOG_LEVEL);
 
 const IDS = {
   ask:     () => getId("ask"),

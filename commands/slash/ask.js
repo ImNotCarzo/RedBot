@@ -1,16 +1,14 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { generateChatReply, setConversacion, getConversacion } = require("../../src/ai");
-const { MAX_HISTORIAL } = require("../../src/config");
-const { RED } = require("../../utils/colors");
+const { MAX_HISTORIAL, RED } = require("../../src/config");
 const {
-  createCommandLogger,
+  Logger,
   handleCommandError,
   sendThinkingReply,
-  editThinkingReply,
-} = require("../_shared/runtime");
+} = require("../../src/runtime");
 
-const log = createCommandLogger("CMD_ASK");
+const log = new Logger("CMD_ASK", process.env.LOG_LEVEL);
 
 const data = {
   data: new CommandBuilder({
@@ -80,7 +78,7 @@ const data = {
         const sent = await ctx.interaction.fetchReply();
         setConversacion(userId, historial, sent.id);
       } else {
-        await editThinkingReply(thinking, { content: "", embeds: [embed] });
+        await thinking?.edit?.({ content: "", embeds: [embed] }).catch(() => null);
         setConversacion(userId, historial, thinking.id);
       }
 

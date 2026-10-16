@@ -1,13 +1,18 @@
 require("dotenv").config();
 
 const { validateEnv } = require("./config");
-const Logger = require("./logger");
 const { connectDatabase } = require("./database");
-const { createBot, initializeBot } = require("./bot");
-const { registerShutdownHandlers, registerProcessErrorHandlers, sanitizeError } = require("./runtime");
+const {
+  Logger,
+  createBot,
+  initializeBot,
+  registerShutdownHandlers,
+  registerProcessErrorHandlers,
+  sanitizeError,
+} = require("./runtime");
 const { startApi } = require("./api");
 
-const log = new Logger("MAIN", process.env.LOG_LEVEL || "info");
+const log = new Logger("MAIN");
 
 (async () => {
   registerProcessErrorHandlers(log);

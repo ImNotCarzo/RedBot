@@ -1,17 +1,17 @@
 const crypto = require("node:crypto");
-const Warn = require("../models/Warn");
-const TempBan = require("../models/TempBan");
-const Logger = require("./logger");
+const { Warn, TempBan } = require("./database");
+const { Logger } = require("./runtime");
 
-const log = new Logger("MODERATION_SERVICE", process.env.LOG_LEVEL);
+const log = new Logger("MODERATION_SERVICE");
 const tempBanTimers = new Map();
 const TEMPBAN_RETRY_MS = 5 * 60_000;
+const MAX_TIMEOUT_MS = 2147483647;
 
 function generateId(length = 6) {
   const size = Number.isFinite(length) ? Math.max(4, Math.min(12, Math.floor(length))) : 6;
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
-  for (let i = 0; i < size; i += 1) {
+  for (let i = 0; i < size; i++) {
     id += alphabet[crypto.randomInt(0, alphabet.length)];
   }
   return id;
@@ -19,8 +19,7 @@ function generateId(length = 6) {
 
 function parseDuration(raw) {
   if (typeof raw !== "string") return null;
-  const str = raw.trim().toLowerCase();
-  const match = str.match(/^(\d+)(s|m|h|d|w)$/);
+  const match = raw.trim().toLowerCase().match(/^(\d+)(s|m|h|d|w)$/);
   if (!match) return null;
   const value = Number.parseInt(match[1], 10);
   if (!Number.isFinite(value) || value <= 0) return null;
@@ -39,32 +38,9 @@ function formatDuration(ms) {
   return `${Math.floor(h / 24)}d`;
 }
 
-function assertSnowflake(value, field) {
-  if (!value || typeof value !== "string") throw new TypeError(`${field} inválido`);
-}
-
-function normalizeReason(reason) {
-  const value = typeof reason === "string" ? reason.trim() : "";
-  return value || "Sin razón";
-}
-
-function normalizeWarnId(warnId) {
-  if (typeof warnId !== "string") throw new TypeError("warnId inválido");
-  const normalized = warnId.trim().toUpperCase();
-  if (!normalized) throw new TypeError("warnId vacío");
-  return normalized;
-}
-
-function getTempBanKey(guildId, userId) {
-  return `${guildId}:${userId}`;
-}
-
 async function addWarn({ guildId, userId, moderatorId, reason, warnId }) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
-  assertSnowflake(moderatorId, "moderatorId");
-  const normalizedWarnId = normalizeWarnId(warnId);
-  const normalizedReason = normalizeReason(reason);
+  const normalizedWarnId = String(warnId).trim().toUpperCase();
+  const normalizedReason = (typeof reason === "string" ? reason.trim() : "") || "Sin razón";
 
   await Warn.create({
     guildId,
@@ -79,78 +55,49 @@ async function addWarn({ guildId, userId, moderatorId, reason, warnId }) {
 }
 
 async function removeWarnById({ guildId, warnId }) {
-  assertSnowflake(guildId, "guildId");
-  return Warn.findOneAndDelete({ guildId, warnId: normalizeWarnId(warnId) });
+  return Warn.findOneAndDelete({ guildId, warnId: String(warnId).trim().toUpperCase() });
 }
 
 async function clearWarnsForUser({ guildId, userId }) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
   const result = await Warn.deleteMany({ guildId, userId });
   return result.deletedCount || 0;
 }
 
 async function listWarnsForUser({ guildId, userId }) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
   return Warn.find({ guildId, userId }).sort({ createdAt: -1 });
 }
 
 async function upsertTempBan({ guildId, userId, unbanAt }) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
   const when = unbanAt instanceof Date ? unbanAt : new Date(unbanAt);
-  if (Number.isNaN(when.getTime())) throw new TypeError("unbanAt inválido");
-
   await TempBan.findOneAndUpdate(
     { guildId, userId },
     { unbanAt: when },
     { upsert: true, setDefaultsOnInsert: true }
   );
-
   return when;
-}
-
-async function removeTempBan({ guildId, userId }) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
-  await TempBan.deleteOne({ guildId, userId });
-}
-
-async function hasTempBan({ guildId, userId }) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
-  const doc = await TempBan.findOne({ guildId, userId }).lean();
-  return Boolean(doc);
 }
 
 async function listPendingTempBans() {
   return TempBan.find({}).lean();
 }
 
-function clearScheduledTempBan(guildId, userId) {
-  const key = getTempBanKey(guildId, userId);
-  const existing = tempBanTimers.get(key);
-  if (!existing) return;
-  clearTimeout(existing);
-  tempBanTimers.delete(key);
-}
-
 function scheduleTempUnban(client, guildId, userId, unbanAt) {
-  assertSnowflake(guildId, "guildId");
-  assertSnowflake(userId, "userId");
-  if (!client?.guilds?.fetch) throw new TypeError("client inválido");
+  if (!client?.guilds?.fetch) return;
 
   const when = unbanAt instanceof Date ? unbanAt : new Date(unbanAt);
-  if (Number.isNaN(when.getTime())) throw new TypeError("unbanAt inválido");
+  if (Number.isNaN(when.getTime())) return;
 
-  const key = getTempBanKey(guildId, userId);
-  clearScheduledTempBan(guildId, userId);
+  const key = `${guildId}:${userId}`;
+  const existing = tempBanTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    tempBanTimers.delete(key);
+  }
 
   const execute = async () => {
     let retry = false;
     try {
-      const stillPending = await hasTempBan({ guildId, userId });
+      const stillPending = await TempBan.exists({ guildId, userId });
       if (!stillPending) return;
 
       const guild = await client.guilds.fetch(guildId).catch((err) => (err?.code === 10004 ? null : undefined));
@@ -160,21 +107,21 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
         return;
       }
       if (!guild) {
-        await removeTempBan({ guildId, userId }).catch(() => {});
+        await TempBan.deleteOne({ guildId, userId }).catch(() => {});
         return;
       }
 
       try {
         await guild.members.unban(userId, "Tempban expirado");
       } catch (err) {
-        // 10026 = Unknown Ban: el usuario ya no está baneado, se puede limpiar el registro
+        // 10026 = Unknown Ban: el usuario ya no está baneado
         if (err?.code !== 10026) {
           retry = true;
           log.error("Fallo al desbanear; reintentando", { guildId, userId, err: err?.message ?? String(err) });
           return;
         }
       }
-      await removeTempBan({ guildId, userId }).catch(() => {});
+      await TempBan.deleteOne({ guildId, userId }).catch(() => {});
     } catch (err) {
       retry = true;
       log.error("Fallo al expirar tempban; reintentando", { guildId, userId, err: err?.message ?? String(err) });
@@ -186,27 +133,14 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
 
   const delay = when.getTime() - Date.now();
   if (delay <= 0) {
-    execute().catch((err) => {
-      log.error("Fallo inesperado al ejecutar tempban inmediato", { guildId, userId, err: err?.message ?? String(err) });
-    });
-    return;
-  }
-
-  const MAX_INT = 2147483647;
-  if (delay > MAX_INT) {
-    const timeout = setTimeout(() => {
-      scheduleTempUnban(client, guildId, userId, unbanAt);
-    }, MAX_INT);
-    timeout.unref();
-    tempBanTimers.set(key, timeout);
+    execute();
     return;
   }
 
   const timeout = setTimeout(() => {
-    execute().catch((err) => {
-      log.error("Fallo inesperado al ejecutar tempban programado", { guildId, userId, err: err?.message ?? String(err) });
-    });
-  }, delay);
+    if (delay > MAX_TIMEOUT_MS) scheduleTempUnban(client, guildId, userId, when);
+    else execute();
+  }, Math.min(delay, MAX_TIMEOUT_MS));
   timeout.unref();
   tempBanTimers.set(key, timeout);
 }
@@ -220,11 +154,6 @@ module.exports = {
   clearWarnsForUser,
   listWarnsForUser,
   upsertTempBan,
-  removeTempBan,
-  hasTempBan,
   listPendingTempBans,
   scheduleTempUnban,
-  clearScheduledTempBan,
-  normalizeReason,
-  normalizeWarnId,
 };

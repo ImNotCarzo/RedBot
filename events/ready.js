@@ -1,9 +1,7 @@
 const { ActivityType, REST, Routes } = require("discord.js");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/moderation");
-const Logger = require("../src/logger");
-const { sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
-const { setId } = require("../src/commandIds");
-const { COMMANDS_TO_UPDATE } = require("../src/config");
+const { Logger, sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
+const { setId, COMMANDS_TO_UPDATE } = require("../src/config");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
 

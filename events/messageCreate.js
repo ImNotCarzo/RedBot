@@ -5,12 +5,12 @@ const {
   generateChatReply,
 } = require("../src/ai");
 const { getPrefix, DEFAULT_PREFIX } = require("../src/guild");
-const Logger = require("../src/logger");
+const { Logger } = require("../src/runtime");
 const {
   MAX_HISTORIAL,
   MAX_EMBED_DESCRIPTION,
+  RED,
 } = require("../src/config");
-const { RED } = require("../utils/colors");
 
 const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";

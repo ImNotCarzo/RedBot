@@ -1,5 +1,5 @@
-const JoinRole = require("../models/JoinRole");
-const Logger = require("../src/logger");
+const { JoinRole } = require("../src/database");
+const { Logger } = require("../src/runtime");
 const log = new Logger("EVENT_GUILD_MEMBER_ADD", process.env.LOG_LEVEL);
 
 const event = {

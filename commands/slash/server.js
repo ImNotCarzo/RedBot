@@ -7,11 +7,11 @@ const {
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { createCommandLogger, clampPage, noGuildReply, buildPagRow, uniqueId, handleCommandError } = require("../_shared/runtime");
-const { RED } = require("../../utils/colors");
+const { Logger, clampPage, paginateArray, noGuildReply, buildPagRow, uniqueId, handleCommandError } = require("../../src/runtime");
+const { RED } = require("../../src/config");
 
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
-const log = createCommandLogger("CMD_SERVER");
+const log = new Logger("CMD_SERVER", process.env.LOG_LEVEL);
 
 function getServerView(guild, selected) {
   if (selected === "logo") {
@@ -53,6 +53,43 @@ function getServerView(guild, selected) {
   return null;
 }
 
+function getSortedServerRoles(guild) {
+  return guild.roles.cache
+    .filter((r) => r.id !== guild.id)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => `<@&${r.id}>`);
+}
+
+function buildServerRolesEmbed(guild, roles, pages, page) {
+  return new EmbedBuilder()
+    .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
+    .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
+    .setColor(RED)
+    .setFooter({ text: `${roles.length} roles en total` })
+    .setTimestamp();
+}
+
+function createServerViewCommand(name, description) {
+  return {
+    data: new CommandBuilder({ name, description }),
+    async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+      try {
+        const guild = ctx.guild;
+        if (!guild) return noGuildReply(ctx);
+
+        const view = getServerView(guild, name);
+        if (view.error) return ctx.send(view.error);
+
+        await ctx.send({ embeds: [view.embed] });
+      } catch (err) {
+        log.error(`Error en server ${name}`, { err: err?.message ?? String(err) });
+        return handleCommandError(ctx, err);
+      }
+    },
+  };
+}
+
 const data = {
   data: new GroupBuilder({
     name: "server",
@@ -61,332 +98,223 @@ const data = {
     as_prefix: false,
     as_slash: true,
   })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "info",
+        description: "Muestra información del servidor",
+      }),
+      async code(ctx) {
+        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        try {
+          const guild = ctx.guild;
+          if (!guild) return noGuildReply(ctx);
 
-  // ══════════════════════════════════════════
-  // server info
-  // ══════════════════════════════════════════
-  .addCommand({
-    data: new CommandBuilder({
-      name: "info",
-      description: "Muestra información del servidor",
-    }),
+          const owner = await guild.fetchOwner().catch(() => null);
+          const createdTs = Math.floor(guild.createdTimestamp / 1000);
+          const roleCount = guild.roles.cache.filter((r) => r.id !== guild.id).size;
 
-    async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
-      try {
-        const guild = ctx.guild;
-        if (!guild) return noGuildReply(ctx);
-
-        const owner = await guild.fetchOwner().catch(() => null);
-        const createdTs = Math.floor(guild.createdTimestamp / 1000);
-        const roleCount = guild.roles.cache.filter((r) => r.id !== guild.id).size;
-
-        const infoEmbed = new EmbedBuilder()
-          .setTitle(guild.name)
-          .setThumbnail(guild.iconURL({ size: 1024, extension: "png" }))
-          .setColor(RED)
-          .addFields(
-            {
-              name: "General",
-              value:
-                `> **ID:** \`${guild.id}\`\n` +
-                `> **Dueño:** ${owner ? owner.user.username : "No disponible"}\n` +
-                `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)\n` +
-                (guild.vanityURLCode ? `> **Tag:** \`${guild.vanityURLCode}\`\n` : ""),
-            },
-            {
-              name: "Estadísticas",
-              value:
-                `> **Miembros:** \`${guild.memberCount}\`\n` +
-                `> **Canales:** \`${guild.channels.cache.size}\`\n` +
-                `> **Roles:** \`${roleCount}\`\n` +
-                `> **Emojis:** \`${guild.emojis.cache.size}\`\n` +
-                `> **Boost:** \`${guild.premiumSubscriptionCount} (Nivel ${guild.premiumTier})\``,
-            },
-            {
-              name: "Seguridad",
-              value: `> **Verificación:** \`${VERIFICATION_LEVELS[guild.verificationLevel] ?? guild.verificationLevel}\``,
-            }
-          )
-          .setTimestamp();
-
-        const baseOptions = [
-          { label: "Logo", value: "logo", description: "Logo del servidor" },
-          ...(guild.banner ? [{ label: "Banner", value: "banner", description: "Banner del servidor" }] : []),
-          { label: "Roles", value: "roles", description: "Roles del servidor" },
-          { label: "Emojis", value: "emojis", description: "Emojis del servidor" },
-        ];
-        const allOptions = [{ label: "Info", value: "info", description: "Información del servidor" }, ...baseOptions];
-
-        const selectId = uniqueId("srv_select");
-        const prevId = uniqueId("srv_prev");
-        const nextId = uniqueId("srv_next");
-
-        const buildSelectRow = (includeInfo) =>
-          new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-              .setCustomId(selectId)
-              .setPlaceholder("Navegar...")
-              .addOptions(
-                (includeInfo ? allOptions : baseOptions).map((o) =>
-                  new StringSelectMenuOptionBuilder().setLabel(o.label).setValue(o.value).setDescription(o.description)
-                )
-              )
-          );
-
-        const reply = await ctx.send({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
-        const authorId = ctx.user?.id ?? ctx.author?.id;
-        let rolesPageCollector = null;
-
-        const collector = reply.createMessageComponentCollector({
-          time: 5 * 60 * 1000,
-          filter: (i) => i.customId === selectId || [prevId, nextId].includes(i.customId),
-        });
-
-        collector.on("collect", async (interaction) => {
-          const isAuthor = interaction.user.id === authorId;
-
-          // Botones de paginación de roles
-          if ([prevId, nextId].includes(interaction.customId)) {
-            if (!isAuthor) return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
-            return;
-          }
-
-          const selected = interaction.values?.[0];
-          if (!selected) return;
-
-          if (rolesPageCollector) {
-            rolesPageCollector.stop();
-            rolesPageCollector = null;
-          }
-
-          if (selected === "info") {
-            if (!isAuthor) return interaction.reply({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
-            return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
-          }
-
-          const view = getServerView(guild, selected);
-          if (view) {
-            if (view.error) return interaction.reply({ content: view.error, flags: MessageFlags.Ephemeral });
-            if (!isAuthor) return interaction.reply({ embeds: [view.embed], flags: MessageFlags.Ephemeral });
-            return interaction.update({ embeds: [view.embed], components: [buildSelectRow(true)] });
-          }
-
-          if (selected === "roles") {
-            const roles = guild.roles.cache
-              .filter((r) => r.id !== guild.id)
-              .sort((a, b) => b.position - a.position)
-              .map((r) => `<@&${r.id}>`);
-
-            if (!roles.length) return interaction.reply({ content: "Este servidor no tiene roles", flags: MessageFlags.Ephemeral });
-
-            const pages = [];
-            for (let i = 0; i < roles.length; i += 15) pages.push(roles.slice(i, i + 15));
-            let page = 0;
-
-            const buildRolesEmbed = () =>
-              new EmbedBuilder()
-                .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
-                .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
-                .setColor(RED)
-                .setFooter({ text: `${roles.length} roles en total` })
-                .setTimestamp();
-
-            if (!isAuthor) {
-              return interaction.reply({
-                embeds: [buildRolesEmbed()],
-                flags: MessageFlags.Ephemeral,
-              });
-            }
-
-            await interaction.update({
-              embeds: [buildRolesEmbed()],
-              components: pages.length > 1 ? [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildSelectRow(true)],
-            });
-
-            if (pages.length <= 1) return;
-
-            rolesPageCollector = reply.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 2 * 60 * 1000,
-              filter: (i) => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
-            });
-
-            rolesPageCollector.on("collect", async (i) => {
-              if (i.customId === prevId) page--;
-              if (i.customId === nextId) page++;
-              page = clampPage(page, pages.length);
-              await i.update({
-                embeds: [buildRolesEmbed()],
-                components: [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)],
-              });
-            });
-
-            rolesPageCollector.on("end", async () => {
-              await reply.edit({ components: [buildSelectRow(true)] }).catch(() => {});
-            });
-          }
-        });
-
-        collector.on("end", async () => {
-          if (rolesPageCollector) rolesPageCollector.stop();
-          await reply.edit({ components: [] }).catch(() => {});
-        });
-      } catch (err) {
-        log.error("Error en server info", { err: err?.message ?? String(err) });
-        return handleCommandError(ctx, err);
-      }
-    },
-  })
-
-  // ══════════════════════════════════════════
-  // server logo
-  // ══════════════════════════════════════════
-  .addCommand({
-    data: new CommandBuilder({
-      name: "logo",
-      description: "Muestra el logo del servidor",
-    }),
-
-    async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
-      try {
-        const guild = ctx.guild;
-        if (!guild) return noGuildReply(ctx);
-
-        const view = getServerView(guild, "logo");
-        if (view.error) return ctx.send(view.error);
-
-        await ctx.send({ embeds: [view.embed] });
-      } catch (err) {
-        log.error("Error en server logo", { err: err?.message ?? String(err) });
-        return handleCommandError(ctx, err);
-      }
-    },
-  })
-
-  // ══════════════════════════════════════════
-  // server banner
-  // ══════════════════════════════════════════
-  .addCommand({
-    data: new CommandBuilder({
-      name: "banner",
-      description: "Muestra el banner del servidor",
-    }),
-
-    async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
-      try {
-        const guild = ctx.guild;
-        if (!guild) return noGuildReply(ctx);
-
-        const view = getServerView(guild, "banner");
-        if (view.error) return ctx.send(view.error);
-
-        await ctx.send({ embeds: [view.embed] });
-      } catch (err) {
-        log.error("Error en server banner", { err: err?.message ?? String(err) });
-        return handleCommandError(ctx, err);
-      }
-    },
-  })
-
-  // ══════════════════════════════════════════
-  // server emojis
-  // ══════════════════════════════════════════
-  .addCommand({
-    data: new CommandBuilder({
-      name: "emojis",
-      description: "Muestra todos los emojis del servidor",
-    }),
-
-    async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
-      try {
-        const guild = ctx.guild;
-        if (!guild) return noGuildReply(ctx);
-
-        const view = getServerView(guild, "emojis");
-        if (view.error) return ctx.send(view.error);
-
-        await ctx.send({ embeds: [view.embed] });
-      } catch (err) {
-        log.error("Error en server emojis", { err: err?.message ?? String(err) });
-        return handleCommandError(ctx, err);
-      }
-    },
-  })
-
-  // ══════════════════════════════════════════
-  // server roles
-  // ══════════════════════════════════════════
-  .addCommand({
-    data: new CommandBuilder({
-      name: "roles",
-      description: "Lista los roles del servidor",
-    }),
-
-    async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
-      try {
-        const guild = ctx.guild;
-        if (!guild) return noGuildReply(ctx);
-
-        const roles = guild.roles.cache
-          .filter((r) => r.id !== guild.id)
-          .sort((a, b) => b.position - a.position)
-          .map((r) => `<@&${r.id}>`);
-
-        if (!roles.length) return ctx.send("No hay roles");
-
-        const pages = [];
-        for (let i = 0; i < roles.length; i += 15) pages.push(roles.slice(i, i + 15));
-        let page = 0;
-
-        const authorId = ctx.user?.id ?? ctx.author?.id;
-        const prevId = uniqueId("srv_roles_prev");
-        const nextId = uniqueId("srv_roles_next");
-
-        const buildEmbed = () =>
-          new EmbedBuilder()
-            .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
-            .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
+          const infoEmbed = new EmbedBuilder()
+            .setTitle(guild.name)
+            .setThumbnail(guild.iconURL({ size: 1024, extension: "png" }))
             .setColor(RED)
-            .setFooter({ text: `${roles.length} roles en total` })
+            .addFields(
+              {
+                name: "General",
+                value:
+                  `> **ID:** \`${guild.id}\`\n` +
+                  `> **Dueño:** ${owner ? owner.user.username : "No disponible"}\n` +
+                  `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)\n` +
+                  (guild.vanityURLCode ? `> **Tag:** \`${guild.vanityURLCode}\`\n` : ""),
+              },
+              {
+                name: "Estadísticas",
+                value:
+                  `> **Miembros:** \`${guild.memberCount}\`\n` +
+                  `> **Canales:** \`${guild.channels.cache.size}\`\n` +
+                  `> **Roles:** \`${roleCount}\`\n` +
+                  `> **Emojis:** \`${guild.emojis.cache.size}\`\n` +
+                  `> **Boost:** \`${guild.premiumSubscriptionCount} (Nivel ${guild.premiumTier})\``,
+              },
+              {
+                name: "Seguridad",
+                value: `> **Verificación:** \`${VERIFICATION_LEVELS[guild.verificationLevel] ?? guild.verificationLevel}\``,
+              }
+            )
             .setTimestamp();
 
-        const reply = await ctx.send({
-          embeds: [buildEmbed()],
-          components: pages.length > 1 ? [buildPagRow(prevId, nextId, page, pages.length)] : [],
-        });
+          const baseOptions = [
+            { label: "Logo", value: "logo", description: "Logo del servidor" },
+            ...(guild.banner ? [{ label: "Banner", value: "banner", description: "Banner del servidor" }] : []),
+            { label: "Roles", value: "roles", description: "Roles del servidor" },
+            { label: "Emojis", value: "emojis", description: "Emojis del servidor" },
+          ];
+          const allOptions = [{ label: "Info", value: "info", description: "Información del servidor" }, ...baseOptions];
 
-        if (pages.length <= 1) return;
+          const selectId = uniqueId("srv_select");
+          const prevId = uniqueId("srv_prev");
+          const nextId = uniqueId("srv_next");
 
-        const collector = reply.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 2 * 60 * 1000,
-          filter: (i) => [prevId, nextId].includes(i.customId),
-        });
+          const buildSelectRow = (includeInfo) =>
+            new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder()
+                .setCustomId(selectId)
+                .setPlaceholder("Navegar...")
+                .addOptions(
+                  (includeInfo ? allOptions : baseOptions).map((o) =>
+                    new StringSelectMenuOptionBuilder().setLabel(o.label).setValue(o.value).setDescription(o.description)
+                  )
+                )
+            );
 
-        collector.on("collect", async (interaction) => {
-          if (interaction.user.id !== authorId) {
-            return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-          }
-          if (interaction.customId === prevId) page--;
-          if (interaction.customId === nextId) page++;
-          page = clampPage(page, pages.length);
-          await interaction.update({ embeds: [buildEmbed()], components: [buildPagRow(prevId, nextId, page, pages.length)] });
-        });
+          const reply = await ctx.send({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
+          const authorId = ctx.user?.id ?? ctx.author?.id;
+          let rolesPageCollector = null;
 
-        collector.on("end", async () => {
-          await reply.edit({ components: [] }).catch(() => {});
-        });
-      } catch (err) {
-        log.error("Error en server roles", { err: err?.message ?? String(err) });
-        return handleCommandError(ctx, err);
-      }
-    },
-  }),
+          const collector = reply.createMessageComponentCollector({
+            time: 5 * 60 * 1000,
+            filter: (i) => i.customId === selectId || [prevId, nextId].includes(i.customId),
+          });
+
+          collector.on("collect", async (interaction) => {
+            const isAuthor = interaction.user.id === authorId;
+
+            if ([prevId, nextId].includes(interaction.customId)) {
+              if (!isAuthor) return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
+              return;
+            }
+
+            const selected = interaction.values?.[0];
+            if (!selected) return;
+
+            if (rolesPageCollector) {
+              rolesPageCollector.stop();
+              rolesPageCollector = null;
+            }
+
+            if (selected === "info") {
+              if (!isAuthor) return interaction.reply({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
+              return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
+            }
+
+            const view = getServerView(guild, selected);
+            if (view) {
+              if (view.error) return interaction.reply({ content: view.error, flags: MessageFlags.Ephemeral });
+              if (!isAuthor) return interaction.reply({ embeds: [view.embed], flags: MessageFlags.Ephemeral });
+              return interaction.update({ embeds: [view.embed], components: [buildSelectRow(true)] });
+            }
+
+            if (selected === "roles") {
+              const roles = getSortedServerRoles(guild);
+              if (!roles.length) return interaction.reply({ content: "Este servidor no tiene roles", flags: MessageFlags.Ephemeral });
+
+              const pages = paginateArray(roles, 15);
+              let page = 0;
+
+              if (!isAuthor) {
+                return interaction.reply({
+                  embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
+                  flags: MessageFlags.Ephemeral,
+                });
+              }
+
+              await interaction.update({
+                embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
+                components: pages.length > 1 ? [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildSelectRow(true)],
+              });
+
+              if (pages.length <= 1) return;
+
+              rolesPageCollector = reply.createMessageComponentCollector({
+                componentType: ComponentType.Button,
+                time: 2 * 60 * 1000,
+                filter: (i) => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
+              });
+
+              rolesPageCollector.on("collect", async (i) => {
+                if (i.customId === prevId) page--;
+                if (i.customId === nextId) page++;
+                page = clampPage(page, pages.length);
+                await i.update({
+                  embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
+                  components: [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)],
+                });
+              });
+
+              rolesPageCollector.on("end", async () => {
+                await reply.edit({ components: [buildSelectRow(true)] }).catch(() => {});
+              });
+            }
+          });
+
+          collector.on("end", async () => {
+            if (rolesPageCollector) rolesPageCollector.stop();
+            await reply.edit({ components: [] }).catch(() => {});
+          });
+        } catch (err) {
+          log.error("Error en server info", { err: err?.message ?? String(err) });
+          return handleCommandError(ctx, err);
+        }
+      },
+    })
+    .addCommand(createServerViewCommand("logo", "Muestra el logo del servidor"))
+    .addCommand(createServerViewCommand("banner", "Muestra el banner del servidor"))
+    .addCommand(createServerViewCommand("emojis", "Muestra todos los emojis del servidor"))
+    .addCommand({
+      data: new CommandBuilder({
+        name: "roles",
+        description: "Lista los roles del servidor",
+      }),
+      async code(ctx) {
+        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        try {
+          const guild = ctx.guild;
+          if (!guild) return noGuildReply(ctx);
+
+          const roles = getSortedServerRoles(guild);
+          if (!roles.length) return ctx.send("No hay roles");
+
+          const pages = paginateArray(roles, 15);
+          let page = 0;
+
+          const authorId = ctx.user?.id ?? ctx.author?.id;
+          const prevId = uniqueId("srv_roles_prev");
+          const nextId = uniqueId("srv_roles_next");
+
+          const reply = await ctx.send({
+            embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
+            components: pages.length > 1 ? [buildPagRow(prevId, nextId, page, pages.length)] : [],
+          });
+
+          if (pages.length <= 1) return;
+
+          const collector = reply.createMessageComponentCollector({
+            componentType: ComponentType.Button,
+            time: 2 * 60 * 1000,
+            filter: (i) => [prevId, nextId].includes(i.customId),
+          });
+
+          collector.on("collect", async (interaction) => {
+            if (interaction.user.id !== authorId) {
+              return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
+            }
+            if (interaction.customId === prevId) page--;
+            if (interaction.customId === nextId) page++;
+            page = clampPage(page, pages.length);
+            await interaction.update({
+              embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
+              components: [buildPagRow(prevId, nextId, page, pages.length)],
+            });
+          });
+
+          collector.on("end", async () => {
+            await reply.edit({ components: [] }).catch(() => {});
+          });
+        } catch (err) {
+          log.error("Error en server roles", { err: err?.message ?? String(err) });
+          return handleCommandError(ctx, err);
+        }
+      },
+    }),
 };
 
 module.exports = { data };

@@ -49,22 +49,15 @@ const dbOptions = {
   },
 };
 
+const COLORS = {
+  RED: "#ff383d",
+  YELLOW: "#f0b132",
+  GREEN: "#23a55a",
+  DARK: "#2b2d31",
+};
+
 const MAX_HISTORIAL = 10;
 const MAX_EMBED_DESCRIPTION = 4096;
-
-// Asignación estratégica de modelos:
-// - Gemini 3.1 Flash Lite (500 RPD, 15 RPM): Extremadamente estable, rápido y sin 500 INTERNAL.
-//   Verificado 100% funcional en visión multimodal (/fun roast, /util describe) y texto (/fun, /util resume).
-// - Gemini 3.5 Flash Lite (500 RPD, 15 RPM): Modelo de contingencia/fallback automático ante cualquier fallo.
-const AI_MODEL_FAST = "gemini-3.1-flash-lite";
-const AI_MODEL_FAST_FALLBACK = "gemini-3.5-flash-lite";
-
-const AI_MODEL_CHAT = "gemini-3.1-flash-lite";
-const AI_MODEL_CHAT_FALLBACK = "gemini-3.5-flash-lite";
-
-const AI_MODEL_VISION = "gemini-3.1-flash-lite";
-const AI_MODEL_VISION_FALLBACK = "gemini-3.5-flash-lite";
-
 const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
@@ -79,19 +72,25 @@ Jamás uses frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!" ni nada po
 Respondes en el mismo idioma que el usuario.
 Mantén el contexto de la conversación.`;
 
+const commandIds = new Map();
+
+function setId(name, id) {
+  if (name && typeof name === "string") commandIds.set(name, id ?? "0");
+}
+
+function getId(name) {
+  return (name && typeof name === "string" && commandIds.get(name)) || "0";
+}
+
 module.exports = {
-  REQUIRED_ENV,
   validateEnv,
   botOptions,
   dbOptions,
+  ...COLORS,
   MAX_HISTORIAL,
   MAX_EMBED_DESCRIPTION,
-  AI_MODEL_CHAT,
-  AI_MODEL_CHAT_FALLBACK,
-  AI_MODEL_VISION,
-  AI_MODEL_VISION_FALLBACK,
-  AI_MODEL_FAST,
-  AI_MODEL_FAST_FALLBACK,
   COMMANDS_TO_UPDATE,
   SYSTEM_PROMPT,
+  setId,
+  getId,
 };

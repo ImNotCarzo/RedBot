@@ -1,10 +1,10 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion, generateText, generateVision } = require("../../src/ai");
-const { RED, GREEN } = require("../../utils/colors");
+const { RED, GREEN } = require("../../src/config");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
 const {
-  createCommandLogger,
+  Logger,
   fetchWithTimeout,
   prepareReply,
   noGuildReply,
@@ -15,13 +15,13 @@ const {
   broadcastDm,
   buildDmAllEmbed,
   buildDmAllLogEmbed,
-} = require("../_shared/runtime");
+} = require("../../src/runtime");
 const { version: botVersion } = require("../../package.json");
 
 let graloniumVersion = "0.2.0";
 try { graloniumVersion = require("gralonium/package.json").version; } catch {}
 
-const log = createCommandLogger("CMD_UTIL");
+const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
 
 // ─────────────────────────────────────────────
 //  DATA

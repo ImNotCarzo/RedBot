@@ -1,5 +1,47 @@
 const mongoose = require("mongoose");
+const { Schema, model, models } = mongoose;
 const { dbOptions } = require("./config");
+
+const guildSchema = new Schema({
+  guildId: { type: String, required: true, unique: true },
+  prefix: { type: String, default: ".", trim: true, minlength: 1, maxlength: 3 },
+}, { timestamps: true });
+
+const joinRoleSchema = new Schema({
+  guildId:    { type: String, required: true, unique: true },
+  roleId:     { type: String, required: true },
+  ignoreBots: { type: Boolean, default: false },
+}, { timestamps: true });
+
+const logSchema = new Schema({
+  guildId:   { type: String, required: true, unique: true },
+  channelId: { type: String, required: true },
+}, { timestamps: true });
+
+const tempBanSchema = new Schema({
+  guildId: { type: String, required: true },
+  userId:  { type: String, required: true },
+  unbanAt: { type: Date,   required: true },
+}, { timestamps: true });
+tempBanSchema.index({ guildId: 1, userId: 1 }, { unique: true });
+tempBanSchema.index({ unbanAt: 1 });
+
+const warnSchema = new Schema({
+  guildId:   { type: String, required: true },
+  userId:    { type: String, required: true },
+  moderator: { type: String, required: true },
+  reason:    { type: String, default: "Sin razón", trim: true, maxlength: 512 },
+  warnId:    { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+warnSchema.index({ guildId: 1, warnId: 1 }, { unique: true });
+warnSchema.index({ guildId: 1, userId: 1, createdAt: -1 });
+
+const GuildConfig = models.GuildConfig || model("GuildConfig", guildSchema);
+const JoinRole    = models.JoinRole    || model("JoinRole", joinRoleSchema);
+const Log         = models.Log         || model("Log", logSchema);
+const TempBan     = models.TempBan     || model("TempBan", tempBanSchema);
+const Warn        = models.Warn        || model("Warn", warnSchema);
 
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
@@ -10,8 +52,7 @@ async function connectDatabase(uri, log) {
       log?.info("Base de datos conectada", { attempt });
       return;
     } catch (err) {
-      const isLast = attempt === retryAttempts;
-      if (isLast) {
+      if (attempt === retryAttempts) {
         log?.error("No se pudo conectar a la base de datos tras varios intentos", { err: err.message });
         throw err;
       }
@@ -33,4 +74,12 @@ async function closeDatabase(log) {
   }
 }
 
-module.exports = { connectDatabase, closeDatabase };
+module.exports = {
+  connectDatabase,
+  closeDatabase,
+  GuildConfig,
+  JoinRole,
+  Log,
+  TempBan,
+  Warn,
+};

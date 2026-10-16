@@ -1,8 +1,7 @@
 const { Errors } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
-const { RED } = require("../utils/colors");
-const Logger = require("../src/logger");
-const { sanitizeError } = require("../src/runtime");
+const { RED } = require("../src/config");
+const { Logger, sanitizeError } = require("../src/runtime");
 
 const log = new Logger("EVENT_FRAMEWORK_ERROR", process.env.LOG_LEVEL);
 
