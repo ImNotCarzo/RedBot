@@ -130,13 +130,13 @@ function buildAttachmentFromUrl(input, paramName = "") {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   const mimeTypes = {
     jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
-    mp3: "audio/mpeg", mp4: "video/mp4", wav: "audio/wav", ogg: "audio/ogg", webm: "video/webm", m4a: "audio/mp4", flac: "audio/flac",
+    mp3: "audio/mpeg", mp4: "video/mp4", wav: "audio/wav", ogg: "audio/ogg", webm: "video/webm", m4a: "audio/mp4", flac: "audio/flac", mov: "video/quicktime",
   };
 
   return {
     name,
     url: input,
-    contentType: mimeTypes[ext] ?? (paramName === "audio" ? "audio/mpeg" : "image/png"),
+    contentType: mimeTypes[ext] ?? (paramName === "audio" || paramName === "archivo" ? "audio/mpeg" : "image/png"),
     size: 0,
   };
 }

@@ -7,19 +7,20 @@ const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
 const aiClients = new Map();
 let currentKey = 0;
 
+const FALLBACK_CHAIN = [
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemma-4-31b-it",
+  "gemma-4-26b-a4b-it",
+  "gemma-3-27b-it",
+];
+
 const DEFAULT_TIMEOUT_MS = 12_000;
-const DEFAULT_ATTEMPTS = 3;
+const DEFAULT_ATTEMPTS = FALLBACK_CHAIN.length;
 const SESSION_TTL_MS = 10 * 60 * 1000;
 const MAX_SESSIONS = 2000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const sessions = new Map();
-
-const FALLBACK_CHAIN = [
-  "gemini-3.1-flash-lite",
-  "gemini-3.5-flash-lite",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
-];
 
 function getAI() {
   const apiKey = GEMINI_KEYS[currentKey] ?? null;
@@ -63,14 +64,17 @@ async function withAITimeout(promise, timeoutMs) {
   }
 }
 
-async function generateWithFallback(params) {
+async function generateWithFallback(params, customChain = null) {
+  const chain = Array.isArray(customChain) && customChain.length > 0 ? customChain : FALLBACK_CHAIN;
+  const maxAttempts = Math.max(chain.length, 2);
   const triedModels = new Set([params.model]);
   const requestParams = { ...params, config: { ...params.config } };
+  const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let lastErr;
-  for (let attempt = 1; attempt <= DEFAULT_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await withAITimeout(getAI().models.generateContent(requestParams), DEFAULT_TIMEOUT_MS);
+      return await withAITimeout(getAI().models.generateContent(requestParams), timeoutMs);
     } catch (err) {
       lastErr = err;
       const msg = String(err?.message ?? err ?? "");
@@ -94,17 +98,33 @@ async function generateWithFallback(params) {
         log.warn("Rate limit en Gemini; rotando API key", { attempt, model: requestParams.model });
       }
 
-      if (isModelFailure && attempt < DEFAULT_ATTEMPTS) {
-        const nextModel = FALLBACK_CHAIN.find((m) => !triedModels.has(m));
+      if (isModelFailure && attempt < maxAttempts) {
+        const nextModel = chain.find((m) => !triedModels.has(m));
         if (nextModel) {
           log.warn(`Modelo ${requestParams.model} falló (${msg.slice(0, 80)}); cambiando a: ${nextModel}`);
           triedModels.add(nextModel);
           requestParams.model = nextModel;
+
+          if (nextModel.startsWith("gemma") && requestParams.config?.systemInstruction) {
+            const sysInst = requestParams.config.systemInstruction;
+            delete requestParams.config.systemInstruction;
+            if (Array.isArray(requestParams.contents) && requestParams.contents.length > 0) {
+              const userTurn = requestParams.contents.find((c) => c.role === "user") || requestParams.contents[0];
+              if (userTurn?.parts) {
+                const textPart = userTurn.parts.find((p) => typeof p.text === "string");
+                if (textPart) {
+                  textPart.text = `[Instrucciones]: ${sysInst}\n\n${textPart.text}`;
+                } else {
+                  userTurn.parts.unshift({ text: `[Instrucciones]: ${sysInst}` });
+                }
+              }
+            }
+          }
           continue;
         }
       }
 
-      if (attempt >= DEFAULT_ATTEMPTS || !isRetriableAIError(err)) break;
+      if (attempt >= maxAttempts || !isRetriableAIError(err)) break;
 
       log.warn("Error transitorio en IA; reintentando", {
         attempt,
@@ -354,10 +374,79 @@ async function generateVision(prompt, imageUrl) {
   return response.text?.trim() || null;
 }
 
+async function generateTranscription(buffer, mimeType = "video/quicktime") {
+  const cleanMime = (mimeType || "video/quicktime").split(";")[0].trim().toLowerCase();
+  const prompt = `Transcribe con exactitud, palabra por palabra, todo el audio hablado en este archivo.
+Instrucciones estrictas:
+- Escribe ÚNICAMENTE el texto que se escucha en el audio.
+- Si no hay voz inteligible, no se escucha nada o está en silencio, responde únicamente: NO_AUDIO_DETECTED
+- Prohibido agregar introducciones, notas, explicaciones, marcas de tiempo ni formato adicional.`;
+
+  let uploadedFile = null;
+  try {
+    let filePart;
+    if (buffer.length <= 14 * 1024 * 1024) {
+      filePart = {
+        inlineData: {
+          mimeType: cleanMime,
+          data: buffer.toString("base64"),
+        },
+      };
+    } else {
+      const fileBlob = new Blob([buffer], { type: cleanMime });
+      uploadedFile = await getAI().files.upload({
+        file: fileBlob,
+        config: {
+          mimeType: cleanMime,
+          displayName: `audio_${Date.now()}`,
+        },
+      });
+
+      let current = uploadedFile;
+      let waited = 0;
+      while (current.state === "PROCESSING" && waited < 30_000) {
+        await wait(2000);
+        waited += 2000;
+        current = await getAI().files.get({ name: uploadedFile.name });
+      }
+
+      if (current.state === "FAILED") {
+        throw new Error("El procesamiento del archivo multimedia falló en Gemini.");
+      }
+
+      filePart = {
+        fileData: {
+          fileUri: current.uri,
+          mimeType: current.mimeType || cleanMime,
+        },
+      };
+    }
+
+    const response = await generateWithFallback(
+      {
+        model: "gemini-3.1-flash-lite",
+        contents: [{ role: "user", parts: [{ text: prompt }, filePart] }],
+        config: { temperature: 0.2 },
+        timeoutMs: 35_000,
+      },
+      ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
+    );
+
+    const text = response.text?.trim() || "";
+    if (!text || text.includes("NO_AUDIO_DETECTED")) return null;
+    return text;
+  } finally {
+    if (uploadedFile?.name) {
+      getAI().files.delete({ name: uploadedFile.name }).catch(() => {});
+    }
+  }
+}
+
 module.exports = {
   generateChatReply,
   generateText,
   generateVision,
+  generateTranscription,
   toGeminiHistory,
   setConversacion,
   getConversacion,

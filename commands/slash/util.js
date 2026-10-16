@@ -1,6 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
-const { deleteConversacion, generateText, generateVision } = require("../../src/ai");
+const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { RED, GREEN } = require("../../src/config");
 const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
 const {
@@ -332,7 +332,7 @@ const data = {
     params: new ParamsBuilder()
       .addAttachment({
         name: "archivo",
-        description: "Audio a transcribir (mp3, wav, ogg, webm, mp4 — máx 25MB)",
+        description: "Audio o video a transcribir (mp3, wav, ogg, webm, mp4, mov — máx 25MB)",
         required: true,
       }),
 
@@ -340,33 +340,50 @@ const data = {
       const reply      = await prepareReply(ctx);
       const attachment = ctx.get("archivo");
 
-      const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac)$/i;
+      const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i;
 
       if (!VALID_EXT.test(attachment.name ?? "")) {
-        return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac", flags: MessageFlags.Ephemeral });
+        return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac, mov", flags: MessageFlags.Ephemeral });
       }
 
       if (attachment.size > 25 * 1024 * 1024) {
         return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
       }
 
+      const isMov = /\.mov$/i.test(attachment.name ?? "") || attachment.contentType === "video/quicktime";
+
       try {
-        const { default: Groq } = require("groq-sdk");
-        const groq = new Groq({ apiKey: process.env.GROQ });
-
-        const fileRes = await fetchWithTimeout(attachment.url, {}, 10_000);
+        const fileRes = await fetchWithTimeout(attachment.url, {}, 15_000);
         if (!fileRes.ok) throw new Error(`No se pudo descargar archivo (${fileRes.status})`);
-        const blob    = await fileRes.blob();
-        const file    = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
+        const arrayBuf = await fileRes.arrayBuffer();
+        const buffer   = Buffer.from(arrayBuf);
 
-        const result = await groq.audio.transcriptions.create({
-          file,
-          model: "whisper-large-v3",
-          response_format: "text",
-        });
+        let texto = null;
 
-        const texto = result?.trim();
-        if (!texto) return reply({ content: "No se detectó voz en el archivo", flags: MessageFlags.Ephemeral });
+        if (isMov) {
+          texto = await generateTranscription(buffer, attachment.contentType || "video/quicktime");
+        } else {
+          try {
+            const { default: Groq } = require("groq-sdk");
+            const groq = new Groq({ apiKey: process.env.GROQ });
+            const blob = new Blob([buffer], { type: attachment.contentType || "audio/mpeg" });
+            const file = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
+
+            const result = await groq.audio.transcriptions.create({
+              file,
+              model: "whisper-large-v3",
+              response_format: "text",
+            });
+            texto = result?.trim() || null;
+          } catch (groqErr) {
+            log.warn("[util transcribe] Falló Groq Whisper; usando Gemini como fallback", {
+              err: groqErr?.message ?? String(groqErr),
+            });
+            texto = await generateTranscription(buffer, attachment.contentType || "audio/mpeg");
+          }
+        }
+
+        if (!texto) return reply({ content: "No se detectó voz inteligible en el archivo", flags: MessageFlags.Ephemeral });
 
         if (texto.length > 3900) {
           return reply({
