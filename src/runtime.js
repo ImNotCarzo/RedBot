@@ -32,7 +32,7 @@ class Logger {
 }
 
 const CLIENT_ID = process.env.CLIENT_ID || "1020772849906098186";
-const INVITE_URL = `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}`;
+const INVITE_URL = `https://redbot.me/invite`;
 const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 const THINKING_TEXT = "<a:typing:1484407380291616778>  RedBot está pensando...";
 
