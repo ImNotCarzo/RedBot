@@ -1,6 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
+const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadVideoBuffer, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN } = require("../../src/config");
 const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
 const {
@@ -391,6 +392,53 @@ const data = {
     }
   },
 })
+
+  // ── DOWNLOAD ──────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "download",
+      description: "Descarga un video desde un enlace (TikTok, X, Instagram, Reddit, etc.)",
+      aliases: ["dl", "video", "bajar"],
+    }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "url",
+        description: "Enlace del video a descargar",
+        required: true,
+      }),
+
+    async code(ctx) {
+      const reply = await prepareReply(ctx, { thinking: true });
+      const rawInput = ctx.get("url");
+      const url = extractFirstUrl(rawInput);
+
+      if (!url) {
+        return reply({ content: "Debes proporcionar un enlace válido (`https://...`)", flags: MessageFlags.Ephemeral });
+      }
+
+      try {
+        const meta = await resolveVideoMetadata(url);
+        if (!meta?.videoUrl) {
+          return reply({
+            content: "No pude extraer ningún video de ese enlace. Verifica que sea público y contenga un video.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const maxBytes = getGuildUploadLimitBytes(ctx.guild);
+        const downloadResult = await downloadVideoBuffer(meta.videoUrl, maxBytes);
+        const payload = buildDownloadV2Payload(meta, downloadResult);
+
+        await reply(payload);
+      } catch (err) {
+        log.error("[util download]", { err: err?.message ?? String(err) });
+        return reply({
+          content: "No se pudo descargar el video en este momento. Intenta con otro enlace.",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+    },
+  })
 
   // ── DESCRIBE ──────────────────────────────────
   .addCommand({

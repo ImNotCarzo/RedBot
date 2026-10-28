@@ -13,6 +13,7 @@ const PREFIXED_TO_SLASH_MAP = {
   clone: "channel/clone",
   color: "role/color",
   dmall: "util/dm",
+  download: "util/download",
   emojis: "server/emojis",
   jumbo: "util/jumbo",
   logo: "server/logo",
@@ -217,6 +218,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         }
       } else if (def.required && replyMsg?.content?.trim()) {
         value = replyMsg.content.trim();
+      } else if (def.required && slashName === "download" && replyMsg?.attachments?.first?.()?.url) {
+        value = replyMsg.attachments.first().url;
       }
     } else if (args.length) {
       value = args.shift();

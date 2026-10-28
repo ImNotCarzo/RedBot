@@ -55,6 +55,7 @@ const getCommands = () => ({
     setprefix: { short: "setprefix", slash: "util setprefix", id: IDS.util(), usage: ".setprefix <nuevo>",         aliases: ["prefix"],                       description: "Cambia o muestra el prefijo del bot en este servidor." },
     askreset:  { short: "askreset",  slash: "util askreset",  id: IDS.util(), usage: ".askreset",                  aliases: ["aireset", "reset"],             description: "Limpia tu historial de conversación con la IA." },
     translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",aliases: ["traducir", "trans"],            description: "Traduce texto a otro idioma." },
+    download:  { short: "download",  slash: "util download",  id: IDS.util(), usage: ".download <url>",            aliases: ["dl", "video", "bajar"],       description: "Descarga un video desde un enlace." },
     describe:  { short: "describe",  slash: "util describe",  id: IDS.util(), usage: ".describe <url | adjunto>",  aliases: ["describir"],                    description: "Describe el contenido de una imagen." },
     transcribe:{ short: "transcribe",slash: "util transcribe",id: IDS.util(), usage: ".transcribe <url | adjunto>",aliases: ["transcribir"],                  description: "Transcribe un audio o video a texto." },
     resumir:   { short: "resume",   slash: "util resume",   id: IDS.util(), usage: ".resume <texto>",           aliases: ["resumir", "summarize"],          description: "Resume un texto largo de 100 caracteres o más." },

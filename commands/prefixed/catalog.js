@@ -256,6 +256,7 @@ const DEFINITIONS = [
   { name: "afk", description: "Establece tu estado como ausente (AFK)", aliases: ["ausente"] },
   { name: "askreset", description: "Limpia tu historial de conversación con la IA", aliases: ["reset", "aireset"] },
   { name: "botinfo", description: "Información general del bot", aliases: ["bot", "info"] },
+  { name: "download", description: "Descarga un video desde un enlace", aliases: ["dl", "video", "bajar"], authorName: "Comando Download", descriptionText: "**Usos:**\nDescarga un video desde un enlace (TikTok, X, Instagram, Reddit, etc.)\n\n**Aliases:**\n`dl`, `video`, `bajar`\n\n```js\n.download <url>\nEjemplo: .download https://www.tiktok.com/@user/video/123```" },
   { name: "describe", description: "Describe el contenido de una imagen", aliases: ["describir"], authorName: "Comando Describe", descriptionText: "**Usos:**\nDescribe el contenido de una imagen\n\n**Aliases:**\n`describir`\n\n```js\n.describe <adjunto>\nEjemplo: .describe <Subeunaimagenwe.png> ```" },
   { name: "invite", description: "Obtén los links de invitación del bot", aliases: ["inv"] },
   { name: "jumbo", description: "Muestra un emoji en tamaño grande", aliases: ["emojijumbo", "bigemoji"], authorName: "Comando Jumbo", descriptionText: "**Usos:**\nMuestra un emoji personalizado o estándar en tamaño grande\n\n**Aliases:**\n`emojijumbo`, `bigemoji`\n\n```js\n.jumbo <emoji>\nEjemplo: .jumbo <:redbot:1474109778044260478>```" },

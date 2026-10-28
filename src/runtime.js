@@ -319,7 +319,15 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
 async function prepareReply(ctx, { thinking = false } = {}) {
   if (ctx.interaction) {
     await ctx.interaction.deferReply();
-    return (payload) => ctx.interaction.editReply(payload);
+    return async (payload) => {
+      const body = typeof payload === "string" ? { content: payload } : payload;
+      const wantsEphemeral = body?.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
+      if (wantsEphemeral && !ctx.interaction.ephemeral && typeof ctx.interaction.followUp === "function") {
+        if (!ctx.interaction.replied) await ctx.interaction.deleteReply().catch(() => {});
+        return ctx.interaction.followUp(body);
+      }
+      return ctx.interaction.editReply(payload);
+    };
   }
   if (!thinking) return (payload) => ctx.send(payload);
 
@@ -330,7 +338,9 @@ async function prepareReply(ctx, { thinking = false } = {}) {
     ctx._thinkingMessage = null;
     if (!current?.edit) return ctx.send(payload);
     const body = typeof payload === "string" ? { content: payload } : payload;
-    if (body.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral) {
+    const isEphemeral = body.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
+    const isV2 = body.flags != null && (Number(body.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
+    if (isEphemeral || isV2) {
       await current.delete().catch(() => {});
       return ctx.send(body);
     }
