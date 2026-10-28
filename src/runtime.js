@@ -5,6 +5,20 @@ const { Gralonium } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
 
+// Tras deferReply() público, Discord ignora el flag Ephemeral en editReply.
+// Para respetarlo en errores, se borra el "pensando..." y se envía un followUp efímero.
+const { Context: GraloniumContext } = require("gralonium");
+const baseContextSend = GraloniumContext.prototype.send;
+GraloniumContext.prototype.send = async function send(payload) {
+  const interaction = this.data;
+  const flags = payload && typeof payload === "object" ? payload.flags : null;
+  const wantsEphemeral = flags != null && (Number(flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
+  if (wantsEphemeral && interaction?.deferred && !interaction.ephemeral && typeof interaction.followUp === "function") {
+    if (!interaction.replied) await interaction.deleteReply().catch(() => {});
+    return interaction.followUp(payload);
+  }
+  return baseContextSend.call(this, payload);
+};
 const LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
 
 class Logger {
@@ -302,12 +316,26 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
   return fetch(url, { ...options, signal });
 }
 
-async function prepareReply(ctx) {
+async function prepareReply(ctx, { thinking = false } = {}) {
   if (ctx.interaction) {
     await ctx.interaction.deferReply();
     return (payload) => ctx.interaction.editReply(payload);
   }
-  return (payload) => ctx.send(payload);
+  if (!thinking) return (payload) => ctx.send(payload);
+
+  let pending = await sendThinkingReply(ctx).catch(() => null);
+  return async (payload) => {
+    const current = pending;
+    pending = null;
+    ctx._thinkingMessage = null;
+    if (!current?.edit) return ctx.send(payload);
+    const body = typeof payload === "string" ? { content: payload } : payload;
+    if (body.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral) {
+      await current.delete().catch(() => {});
+      return ctx.send(body);
+    }
+    return current.edit({ content: "", embeds: [], components: [], ...body }).catch(() => ctx.send(body));
+  };
 }
 
 function noGuildReply(ctx, message = "Este comando solo funciona en servidores") {
@@ -446,7 +474,7 @@ module.exports = {
   registerShutdownHandlers,
   clampPage,
   paginateArray,
-  buildPaginationRow,
+  buildPaginationRow,  buildPagRow: buildPaginationRow,
   uniqueId,
   sendThinkingReply,
   formatPermissionName,

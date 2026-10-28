@@ -164,7 +164,7 @@ const dmallCommand = {
 
     await sendLog(guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros: exclusiones })).catch(() => null);
 
-    return progressMsg.edit(`hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`).catch(() => null);
+    return (progressMsg ? progressMsg.edit.bind(progressMsg) : ctx.send)(`hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`).catch(() => null);
   },
 };
 

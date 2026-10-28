@@ -285,7 +285,8 @@ function wrapSingleCommand(command, file, log) {
     const slashName = slashKey?.split("/")[1];
     const slashCommand = slashKey ? slashCommandMap.get(slashKey) : null;
 
-    if (slashCommand?.code) {
+    // dmall usa su propio parser (titulo,texto + flags --); no se delega al slash
+    if (slashCommand?.code && prefixedName !== "dmall") {
       try {
         const prevCommand = ctx.command;
         ctx.command = slashCommand;

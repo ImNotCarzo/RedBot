@@ -12,7 +12,6 @@ const FALLBACK_CHAIN = [
   "gemini-3.5-flash-lite",
   "gemma-4-31b-it",
   "gemma-4-26b-a4b-it",
-  "gemma-3-27b-it",
 ];
 
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -364,8 +363,8 @@ async function generateText(prompt, systemInstruction) {
   return response.text?.trim() || null;
 }
 
-async function generateVision(prompt, imageUrl) {
-  const imagePart = await fetchImageAsInlineData(imageUrl);
+async function generateVision(prompt, image) {
+  const imagePart = typeof image === "string" ? await fetchImageAsInlineData(image) : image;
   const response = await generateWithFallback({
     model: FALLBACK_CHAIN[0],
     contents: [{ role: "user", parts: [{ text: prompt }, imagePart] }],
@@ -446,6 +445,7 @@ module.exports = {
   generateChatReply,
   generateText,
   generateVision,
+  fetchImageAsInlineData,
   generateTranscription,
   toGeminiHistory,
   setConversacion,

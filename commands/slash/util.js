@@ -287,7 +287,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply      = await prepareReply(ctx);
+      const reply      = await prepareReply(ctx, { thinking: true });
       const attachment = ctx.get("imagen");
       if (!attachment) {
         return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
@@ -337,7 +337,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply      = await prepareReply(ctx);
+      const reply      = await prepareReply(ctx, { thinking: true });
       const attachment = ctx.get("archivo");
 
       const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i;
@@ -508,7 +508,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepareReply(ctx);
+      const reply = await prepareReply(ctx, { thinking: true });
       const texto = ctx.get("texto");
 
       if (texto.length < 100) {

@@ -98,7 +98,6 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
       try {
         await channel.permissionOverwrites.edit(member, {
           ViewChannel: allow,
-          SendMessages: allow,
         }, { reason: `${modTag}: channel ${name}` });
 
         await ctx.send({

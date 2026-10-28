@@ -130,7 +130,7 @@ const data = {
           if (!guild) {
             const user = await resolveUser(ctx, input);
             if (!user) return ctx.send("No se encontró ningún usuario");
-            const fetched = await user.fetch().catch(() => user);
+            const fetched = await user.fetch(true).catch(() => user);
             const createdTs = Math.floor(fetched.createdTimestamp / 1000);
             const insignias = fetched.flags?.toArray().map((f) => `\`${f}\``).join(", ") || "Sin insignias";
 
@@ -202,12 +202,14 @@ const data = {
           const member = await resolveMember(ctx, input);
           if (!member) return ctx.send("No se encontró ningún usuario");
 
-          const user = await member.user.fetch().catch(() => member.user);
+          const user = await member.user.fetch(true).catch(() => member.user);
+          const fullMember = await member.fetch(true).catch(() => member);
+          const getBannerUrl = () => fullMember.bannerURL?.({ size: 4096 }) ?? user.bannerURL({ size: 4096 }) ?? null;
           const insignias = user.flags?.toArray().map((f) => `\`${f}\``).join(", ") || "Sin insignias";
           const colorRol = getMemberColor(member, DARK);
           const createdTs = Math.floor(user.createdTimestamp / 1000);
           const joinedTs = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
-          const hasBanner = !!user.banner;
+          const hasBanner = !!(user.banner || fullMember.banner);
 
           const fields = [
             {
@@ -280,7 +282,7 @@ const data = {
                 return interaction.reply({ embeds: [av], flags: MessageFlags.Ephemeral });
               }
               if (selected === "banner") {
-                const bannerURL = user.bannerURL({ size: 4096 });
+                const bannerURL = getBannerUrl();
                 if (!bannerURL) return interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral });
                 const bn = new EmbedBuilder()
                   .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
@@ -359,7 +361,7 @@ const data = {
             }
 
             if (selected === "banner") {
-              const bannerURL = user.bannerURL({ size: 4096 });
+              const bannerURL = getBannerUrl();
               if (!bannerURL) return interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral });
               return interaction.update({
                 embeds: [new EmbedBuilder()
@@ -508,11 +510,11 @@ const data = {
           if (ctx.guild) {
             member = await resolveMember(ctx, input);
             if (!member) return ctx.send("No pude encontrar al usuario");
-            user = await member.user.fetch().catch(() => member.user);
+            user = await member.user.fetch(true).catch(() => member.user);
           } else {
             user = await resolveUser(ctx, input);
             if (!user) return ctx.send("No pude encontrar al usuario");
-            user = await user.fetch().catch(() => user);
+            user = await user.fetch(true).catch(() => user);
           }
 
           const serverBannerURL = member?.bannerURL?.({ size: 4096 }) ?? null;

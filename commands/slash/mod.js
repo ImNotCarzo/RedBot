@@ -503,16 +503,23 @@ const data = {
         try {
           const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
           const fetched = await ctx.channel.messages.fetch({ limit: 100 });
+          const cmdMessage = ctx.message ?? null;
+          const botReplyId = ctx.interaction?.id ?? null;
           const toDelete = fetched
-            .filter((m) => m.createdTimestamp > twoWeeksAgo && (!target || m.author.id === target.id))
+            .filter((m) =>
+              m.id !== cmdMessage?.id &&
+              !(botReplyId && (m.interaction?.id === botReplyId || m.interactionMetadata?.id === botReplyId)) &&
+              m.createdTimestamp > twoWeeksAgo &&
+              (!target || m.author.id === target.id)
+            )
             .first(amount);
-
           if (!toDelete.length) {
             return ctx.send({ content: "No hay mensajes recientes para borrar", flags: MessageFlags.Ephemeral });
           }
 
+          if (cmdMessage) toDelete.push(cmdMessage);
           const deleted = await ctx.channel.bulkDelete(toDelete, true);
-          const cantidad = deleted.size;
+          const cantidad = Math.max(0, deleted.size - (cmdMessage && deleted.has(cmdMessage.id) ? 1 : 0));
           const texto = target
             ? `Se eliminaron **${cantidad}** mensaje${cantidad !== 1 ? "s" : ""} de **${target.user.globalName || target.user.username}**`
             : `Se eliminaron **${cantidad}** mensaje${cantidad !== 1 ? "s" : ""}`;

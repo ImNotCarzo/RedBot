@@ -1,7 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 const { Logger, prepareReply, noGuildReply, handleCommandError } = require("../../src/runtime");
-const { generateText, generateVision } = require("../../src/ai");
+const { generateText, generateVision, fetchImageAsInlineData } = require("../../src/ai");
 const { RED } = require("../../src/config");
 
 const log = new Logger("CMD_FUN", process.env.LOG_LEVEL);
@@ -26,7 +26,7 @@ function msATexto(ms) {
 }
 
 async function runTextFunCommand(ctx, { logTag, prompt, fallbackText, title, footerText }) {
-  const reply = await prepareReply(ctx);
+  const reply = await prepareReply(ctx, { thinking: true });
   try {
     const raw = await generateText(prompt);
     const texto = raw?.slice(0, 4000) || fallbackText;
@@ -150,13 +150,17 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
 
-        const reply = await prepareReply(ctx);
+        const reply = await prepareReply(ctx, { thinking: true });
 
         try {
-          const target = ctx.get("usuario") ?? ctx.member;
-          if (!target) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
+          const baseTarget = ctx.get("usuario") ?? ctx.member;
+          if (!baseTarget) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
 
-          const user = target.user;
+          // Precarga miembro (roles, presencia, ingreso) y foto antes de generar, para evitar fallos iniciales
+          const target = await ctx.guild.members.fetch({ user: baseTarget.id, force: true }).catch(() => baseTarget);
+          const user = await target.user.fetch(true).catch(() => target.user);
+          const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+          const imagePart = await fetchImageAsInlineData(avatarUrl).catch(() => fetchImageAsInlineData(avatarUrl)).catch(() => null);
           const username = user.globalName ?? user.username;
           const usertag = user.username;
 
@@ -201,8 +205,8 @@ Sarcasmo, humor negro e ingenio. Sin amenazas reales. Sin ser genérico.
 Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos.
 ${datosUsuario}`;
 
-          const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
-          const texto = (await generateVision(prompt, avatarUrl))?.slice(0, 4000)
+          const generated = imagePart ? await generateVision(prompt, imagePart) : await generateText(prompt);
+          const texto = generated?.slice(0, 4000)
             ?? "Ocurrió un error con la IA, intenta de nuevo";
 
           await reply({
