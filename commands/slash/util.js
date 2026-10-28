@@ -2,7 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { RED, GREEN } = require("../../src/config");
-const { getPrefix, setPrefix, sendLog } = require("../../src/guild");
+const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
 const {
   Logger,
   fetchWithTimeout,
@@ -214,6 +214,125 @@ const data = {
       const userId = ctx.user?.id ?? ctx.author?.id;
       deleteConversacion(userId);
       await ctx.send({ content: "Tu historial de conversación fue reiniciado." });
+    },
+  })
+
+  // ── AFK ───────────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "afk",
+      description: "Establece tu estado como ausente (AFK)",
+      aliases: ["ausente"],
+    }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "razon",
+        description: "Motivo de tu ausencia (opcional)",
+        required: false,
+      }),
+
+    async code(ctx) {
+      try {
+        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        if (!ctx.guild) return noGuildReply(ctx);
+
+        const invoker = ctx.user ?? ctx.author;
+        const razon = ctx.get("razon")?.trim() || "AFK";
+
+        await setAfk(ctx.guild.id, invoker.id, razon);
+
+        await ctx.send({
+          embeds: [
+            new EmbedBuilder()
+              .setAuthor({ name: invoker.username, iconURL: invoker.displayAvatarURL({ size: 128 }) })
+              .setDescription(`💤 Ahora estás **AFK**: ${razon}`)
+              .setColor(RED)
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        log.error("[util afk]", { err: err?.message ?? String(err) });
+        handleCommandError(ctx, err);
+      }
+    },
+  })
+
+  // ── JUMBO ─────────────────────────────────────
+  .addCommand({
+    data: new CommandBuilder({
+      name: "jumbo",
+      description: "Muestra un emoji en tamaño grande",
+      aliases: ["emojijumbo", "bigemoji"],
+    }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "emoji",
+        description: "Emoji personalizado o estándar a ampliar",
+        required: true,
+      }),
+
+    async code(ctx) {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+      try {
+        const raw = (ctx.get("emoji") ?? "").trim();
+        if (!raw) {
+          return ctx.send({ content: "Debes ingresar un emoji válido", flags: MessageFlags.Ephemeral });
+        }
+
+        const customMatch = raw.match(/<(a)?:([a-zA-Z0-9_]+):(\d{17,20})>/);
+        if (customMatch) {
+          const animated = Boolean(customMatch[1]);
+          const name = customMatch[2];
+          const id = customMatch[3];
+          const ext = animated ? "gif" : "png";
+          const url = `https://cdn.discordapp.com/emojis/${id}.${ext}?size=4096&quality=lossless`;
+
+          return ctx.send({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(`:${name}:`)
+                .setURL(url)
+                .setImage(url)
+                .setFooter({ text: `ID: ${id}` })
+                .setColor(RED)
+                .setTimestamp(),
+            ],
+          });
+        }
+
+        const chars = [...raw];
+        if (!chars.length || chars.length > 10 || /^[a-zA-Z0-9\s!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(raw)) {
+          return ctx.send({ content: "Debes ingresar un emoji válido", flags: MessageFlags.Ephemeral });
+        }
+
+        const rawCps = chars.map((c) => c.codePointAt(0).toString(16));
+        const filteredCps = rawCps.includes("200d") ? rawCps : rawCps.filter((cp) => cp !== "fe0f");
+        if (!filteredCps.length) {
+          return ctx.send({ content: "Debes ingresar un emoji válido", flags: MessageFlags.Ephemeral });
+        }
+
+        const twemojiUrl = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/${filteredCps.join("-")}.png`;
+        const checkRes = await fetchWithTimeout(twemojiUrl, { method: "HEAD" }, 5000).catch(() => null);
+        if (!checkRes?.ok) {
+          return ctx.send({ content: "No pude encontrar ese emoji", flags: MessageFlags.Ephemeral });
+        }
+
+        const highResUrl = `https://emojicdn.elk.sh/${encodeURIComponent(raw)}?style=twitter`;
+
+        return ctx.send({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(`Emoji ${raw}`)
+              .setURL(highResUrl)
+              .setImage(highResUrl)
+              .setColor(RED)
+              .setTimestamp(),
+          ],
+        });
+      } catch (err) {
+        log.error("[util jumbo]", { err: err?.message ?? String(err) });
+        handleCommandError(ctx, err);
+      }
     },
   })
 

@@ -87,30 +87,31 @@ const DMALL_PARAMERROR = (bot) => ({
       .setDescription(
         `**Usos:**\nEnvía un embed por DM a todos los miembros del servidor` +
         `\n\n**Aliases:**\n\`dmall\`, \`dmeveryone\`` +
-        `\n\`\`\`\n` +
+        `\n\n\`\`\`js\n` +
         `.dm titulo,texto [--solo <@rol>] [--rol <@rol>] [--user <@user>] [--imagen <url>]\n` +
         `\n` +
-        `Ejemplo base:\n` +
+        `# Básico\n` +
         `  .dm Hoy jugamos,go ofi\n` +
         `\n` +
-        `Con imagen:\n` +
+        `# Con imagen por URL o adjunto\n` +
         `  .dm Hoy jugamos,miren esto --imagen https://i.imgur.com/abc.png\n` +
         `\n` +
-        `Solo un rol:\n` +
+        `# Solo a un rol\n` +
         `  .dm Hoy jugamos,solo los gokianos --solo @gokianos\n` +
         `\n` +
-        `Excluir rol:\n` +
+        `# Excluir un rol\n` +
         `  .dm Hoy jugamos,menos los malos --rol @malos\n` +
         `\n` +
-        `Excluir usuario:\n` +
+        `# Excluir un usuario\n` +
         `  .dm Hoy jugamos,todos menos el mamon --user @loge\n` +
         `\n` +
-        `Todo:\n` +
+        `# Todo combinado\n` +
         `  .dm Hoy jugamos,solo gokianos sin malos ni mamones --solo @gokianos --rol @malos --user @loge --imagen https://i.imgur.com/abc.png` +
         `\`\`\``
       )
       .setColor(RED),
   ],
+  allowedMentions: { repliedUser: false },
 });
 
 const dmallCommand = {
@@ -204,6 +205,7 @@ const DEFINITIONS = [
   { name: "rename", description: "Renombra un canal", aliases: ["chrename", "channelrename", "crename", "chanrename"], authorName: "Comando Rename", descriptionText: "**Usos:**\nRenombra un canal\n\n**Aliases:**\n`chrename`, `channelrename`\n\n```js\n.rename [#canal] <nuevo>\nEjemplo: .rename #uxiono padalustro```" },
   { name: "slowmode", description: "Establece el slowmode de un canal (0 para desactivar, máx 6h)", aliases: ["sm", "chslowmode", "channelslowmode", "lento"], authorName: "Comando Slowmode", descriptionText: "**Usos:**\nEstablece un slowmode para el canal\n\n**Aliases:**\n`sm`, `chslowmode`, `channelslowmode`\n\n```js\n.slowmode <tiempo> [#canal]\nEjemplo: .slowmode 1h #uxiono```" },
   { name: "unlock", description: "Abre un canal bloqueado", aliases: ["chunlock", "channelunlock", "cunlock", "abrir", "desbloquear"] },
+  { name: "choose", description: "Elige una opción al azar entre varias", aliases: ["elegir", "escoger", "pick"], authorName: "Comando Choose", descriptionText: "**Usos:**\nElige una opción al azar entre varias\n\n**Aliases:**\n`elegir`, `escoger`, `pick`\n\n```js\n.choose <opción1, opción2, ...>\nEjemplo: .choose pizza, hamburguesa, tacos```" },
   { name: "critica", description: "Te doy una crítica despiadada de algo", aliases: ["criticar", "criticize"], authorName: "Comando Critica", descriptionText: "**Usos:**\nGenera una crítica despiadada de algo\n\n**Aliases:**\n`criticar`, `criticize`\n\n```js\n.critica <tema>\nEjemplo: .critica la chochoinflación```" },
   { name: "excusa", description: "Genera una excusa ridícula pero creativa", aliases: ["coartada", "excuse"], authorName: "Comando Excusa", descriptionText: "**Usos:**\nGenera una excusa ridícula pero creativa\n\n**Aliases:**\n`coartada`, `excuse`\n\n```js\n.excusa [situacion]\nEjemplo: .excusa llegué tarde```" },
   { name: "lol", description: "Responde con un emoji random", aliases: [] },
@@ -250,10 +252,13 @@ const DEFINITIONS = [
   { name: "user", description: "Muestra información de un usuario", aliases: ["userinfo", "ui", "whois"] },
   { name: "userperms", description: "Muestra los permisos de un usuario en el servidor", aliases: ["perms", "permissions", "uperms", "up"] },
   { name: "uroles", description: "Muestra los roles de un usuario", aliases: ["userroles", "ur"] },
+  { name: "randomuser", description: "Elige a un miembro del servidor al azar", aliases: ["urandom", "userrandom", "ruser"] },
+  { name: "afk", description: "Establece tu estado como ausente (AFK)", aliases: ["ausente"] },
   { name: "askreset", description: "Limpia tu historial de conversación con la IA", aliases: ["reset", "aireset"] },
   { name: "botinfo", description: "Información general del bot", aliases: ["bot", "info"] },
   { name: "describe", description: "Describe el contenido de una imagen", aliases: ["describir"], authorName: "Comando Describe", descriptionText: "**Usos:**\nDescribe el contenido de una imagen\n\n**Aliases:**\n`describir`\n\n```js\n.describe <adjunto>\nEjemplo: .describe <Subeunaimagenwe.png> ```" },
   { name: "invite", description: "Obtén los links de invitación del bot", aliases: ["inv"] },
+  { name: "jumbo", description: "Muestra un emoji en tamaño grande", aliases: ["emojijumbo", "bigemoji"], authorName: "Comando Jumbo", descriptionText: "**Usos:**\nMuestra un emoji personalizado o estándar en tamaño grande\n\n**Aliases:**\n`emojijumbo`, `bigemoji`\n\n```js\n.jumbo <emoji>\nEjemplo: .jumbo <:redbot:1474109778044260478>```" },
   { name: "ping", description: "Muestra la latencia del bot", aliases: [] },
   { name: "resume", description: "Resume un texto largo", aliases: ["resumir", "summarize"], authorName: "Comando Resume", descriptionText: "**Usos:**\nResume un texto de 100 caracteres o más\n\n**Aliases:**\n`resumir`, `summarize`\n\n```js\n.resume <texto>\nEjemplo: .resume en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...```" },
   { name: "setprefix", description: "Cambia o muestra el prefix del bot en este servidor", aliases: ["prefix"] },

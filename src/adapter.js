@@ -5,14 +5,18 @@ const { isPromise } = require("util/types");
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 
 const PREFIXED_TO_SLASH_MAP = {
+  afk: "util/afk",
   avatar: "user/avatar",
   botinfo: "util/botinfo",
   channelinfo: "channel/info",
+  choose: "fun/choose",
   clone: "channel/clone",
   color: "role/color",
   dmall: "util/dm",
   emojis: "server/emojis",
+  jumbo: "util/jumbo",
   logo: "server/logo",
+  randomuser: "user/random",
   rename: "channel/rename",
   role: "role/info",
   roleadd: "role/add",

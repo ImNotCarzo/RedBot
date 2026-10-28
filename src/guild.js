@@ -1,4 +1,4 @@
-const { GuildConfig, Log } = require("./database");
+const { GuildConfig, Log, Afk } = require("./database");
 const { Logger, parsePositiveInt, withTimeout } = require("./runtime");
 
 const log = new Logger("GUILD_SERVICE");
@@ -8,9 +8,12 @@ const PREFIX_QUERY_TIMEOUT_MS = parsePositiveInt(process.env.PREFIX_QUERY_TIMEOU
 const PREFIX_CACHE_MAX = 2000;
 const PREFIX_CACHE_TTL_MS = 30 * 60 * 1000;
 const LOG_CACHE_TTL_MS = 15 * 60 * 1000;
+const AFK_CACHE_MAX = 5000;
+const AFK_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const prefixCache = new Map();
 const logChannelCache = new Map();
+const afkCache = new Map();
 
 function getCachedPrefix(guildId) {
   const entry = prefixCache.get(guildId);
@@ -61,6 +64,53 @@ async function setPrefix(guildId, prefix) {
   );
   setCachedPrefix(guildId, normalized);
   return normalized;
+}
+
+function setCachedAfk(key, value) {
+  if (afkCache.size >= AFK_CACHE_MAX && !afkCache.has(key)) {
+    const oldest = afkCache.keys().next().value;
+    if (oldest) afkCache.delete(oldest);
+  }
+  afkCache.set(key, { value, expiresAt: Date.now() + AFK_CACHE_TTL_MS });
+}
+
+async function getAfk(guildId, userId) {
+  if (!guildId || !userId) return null;
+  const key = `${guildId}:${userId}`;
+  const cached = afkCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+  try {
+    const doc = await Afk.findOne({ guildId, userId }).lean();
+    const val = doc ? { reason: doc.reason, createdAt: doc.createdAt } : null;
+    setCachedAfk(key, val);
+    return val;
+  } catch {
+    return null;
+  }
+}
+
+async function setAfk(guildId, userId, reason = "AFK") {
+  const cleanReason = String(reason || "AFK").trim().slice(0, 256) || "AFK";
+  const now = new Date();
+  const key = `${guildId}:${userId}`;
+  const val = { reason: cleanReason, createdAt: now };
+  setCachedAfk(key, val);
+  await Afk.findOneAndUpdate(
+    { guildId, userId },
+    { reason: cleanReason, createdAt: now },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
+  return val;
+}
+
+async function removeAfk(guildId, userId) {
+  if (!guildId || !userId) return null;
+  const key = `${guildId}:${userId}`;
+  setCachedAfk(key, null);
+  const removed = await Afk.findOneAndDelete({ guildId, userId }).lean().catch(() => null);
+  return removed;
 }
 
 async function getLogChannelId(guildId) {
@@ -131,6 +181,9 @@ module.exports = {
   DEFAULT_PREFIX,
   getPrefix,
   setPrefix,
+  getAfk,
+  setAfk,
+  removeAfk,
   setLogChannel,
   clearLogChannel,
   sendLog,

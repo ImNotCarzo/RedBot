@@ -47,6 +47,8 @@ const CATEGORY_LABELS = {
 const getCommands = () => ({
   utilidad: {
     ask:       { short: "ask",       slash: "ask",            id: IDS.ask(),  usage: ".ask <pregunta>",            aliases: ["ai", "ia"],                    description: "Hazle una pregunta a la IA." },
+    afk:       { short: "afk",       slash: "util afk",       id: IDS.util(), usage: ".afk [razón]",               aliases: ["ausente"],                     description: "Establece tu estado como ausente (AFK)." },
+    jumbo:     { short: "jumbo",     slash: "util jumbo",     id: IDS.util(), usage: ".jumbo <emoji>",             aliases: ["emojijumbo", "bigemoji"],      description: "Muestra un emoji en tamaño grande." },
     ping:      { short: "ping",      slash: "util ping",      id: IDS.util(), usage: ".ping",                      aliases: [],                               description: "Muestra la latencia actual del bot." },
     botinfo:   { short: "botinfo",   slash: "util botinfo",   id: IDS.util(), usage: ".botinfo",                   aliases: ["bot", "info"],                  description: "Muestra información general del bot." },
     invite:    { short: "invite",    slash: "util invite",    id: IDS.util(), usage: ".invite",                    aliases: ["inv"],                           description: "Envía la invitación del bot y el servidor de soporte." },
@@ -59,11 +61,12 @@ const getCommands = () => ({
     dm:        { short: "dmall",    slash: "util dm",       id: IDS.util(), usage: ".dmall <mensaje>",          aliases: ["dm"],                            description: "Envía un mensaje privado a miembros del servidor." },
   },
   usuario: {
-    info:        { short: "user",   slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",   aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
-    avatar:      { short: "avatar", slash: "user avatar",      id: IDS.user(), usage: ".avatar [@usuario]", aliases: ["av", "pfp"],                  description: "Muestra el avatar de un usuario." },
-    banner:      { short: "banner", slash: "user banner",      id: IDS.user(), usage: ".banner [@usuario]", aliases: ["userbanner", "ub"],           description: "Muestra el banner de un usuario." },
-    roles:       { short: "uroles", slash: "user roles",       id: IDS.user(), usage: ".uroles [@usuario]", aliases: ["userroles", "ur"],            description: "Muestra los roles de un usuario." },
-    permissions: { short: "perms",  slash: "user permissions", id: IDS.user(), usage: ".perms [@usuario]",  aliases: ["userperms", "up"],            description: "Muestra los permisos de un usuario en el servidor." },
+    info:        { short: "user",       slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",      aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
+    avatar:      { short: "avatar",     slash: "user avatar",      id: IDS.user(), usage: ".avatar [@usuario]",    aliases: ["av", "pfp"],                  description: "Muestra el avatar de un usuario." },
+    banner:      { short: "banner",     slash: "user banner",      id: IDS.user(), usage: ".banner [@usuario]",    aliases: ["userbanner", "ub"],           description: "Muestra el banner de un usuario." },
+    roles:       { short: "uroles",     slash: "user roles",       id: IDS.user(), usage: ".uroles [@usuario]",    aliases: ["userroles", "ur"],            description: "Muestra los roles de un usuario." },
+    permissions: { short: "perms",      slash: "user permissions", id: IDS.user(), usage: ".perms [@usuario]",     aliases: ["userperms", "up"],            description: "Muestra los permisos de un usuario en el servidor." },
+    random:      { short: "randomuser", slash: "user random",      id: IDS.user(), usage: ".randomuser [@rol]",    aliases: ["urandom", "userrandom", "ruser"], description: "Elige a un miembro del servidor al azar." },
   },
   moderacion: {
     ban:        { short: "ban",        slash: "mod ban",        id: IDS.mod(), usage: ".ban <@usuario> [razón]",            aliases: [],                          description: "Banea a un usuario del servidor." },
@@ -119,12 +122,13 @@ const getCommands = () => ({
     hide:     { short: "hide",   slash: "channel hide",     id: IDS.channel(), usage: ".hide [#canal]",             aliases: ["ocultar", "esconder"],     description: "Oculta un canal a @everyone." },
   },
   diversion: {
-    opinion: { short: "opinion", slash: "fun opinion", id: IDS.fun(), usage: ".opinion <tema>",  aliases: ["op", "opina"],   description: "Pide mi opinión sin filtro sobre algo." },
-    critica: { short: "critica", slash: "fun critica", id: IDS.fun(), usage: ".critica <tema>",  aliases: ["criticar"],      description: "Te doy una crítica despiadada de algo." },
-    excusa:  { short: "excusa",  slash: "fun excusa",  id: IDS.fun(), usage: ".excusa [situacion]",aliases: ["coartada"],    description: "Genera una excusa ridícula pero creativa." },
-    teoria:  { short: "teoria",  slash: "fun teoria",  id: IDS.fun(), usage: ".teoria <tema>",   aliases: ["conspira"],      description: "Una teoría conspirativa sobre cualquier cosa." },
-    roast:   { short: "roast",   slash: "fun roast",   id: IDS.fun(), usage: ".roast [@usuario]", aliases: ["burn"],         description: "Critica despiadadamente a un usuario." },
-    lol:     { short: "lol",     slash: "fun lol",     id: IDS.fun(), usage: ".lol",              aliases: [],                description: "Ríete de algo así bien jaja." },
+    choose:  { short: "choose",  slash: "fun choose",  id: IDS.fun(), usage: ".choose <op1, op2, ...>", aliases: ["elegir", "escoger", "pick"], description: "Elige una opción al azar entre varias." },
+    opinion: { short: "opinion", slash: "fun opinion", id: IDS.fun(), usage: ".opinion <tema>",         aliases: ["op", "opina"],               description: "Pide mi opinión sin filtro sobre algo." },
+    critica: { short: "critica", slash: "fun critica", id: IDS.fun(), usage: ".critica <tema>",         aliases: ["criticar"],                  description: "Te doy una crítica despiadada de algo." },
+    excusa:  { short: "excusa",  slash: "fun excusa",  id: IDS.fun(), usage: ".excusa [situacion]",     aliases: ["coartada"],                  description: "Genera una excusa ridícula pero creativa." },
+    teoria:  { short: "teoria",  slash: "fun teoria",  id: IDS.fun(), usage: ".teoria <tema>",          aliases: ["conspira"],                  description: "Una teoría conspirativa sobre cualquier cosa." },
+    roast:   { short: "roast",   slash: "fun roast",   id: IDS.fun(), usage: ".roast [@usuario]",       aliases: ["burn"],                      description: "Critica despiadadamente a un usuario." },
+    lol:     { short: "lol",     slash: "fun lol",     id: IDS.fun(), usage: ".lol",                    aliases: [],                            description: "Ríete de algo así bien jaja." },
   },
 });
 

@@ -4,7 +4,7 @@ const {
   getConversacion,
   generateChatReply,
 } = require("../src/ai");
-const { getPrefix, DEFAULT_PREFIX } = require("../src/guild");
+const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk } = require("../src/guild");
 const { Logger } = require("../src/runtime");
 const {
   MAX_HISTORIAL,
@@ -16,19 +16,69 @@ const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
 const SAFE_MENTIONS = { parse: [], repliedUser: false };
 
+async function handleAfkChecks(message, prefix) {
+  if (!message.guildId || message.author.bot) return;
+
+  const content = message.content?.trim() ?? "";
+  const isInvokingAfk =
+    content.startsWith(prefix) &&
+    /^(afk|ausente)(\s|$)/i.test(content.slice(prefix.length).trim());
+
+  if (!isInvokingAfk) {
+    const authorAfk = await getAfk(message.guildId, message.author.id);
+    if (authorAfk && Date.now() - new Date(authorAfk.createdAt).getTime() >= 2500) {
+      await removeAfk(message.guildId, message.author.id);
+      const sinceTs = Math.floor(new Date(authorAfk.createdAt).getTime() / 1000);
+      const welcomeEmbed = new EmbedBuilder()
+        .setDescription(`👋 Bienvenido de vuelta ${message.author}, quité tu estado **AFK** (estuviste ausente <t:${sinceTs}:R>).`)
+        .setColor(RED);
+
+      message
+        .reply({ embeds: [welcomeEmbed], allowedMentions: SAFE_MENTIONS })
+        .then((sent) => setTimeout(() => sent.delete().catch(() => {}), 8000))
+        .catch(() => {});
+    }
+  }
+
+  if (message.mentions?.users?.size) {
+    const mentioned = [...message.mentions.users.values()]
+      .filter((u) => !u.bot && u.id !== message.author.id)
+      .slice(0, 3);
+
+    const afkLines = [];
+    for (const targetUser of mentioned) {
+      const targetAfk = await getAfk(message.guildId, targetUser.id);
+      if (targetAfk) {
+        const sinceTs = Math.floor(new Date(targetAfk.createdAt).getTime() / 1000);
+        afkLines.push(`💤 **${targetUser.username}** está AFK (<t:${sinceTs}:R>): ${targetAfk.reason}`);
+      }
+    }
+
+    if (afkLines.length > 0) {
+      const afkEmbed = new EmbedBuilder()
+        .setDescription(afkLines.join("\n"))
+        .setColor(RED);
+      await message.reply({ embeds: [afkEmbed], allowedMentions: SAFE_MENTIONS }).catch(() => {});
+    }
+  }
+}
+
 const event = {
   name: "messageCreate",
   once: false,
   async code(_bot, message) {
     try {
       if (message.author.bot) return;
+
+      const prefix = message.guildId ? await getPrefix(message.guildId) : DEFAULT_PREFIX;
+      await handleAfkChecks(message, prefix).catch(() => {});
+
       if (!message.reference?.messageId) return;
 
       const pregunta = message.content?.trim();
       if (!pregunta) return;
 
       // Evitar conflicto si el usuario está ejecutando un comando con prefijo mientras hace reply
-      const prefix = message.guildId ? await getPrefix(message.guildId) : DEFAULT_PREFIX;
       if (pregunta.startsWith(prefix)) return;
 
       const repliedMsg =

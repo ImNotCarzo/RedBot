@@ -22,6 +22,45 @@ const { RED, DARK } = require("../../src/config");
 
 const log = new Logger("CMD_USER", process.env.LOG_LEVEL);
 
+const BADGE_NAMES = {
+  Staff: "Personal de Discord",
+  Partner: "Servidor Socio",
+  Hypesquad: "Eventos HypeSquad",
+  BugHunterLevel1: "Cazador de Errores",
+  BugHunterLevel2: "Cazador de Errores (Oro)",
+  HypeSquadOnlineHouse1: "HypeSquad Bravery",
+  HypeSquadOnlineHouse2: "HypeSquad Brilliance",
+  HypeSquadOnlineHouse3: "HypeSquad Balance",
+  PremiumEarlySupporter: "Partidario Inicial de Nitro",
+  TeamPseudoUser: "Equipo de Discord",
+  VerifiedBot: "Bot Verificado",
+  VerifiedDeveloper: "Desarrollador de Bots Verificado",
+  CertifiedModerator: "Moderador Certificado",
+  BotHTTPInteractions: "Interacciones HTTP",
+  ActiveDeveloper: "Desarrollador Activo",
+  Quarantined: "En Cuarentena",
+  Spammer: "Spammer",
+  Collaborator: "Colaborador",
+  RestrictedCollaborator: "Colaborador Restringido",
+};
+
+function formatUserBadges(user) {
+  const flags = user?.flags?.toArray() ?? [];
+  if (!flags.length) return "Sin insignias";
+  return flags.map((f) => `\`${BADGE_NAMES[f] ?? f}\``).join(", ");
+}
+
+function cleanDecoLabel(raw, fallback) {
+  if (!raw || typeof raw !== "string" || /^\d{15,22}$/.test(raw)) return fallback;
+  const cleaned = raw
+    .replace(/^collectibles[/_.-]*/i, "")
+    .replace(/^nameplates[/_.-]*/i, "")
+    .replace(/[/_-]+/g, " ")
+    .trim();
+  if (!cleaned || /^\d+$/.test(cleaned)) return fallback;
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
 async function resolveUser(ctx, input) {
   const invoker = ctx.user ?? ctx.author;
   if (!input) return invoker ?? null;
@@ -72,13 +111,13 @@ function buildExtendedFields(member, user) {
 
   const pg = user.primaryGuild;
   if (pg?.tag) {
-    const badgeURL = user.guildTagBadgeURL({ size: 4096 });
+    const badgeURL = user.guildTagBadgeURL?.({ size: 4096 }) ?? null;
     fields.push({
-      name: "Guild Tag",
+      name: "Tag de servidor",
       value:
-        `> **Tag:** \`${pg.tag}\`\n` +
+        `> **Etiqueta:** \`${pg.tag}\`\n` +
         `> **ID del servidor:** \`${pg.identityGuildId ?? "N/A"}\`\n` +
-        `> ${badgeURL ? `**[Insignia](${badgeURL})**` : "Sin insignia"}`,
+        `> **Insignia:** ${badgeURL ? `[Ver insignia](${badgeURL})` : "Sin insignia"}`,
     });
   }
 
@@ -89,17 +128,19 @@ function buildExtendedFields(member, user) {
   const nameplate = user.collectibles?.nameplate ?? null;
 
   const decoLines = [];
-  if (activeDecData) {
-    const decName = activeDecData.skuId ?? "Decoración de avatar";
-    const decLine = avatarDecURL ? `[${decName}](${avatarDecURL})` : decName;
-    decoLines.push(`> **Avatar:** ${decLine}`);
+  if (activeDecData || avatarDecURL) {
+    const decLink = avatarDecURL ? `[Ver decoración](${avatarDecURL})` : "Activa";
+    const shopLink = activeDecData?.skuId
+      ? ` • [Tienda](https://discord.com/shop#itemSkuId=${activeDecData.skuId})`
+      : "";
+    decoLines.push(`> **Decoración de avatar:** ${decLink}${shopLink}`);
   }
   if (nameplate) {
-    const plateName = nameplate.label || nameplate.skuId || "Placa de nombre";
+    const plateName = cleanDecoLabel(nameplate.label || nameplate.palette, "Ver placa");
     const plateLink = nameplate.skuId
       ? `[${plateName}](https://discord.com/shop#itemSkuId=${nameplate.skuId})`
       : plateName;
-    decoLines.push(`> **Placa:** ${plateLink}`);
+    decoLines.push(`> **Placa de nombre:** ${plateLink}`);
   }
   if (decoLines.length) {
     fields.push({ name: "Decoraciones", value: decoLines.join("\n") });
@@ -132,7 +173,7 @@ const data = {
             if (!user) return ctx.send("No se encontró ningún usuario");
             const fetched = await user.fetch(true).catch(() => user);
             const createdTs = Math.floor(fetched.createdTimestamp / 1000);
-            const insignias = fetched.flags?.toArray().map((f) => `\`${f}\``).join(", ") || "Sin insignias";
+            const insignias = formatUserBadges(fetched);
 
             const embed = new EmbedBuilder()
               .setThumbnail(fetched.displayAvatarURL({ size: 1024 }))
@@ -205,7 +246,7 @@ const data = {
           const user = await member.user.fetch(true).catch(() => member.user);
           const fullMember = await member.fetch(true).catch(() => member);
           const getBannerUrl = () => fullMember.bannerURL?.({ size: 4096 }) ?? user.bannerURL({ size: 4096 }) ?? null;
-          const insignias = user.flags?.toArray().map((f) => `\`${f}\``).join(", ") || "Sin insignias";
+          const insignias = formatUserBadges(user);
           const colorRol = getMemberColor(member, DARK);
           const createdTs = Math.floor(user.createdTimestamp / 1000);
           const joinedTs = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
@@ -226,7 +267,7 @@ const data = {
                 `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n` +
                 `> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`,
             },
-            ...buildExtendedFields(member, user),
+            ...buildExtendedFields(fullMember, user),
           ];
 
           const infoEmbed = new EmbedBuilder()
@@ -511,6 +552,7 @@ const data = {
             member = await resolveMember(ctx, input);
             if (!member) return ctx.send("No pude encontrar al usuario");
             user = await member.user.fetch(true).catch(() => member.user);
+            member = await member.fetch(true).catch(() => member);
           } else {
             user = await resolveUser(ctx, input);
             if (!user) return ctx.send("No pude encontrar al usuario");
@@ -521,7 +563,7 @@ const data = {
           const globalBannerURL = user.bannerURL({ size: 4096 });
           if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
 
-          const hasDistinct = !!(serverBannerURL && serverBannerURL !== globalBannerURL);
+          const hasDistinct = !!(serverBannerURL && globalBannerURL && serverBannerURL !== globalBannerURL);
           const color = getMemberColor(member, member ? DARK : RED);
 
           const buildEmbed = (type) => {
@@ -667,6 +709,66 @@ const data = {
           collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
         } catch (err) {
           log.error("Error en user permissions", { err: err?.message ?? String(err) });
+          return handleCommandError(ctx, err);
+        }
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "random",
+        description: "Elige a un miembro del servidor al azar",
+      }),
+      params: new ParamsBuilder().addRole({
+        name: "rol",
+        description: "Filtrar entre miembros de un rol específico (opcional)",
+        required: false,
+      }),
+
+      async code(ctx) {
+        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        try {
+          if (!ctx.guild) return noGuildReply(ctx);
+
+          const role = ctx.get("rol") ?? null;
+          if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+            await ctx.guild.members.fetch().catch(() => {});
+          }
+
+          let pool = ctx.guild.members.cache;
+          if (role) {
+            pool = pool.filter((m) => m.roles.cache.has(role.id));
+          }
+
+          const humans = pool.filter((m) => !m.user.bot);
+          const candidates = humans.size > 0 ? humans : pool;
+
+          if (!candidates.size) {
+            return ctx.send({
+              content: role ? `No hay miembros con el rol ${role}` : "No se encontraron miembros en el servidor",
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+
+          const chosen = candidates.random();
+          const user = chosen.user;
+          const color = getMemberColor(chosen, RED);
+          const joinedTs = chosen.joinedTimestamp ? Math.floor(chosen.joinedTimestamp / 1000) : null;
+
+          const embed = new EmbedBuilder()
+            .setTitle("Usuario al azar")
+            .setThumbnail(chosen.displayAvatarURL({ size: 1024 }))
+            .setDescription(
+              `> **Seleccionado:** ${chosen} (\`${user.username}\`)\n` +
+              `> **ID:** \`${user.id}\`` +
+              (role ? `\n> **Rol filtrado:** ${role}` : "") +
+              (joinedTs ? `\n> **Ingreso:** <t:${joinedTs}:R>` : "")
+            )
+            .setColor(color)
+            .setTimestamp();
+
+          await ctx.send({ embeds: [embed] });
+        } catch (err) {
+          log.error("Error en user random", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
         }
       },

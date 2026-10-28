@@ -37,11 +37,20 @@ const warnSchema = new Schema({
 warnSchema.index({ guildId: 1, warnId: 1 }, { unique: true });
 warnSchema.index({ guildId: 1, userId: 1, createdAt: -1 });
 
+const afkSchema = new Schema({
+  guildId:   { type: String, required: true },
+  userId:    { type: String, required: true },
+  reason:    { type: String, default: "AFK", trim: true, maxlength: 256 },
+  createdAt: { type: Date, default: Date.now },
+});
+afkSchema.index({ guildId: 1, userId: 1 }, { unique: true });
+
 const GuildConfig = models.GuildConfig || model("GuildConfig", guildSchema);
 const JoinRole    = models.JoinRole    || model("JoinRole", joinRoleSchema);
 const Log         = models.Log         || model("Log", logSchema);
 const TempBan     = models.TempBan     || model("TempBan", tempBanSchema);
 const Warn        = models.Warn        || model("Warn", warnSchema);
+const Afk         = models.Afk         || model("Afk", afkSchema);
 
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
@@ -82,4 +91,5 @@ module.exports = {
   Log,
   TempBan,
   Warn,
+  Afk,
 };

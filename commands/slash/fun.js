@@ -12,6 +12,28 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
+const BADGE_NAMES = {
+  Staff: "Personal de Discord",
+  Partner: "Servidor Socio",
+  Hypesquad: "Eventos HypeSquad",
+  BugHunterLevel1: "Cazador de Errores",
+  BugHunterLevel2: "Cazador de Errores (Oro)",
+  HypeSquadOnlineHouse1: "HypeSquad Bravery",
+  HypeSquadOnlineHouse2: "HypeSquad Brilliance",
+  HypeSquadOnlineHouse3: "HypeSquad Balance",
+  PremiumEarlySupporter: "Partidario Inicial de Nitro",
+  TeamPseudoUser: "Equipo de Discord",
+  VerifiedBot: "Bot Verificado",
+  VerifiedDeveloper: "Desarrollador de Bots Verificado",
+  CertifiedModerator: "Moderador Certificado",
+  BotHTTPInteractions: "Interacciones HTTP",
+  ActiveDeveloper: "Desarrollador Activo",
+  Quarantined: "En Cuarentena",
+  Spammer: "Spammer",
+  Collaborator: "Colaborador",
+  RestrictedCollaborator: "Colaborador Restringido",
+};
+
 function msATexto(ms) {
   const min = Math.floor(ms / 60000);
   const hrs = Math.floor(min / 60);
@@ -186,7 +208,7 @@ const data = {
             "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
           ];
           const perms = target.permissions?.toArray()?.filter((p) => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
-          const badges = user.flags?.toArray()?.join(", ") || "ninguna";
+          const badges = user.flags?.toArray()?.map((f) => BADGE_NAMES[f] ?? f)?.join(", ") || "ninguna";
 
           const datosUsuario = [
             `Nombre: ${username} (@${usertag})`,
@@ -221,6 +243,60 @@ ${datosUsuario}`;
           });
         } catch (err) {
           log.error("[fun roast]", { err: err?.message ?? String(err) });
+          handleCommandError(ctx, err);
+        }
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "choose",
+        description: "Elige una opción al azar entre varias",
+        aliases: ["elegir", "escoger", "pick"],
+      }),
+      params: new ParamsBuilder().addString({
+        name: "opciones",
+        description: "Opciones separadas por coma (,) o barra (|)",
+        required: true,
+      }),
+      async code(ctx) {
+        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        try {
+          const raw = (ctx.get("opciones") ?? "").trim();
+          let items = [];
+          if (raw.includes("|")) {
+            items = raw.split("|");
+          } else if (raw.includes(",")) {
+            items = raw.split(",");
+          } else if (/\s+o\s+/i.test(raw)) {
+            items = raw.split(/\s+o\s+/i);
+          } else {
+            items = raw.split(/\s+/);
+          }
+
+          items = items.map((s) => s.trim()).filter(Boolean);
+          if (items.length < 2) {
+            return ctx.send({
+              content: "Debes darme al menos 2 opciones para elegir (sepáralas con `,` o `|`)",
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+
+          const eleccion = items[Math.floor(Math.random() * items.length)];
+
+          await ctx.send({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("Decisión tomada")
+                .setDescription(
+                  `> **Opciones:** ${items.map((i) => `\`${i}\``).join(", ")}\n` +
+                  `> **Elección:** **${eleccion}**`
+                )
+                .setColor(RED)
+                .setTimestamp(),
+            ],
+          });
+        } catch (err) {
+          log.error("[fun choose]", { err: err?.message ?? String(err) });
           handleCommandError(ctx, err);
         }
       },
