@@ -50,6 +50,121 @@ function getGuildUploadLimitBytes(guild) {
   return 9.5 * 1024 * 1024;
 }
 
+function extractYouTubeId(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "youtu.be" || host.endsWith(".youtu.be")) {
+      const id = parsed.pathname.split("/").filter(Boolean)[0];
+      return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    if (host.includes("youtube.com") || host.includes("youtube-nocookie.com")) {
+      const v = parsed.searchParams.get("v");
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+      const pathMatch = parsed.pathname.match(/\/(?:shorts|embed|live|v)\/([A-Za-z0-9_-]{11})/);
+      if (pathMatch) return pathMatch[1];
+    }
+  } catch {}
+  return null;
+}
+
+async function fetchYouTubeVisitorData(videoId) {
+  try {
+    const res = await fetchWithTimeout(
+      `https://www.youtube.com/embed/${videoId}`,
+      { headers: { "User-Agent": BROWSER_UA } },
+      6000
+    );
+    if (!res.ok) return undefined;
+    const html = await res.text();
+    const match = html.match(/"VISITOR_DATA":"([^"]+)"/);
+    return match ? match[1] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function extractYouTube(url) {
+  const videoId = extractYouTubeId(url);
+  if (!videoId) return null;
+
+  const visitorData = await fetchYouTubeVisitorData(videoId);
+
+  const clients = [
+    {
+      name: "ANDROID",
+      version: "20.03.32",
+      ua: "com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip",
+      id: 3,
+      extra: { androidSdkVersion: 34, osName: "Android", osVersion: "14" },
+    },
+    {
+      name: "ANDROID_VR",
+      version: "1.60.19",
+      ua: "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+      id: 28,
+      extra: { androidSdkVersion: 32, osName: "Android", osVersion: "12L", deviceMake: "Oculus", deviceModel: "Quest 3" },
+    },
+  ];
+
+  for (const c of clients) {
+    try {
+      const res = await fetchWithTimeout(
+        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": c.ua,
+            "X-YouTube-Client-Name": String(c.id),
+            "X-YouTube-Client-Version": c.version,
+            ...(visitorData ? { "X-Goog-Visitor-Id": visitorData } : {}),
+          },
+          body: JSON.stringify({
+            videoId,
+            contentCheckOk: true,
+            racyCheckOk: true,
+            context: {
+              client: {
+                clientName: c.name,
+                clientVersion: c.version,
+                hl: "es",
+                gl: "US",
+                ...(visitorData ? { visitorData } : {}),
+                ...c.extra,
+              },
+            },
+          }),
+        },
+        10_000
+      );
+
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data?.playabilityStatus?.status !== "OK") continue;
+
+      const formats = (data?.streamingData?.formats ?? []).filter(
+        (f) => f?.url && f?.mimeType?.includes("video/mp4")
+      );
+      if (!formats.length) continue;
+
+      formats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+      const chosen = formats[0];
+
+      return {
+        platform: "YouTube",
+        author: data?.videoDetails?.author || "YouTube",
+        title: data?.videoDetails?.title || "Video de YouTube",
+        videoUrl: chosen.url,
+        sourceUrl: url,
+        userAgent: c.ua,
+      };
+    } catch {}
+  }
+
+  return null;
+}
+
 async function extractTikTok(url) {
   try {
     const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
@@ -213,6 +328,11 @@ async function extractOpenGraphVideo(fetchUrl, platformLabel = "Web", originalUr
     }
 
     const html = await res.text();
+    const videoType = extractMetaTag(html, "og:video:type");
+    if (videoType && /text\/html|application\/x-shockwave-flash/i.test(videoType)) {
+      return null;
+    }
+
     const videoUrl =
       extractMetaTag(html, "og:video:secure_url") ||
       extractMetaTag(html, "og:video") ||
@@ -220,6 +340,7 @@ async function extractOpenGraphVideo(fetchUrl, platformLabel = "Web", originalUr
       extractMetaTag(html, "twitter:player:stream");
 
     if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) return null;
+    if (/\/embed\//i.test(videoUrl)) return null;
 
     const title =
       extractMetaTag(html, "og:description") ||
@@ -253,12 +374,16 @@ async function resolveVideoMetadata(rawUrl) {
 
   if (/\.(mp4|mov|webm)(\?.*)?$/i.test(parsed.pathname)) {
     return {
-      platform: "Enlace directo",
+      platform: "Video",
       author: host,
       title: parsed.pathname.split("/").pop() || "Video",
       videoUrl: rawUrl,
       sourceUrl: rawUrl,
     };
+  }
+
+  if (host.includes("youtube.com") || host === "youtu.be" || host.endsWith(".youtu.be")) {
+    return extractYouTube(rawUrl);
   }
 
   if (host.includes("tiktok.com")) {
@@ -280,20 +405,25 @@ async function resolveVideoMetadata(rawUrl) {
   return extractOpenGraphVideo(rawUrl, host.replace(/^www\./, ""), rawUrl);
 }
 
-async function downloadVideoBuffer(videoUrl, maxBytes) {
+async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA) {
   const res = await fetchWithTimeout(
     videoUrl,
     {
       headers: {
-        "User-Agent": BROWSER_UA,
+        "User-Agent": userAgent || BROWSER_UA,
         Accept: "*/*",
       },
       redirect: "follow",
     },
-    20_000
+    25_000
   );
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const ctype = (res.headers.get("content-type") || "").toLowerCase();
+  if (ctype.includes("text/html")) {
+    throw new Error("URL resolved to HTML instead of a video stream");
+  }
 
   const contentLength = Number(res.headers.get("content-length") ?? 0);
   if (contentLength > maxBytes) {
@@ -320,21 +450,12 @@ const ACCENT_COLOR =
 function buildDownloadV2Payload(meta, downloadResult) {
   const container = new ContainerBuilder().setAccentColor(ACCENT_COLOR);
 
-  const headerLines = [`### 🎬 ${meta.platform}`];
-  if (meta.author && meta.author !== meta.platform) {
-    headerLines.push(`> **Autor:** ${meta.author}`);
-  }
-  if (meta.title && meta.title !== `Video de ${meta.platform}`) {
-    const cleanTitle = meta.title.replace(/\s+/g, " ").trim().slice(0, 240);
-    if (cleanTitle) headerLines.push(`> ${cleanTitle}`);
-  }
-
   container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(headerLines.join("\n"))
+    new TextDisplayBuilder().setContent(`-# ${meta.platform}`)
   );
 
   container.addSeparatorComponents(
-    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(false)
   );
 
   const files = [];
@@ -352,18 +473,18 @@ function buildDownloadV2Payload(meta, downloadResult) {
       : "más del límite permitido";
     container.addTextDisplayComponents(
       new TextDisplayBuilder().setContent(
-        `⚠️ El video pesa **${sizeMb}** y supera el límite de subida directa de este servidor. Puedes verlo o descargarlo desde el botón inferior.`
+        `⚠️ El video pesa **${sizeMb}** y supera el límite de subida directa de este servidor.`
       )
     );
   }
 
   container.addSeparatorComponents(
-    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(true)
+    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(false)
   );
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setLabel("Enlace original")
+      .setLabel("Original")
       .setStyle(ButtonStyle.Link)
       .setURL(meta.sourceUrl)
   );

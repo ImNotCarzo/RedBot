@@ -426,7 +426,7 @@ const data = {
         }
 
         const maxBytes = getGuildUploadLimitBytes(ctx.guild);
-        const downloadResult = await downloadVideoBuffer(meta.videoUrl, maxBytes);
+        const downloadResult = await downloadVideoBuffer(meta.videoUrl, maxBytes, meta.userAgent);
         const payload = buildDownloadV2Payload(meta, downloadResult);
 
         await reply(payload);
