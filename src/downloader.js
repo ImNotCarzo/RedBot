@@ -190,132 +190,161 @@ async function extractYouTube(url) {
   return extractYouTubeViaNoTube(videoId, url);
 }
 
-async function pickNoTubeServer() {
+async function pickNoTubeServers(count = 2, exclude = new Set()) {
   const pool = [];
-  for (let n = 40; n <= 76; n++) pool.push(n);
-  pool.sort(() => Math.random() - 0.5);
-  const candidates = pool.slice(0, 6).map((n) => `https://s${n}.notube.im`);
-
-  try {
-    return await Promise.any(
-      candidates.map(async (host) => {
-        const res = await fetchWithTimeout(
-          `${host}/check-server-load.php`,
-          { headers: { "User-Agent": BROWSER_UA, Origin: "https://notube.im", Referer: "https://notube.im/" } },
-          4000
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = (await res.text()).trim();
-        if (text !== "OK") throw new Error(text);
-        return host;
-      })
-    );
-  } catch {
-    return "https://s60.notube.im";
+  for (let n = 40; n <= 76; n++) {
+    const host = `https://s${n}.notube.im`;
+    if (!exclude.has(host)) pool.push(host);
   }
+  pool.sort(() => Math.random() - 0.5);
+  const candidates = pool.slice(0, 8);
+  const ready = [];
+
+  await new Promise((resolve) => {
+    let settled = 0;
+    const timer = setTimeout(resolve, 1500);
+    for (const host of candidates) {
+      fetchWithTimeout(
+        `${host}/check-server-load.php`,
+        { headers: { "User-Agent": BROWSER_UA, Origin: "https://notube.im", Referer: "https://notube.im/" } },
+        1500
+      )
+        .then(async (res) => {
+          if (!res.ok) return;
+          const text = (await res.text()).trim();
+          if (text === "OK" && ready.length < count) {
+            ready.push(host);
+            if (ready.length >= count) {
+              clearTimeout(timer);
+              resolve();
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          settled++;
+          if (settled >= candidates.length) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+    }
+  });
+
+  for (const host of candidates) {
+    if (ready.length >= count) break;
+    if (!ready.includes(host)) ready.push(host);
+  }
+  return ready.length ? ready.slice(0, count) : ["https://s60.notube.im"];
+}
+
+async function runNoTubeHost(host, watchUrl, originalUrl) {
+  const r1 = await fetchWithTimeout(
+    `${host}/recover_weight.php`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": BROWSER_UA,
+        Origin: "https://notube.im",
+        Referer: "https://notube.im/",
+      },
+      body: new URLSearchParams({
+        url: watchUrl,
+        format: "mp4",
+        lang: "es",
+        subscribed: "false",
+      }).toString(),
+    },
+    15_000
+  );
+  if (!r1.ok) throw new Error(`weight HTTP ${r1.status}`);
+  const weightData = await r1.json();
+  if (!weightData?.token || !weightData?.name_mp4) {
+    throw new Error("missing token/name_mp4");
+  }
+
+  const r2 = await fetchWithTimeout(
+    `${host}/recover_file.php`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": BROWSER_UA,
+        Origin: "https://notube.im",
+        Referer: "https://notube.im/",
+      },
+      body: new URLSearchParams({
+        url: watchUrl,
+        format: "mp4",
+        name_mp4: weightData.name_mp4,
+        lang: "es",
+        token: weightData.token,
+        subscribed: "false",
+        playlist: "false",
+        adblock: "false",
+      }).toString(),
+    },
+    25_000
+  );
+  if (!r2.ok) throw new Error(`file HTTP ${r2.status}`);
+
+  let finalToken = weightData.token;
+  try {
+    const rfJson = await r2.json();
+    if (rfJson?.token) finalToken = rfJson.token;
+  } catch {}
+
+  await fetchWithTimeout(
+    `${host}/conversion.php`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": BROWSER_UA,
+        Origin: "https://notube.im",
+        Referer: "https://notube.im/",
+      },
+      body: new URLSearchParams({ token: finalToken }).toString(),
+    },
+    12_000
+  ).catch(() => null);
+
+  const pageRes = await fetchWithTimeout(
+    `https://notube.im/es/download?token=${encodeURIComponent(finalToken)}`,
+    { headers: { "User-Agent": BROWSER_UA, Referer: "https://notube.im/" } },
+    8_000
+  );
+  if (!pageRes.ok) throw new Error(`download page HTTP ${pageRes.status}`);
+  const pageHtml = await pageRes.text();
+  const dlMatch = pageHtml.match(/href="(https:\/\/[^"]+download\.php\?[^"]+)"/i);
+  if (!dlMatch?.[1]) throw new Error("missing download.php link");
+
+  const decodedTitle = weightData.titre_mp4
+    ? decodeURIComponent(weightData.titre_mp4.replace(/\+/g, " "))
+    : "Video de YouTube";
+
+  return {
+    platform: "YouTube",
+    author: "YouTube",
+    title: decodedTitle,
+    videoUrl: dlMatch[1],
+    sourceUrl: originalUrl,
+    userAgent: BROWSER_UA,
+    headers: { Referer: "https://notube.im/" },
+  };
 }
 
 async function extractYouTubeViaNoTube(videoId, url) {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const tried = new Set();
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const host = await pickNoTubeServer();
+  for (let round = 0; round < 2; round++) {
+    const hosts = await pickNoTubeServers(2, tried);
+    hosts.forEach((h) => tried.add(h));
     try {
-      const r1 = await fetchWithTimeout(
-        `${host}/recover_weight.php`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": BROWSER_UA,
-            Origin: "https://notube.im",
-            Referer: "https://notube.im/",
-          },
-          body: new URLSearchParams({
-            url: watchUrl,
-            format: "mp4",
-            lang: "es",
-            subscribed: "false",
-          }).toString(),
-        },
-        15_000
-      );
-      if (!r1.ok) continue;
-      const weightData = await r1.json();
-      if (!weightData?.token || !weightData?.name_mp4) continue;
-
-      const r2 = await fetchWithTimeout(
-        `${host}/recover_file.php`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": BROWSER_UA,
-            Origin: "https://notube.im",
-            Referer: "https://notube.im/",
-          },
-          body: new URLSearchParams({
-            url: watchUrl,
-            format: "mp4",
-            name_mp4: weightData.name_mp4,
-            lang: "es",
-            token: weightData.token,
-            subscribed: "false",
-            playlist: "false",
-            adblock: "false",
-          }).toString(),
-        },
-        25_000
-      );
-      if (!r2.ok) continue;
-
-      let finalToken = weightData.token;
-      try {
-        const rfJson = await r2.json();
-        if (rfJson?.token) finalToken = rfJson.token;
-      } catch {}
-
-      await fetchWithTimeout(
-        `${host}/conversion.php`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": BROWSER_UA,
-            Origin: "https://notube.im",
-            Referer: "https://notube.im/",
-          },
-          body: new URLSearchParams({ token: finalToken }).toString(),
-        },
-        15_000
-      ).catch(() => null);
-
-      const pageRes = await fetchWithTimeout(
-        `https://notube.im/es/download?token=${encodeURIComponent(finalToken)}`,
-        { headers: { "User-Agent": BROWSER_UA, Referer: "https://notube.im/" } },
-        10_000
-      );
-      if (!pageRes.ok) continue;
-      const pageHtml = await pageRes.text();
-      const dlMatch = pageHtml.match(/href="(https:\/\/[^"]+download\.php\?[^"]+)"/i);
-      if (!dlMatch?.[1]) continue;
-
-      const decodedTitle = weightData.titre_mp4
-        ? decodeURIComponent(weightData.titre_mp4.replace(/\+/g, " "))
-        : "Video de YouTube";
-
-      return {
-        platform: "YouTube",
-        author: "YouTube",
-        title: decodedTitle,
-        videoUrl: dlMatch[1],
-        sourceUrl: url,
-        userAgent: BROWSER_UA,
-        headers: { Referer: "https://notube.im/" },
-      };
-    } catch (err) {
-      log.warn("[download:yt] notube error", { host, err: err?.message ?? String(err) });
-    }
+      return await Promise.any(hosts.map((host) => runNoTubeHost(host, watchUrl, url)));
+    } catch {}
   }
 
   log.error("[download:yt] todos los métodos fallaron", { videoId });
