@@ -429,7 +429,18 @@ const data = {
         const downloadResult = await downloadVideoBuffer(meta.videoUrl, maxBytes, meta.userAgent);
         const payload = buildDownloadV2Payload(meta, downloadResult);
 
-        await reply(payload);
+        try {
+          await reply(payload);
+        } catch (sendErr) {
+          if (sendErr?.code === 40005 || sendErr?.status === 413) {
+            const fallbackPayload = buildDownloadV2Payload(meta, {
+              tooLarge: true,
+              size: downloadResult.size,
+            });
+            return await reply(fallbackPayload);
+          }
+          throw sendErr;
+        }
       } catch (err) {
         log.error("[util download]", { err: err?.message ?? String(err) });
         return reply({

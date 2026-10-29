@@ -50,6 +50,13 @@ function normalizeReplyPayload(payload) {
   if (typeof payload === "string") return { content: payload };
   if (Array.isArray(payload)) return { content: payload.join("\n") };
   if (!payload || typeof payload !== "object") return { content: String(payload ?? "") };
+  if (payload.flags != null) {
+    const cleanedFlags = Number(payload.flags) & ~64;
+    const copy = { ...payload };
+    if (cleanedFlags) copy.flags = cleanedFlags;
+    else delete copy.flags;
+    return copy;
+  }
   return payload;
 }
 

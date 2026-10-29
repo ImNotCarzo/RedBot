@@ -323,8 +323,17 @@ async function prepareReply(ctx, { thinking = false } = {}) {
       const body = typeof payload === "string" ? { content: payload } : payload;
       const wantsEphemeral = body?.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
       if (wantsEphemeral && !ctx.interaction.ephemeral && typeof ctx.interaction.followUp === "function") {
-        if (!ctx.interaction.replied) await ctx.interaction.deleteReply().catch(() => {});
+        await ctx.interaction.deleteReply().catch(() => {});
         return ctx.interaction.followUp(body);
+      }
+      const isV2 = body?.flags != null && (Number(body.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
+      if (isV2) {
+        try {
+          return await ctx.interaction.editReply({ content: null, embeds: [], ...body });
+        } catch {
+          await ctx.interaction.deleteReply().catch(() => {});
+          return ctx.interaction.followUp(body);
+        }
       }
       return ctx.interaction.editReply(payload);
     };
@@ -334,15 +343,23 @@ async function prepareReply(ctx, { thinking = false } = {}) {
   let pending = await sendThinkingReply(ctx).catch(() => null);
   return async (payload) => {
     const current = pending;
+    if (!current?.edit) return ctx.send(payload);
+    const rawBody = typeof payload === "string" ? { content: payload } : payload;
+    const isV2 = rawBody?.flags != null && (Number(rawBody.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
+    if (isV2) {
+      const sent = await ctx.send(rawBody);
+      pending = null;
+      ctx._thinkingMessage = null;
+      await current.delete().catch(() => {});
+      return sent;
+    }
     pending = null;
     ctx._thinkingMessage = null;
-    if (!current?.edit) return ctx.send(payload);
-    const body = typeof payload === "string" ? { content: payload } : payload;
-    const isEphemeral = body.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
-    const isV2 = body.flags != null && (Number(body.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
-    if (isEphemeral || isV2) {
-      await current.delete().catch(() => {});
-      return ctx.send(body);
+    const body = { ...rawBody };
+    if (body.flags != null) {
+      const cleaned = Number(body.flags) & ~MessageFlags.Ephemeral;
+      if (cleaned) body.flags = cleaned;
+      else delete body.flags;
     }
     return current.edit({ content: "", embeds: [], components: [], ...body }).catch(() => ctx.send(body));
   };

@@ -47,7 +47,7 @@ function getGuildUploadLimitBytes(guild) {
   const tier = guild?.premiumTier ?? 0;
   if (tier >= 3) return 95 * 1024 * 1024;
   if (tier === 2) return 48 * 1024 * 1024;
-  return 9.5 * 1024 * 1024;
+  return 24.5 * 1024 * 1024;
 }
 
 function extractYouTubeId(rawUrl) {
@@ -406,16 +406,69 @@ async function resolveVideoMetadata(rawUrl) {
 }
 
 async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA) {
+  const ua = userAgent || BROWSER_UA;
+
+  if (/googlevideo\.com/i.test(videoUrl)) {
+    const probe = await fetchWithTimeout(
+      videoUrl,
+      {
+        headers: { "User-Agent": ua, Range: "bytes=0-0" },
+        redirect: "follow",
+      },
+      10_000
+    );
+    if (!probe.ok && probe.status !== 206) throw new Error(`HTTP ${probe.status}`);
+
+    const contentRange = probe.headers.get("content-range");
+    const totalSize = contentRange
+      ? Number(contentRange.split("/")[1])
+      : Number(probe.headers.get("content-length") ?? 0);
+
+    if (totalSize > maxBytes) {
+      return { tooLarge: true, size: totalSize };
+    }
+
+    if (totalSize > 0) {
+      const chunkSize = 2 * 1024 * 1024;
+      const ranges = [];
+      for (let start = 0; start < totalSize; start += chunkSize) {
+        ranges.push([start, Math.min(start + chunkSize - 1, totalSize - 1)]);
+      }
+
+      const buffers = await Promise.all(
+        ranges.map(async ([start, end]) => {
+          const r = await fetchWithTimeout(
+            videoUrl,
+            {
+              headers: { "User-Agent": ua, Range: `bytes=${start}-${end}` },
+              redirect: "follow",
+            },
+            45_000
+          );
+          if (!r.ok && r.status !== 206) throw new Error(`HTTP ${r.status}`);
+          return Buffer.from(await r.arrayBuffer());
+        })
+      );
+
+      const full = Buffer.concat(buffers);
+      return {
+        tooLarge: full.length > maxBytes,
+        buffer: full.length > maxBytes ? null : full,
+        size: full.length,
+      };
+    }
+  }
+
   const res = await fetchWithTimeout(
     videoUrl,
     {
       headers: {
-        "User-Agent": userAgent || BROWSER_UA,
+        "User-Agent": ua,
         Accept: "*/*",
       },
       redirect: "follow",
     },
-    25_000
+    35_000
   );
 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -488,15 +541,6 @@ function buildDownloadV2Payload(meta, downloadResult) {
       .setStyle(ButtonStyle.Link)
       .setURL(meta.sourceUrl)
   );
-
-  if (downloadResult.tooLarge && meta.videoUrl) {
-    row.addComponents(
-      new ButtonBuilder()
-        .setLabel("Descargar MP4")
-        .setStyle(ButtonStyle.Link)
-        .setURL(meta.videoUrl)
-    );
-  }
 
   container.addActionRowComponents(row);
 
