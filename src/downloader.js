@@ -18,6 +18,7 @@ const log = new Logger("DOWNLOAD");
 
 const DISCORD_BOT_UA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const ANDROID_UA = "com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip";
 
 function extractFirstUrl(text) {
   if (!text || typeof text !== "string") return null;
@@ -70,19 +71,55 @@ function extractYouTubeId(rawUrl) {
   return null;
 }
 
-async function fetchYouTubeVisitorData(videoId) {
+async function fetchVisitorDataFromInnertube() {
+  try {
+    const res = await fetchWithTimeout(
+      "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": ANDROID_UA,
+          "X-YouTube-Client-Name": "3",
+          "X-YouTube-Client-Version": "20.03.32",
+        },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: "ANDROID",
+              clientVersion: "20.03.32",
+              androidSdkVersion: 34,
+              osName: "Android",
+              osVersion: "14",
+              hl: "es",
+              gl: "US",
+            },
+          },
+        }),
+      },
+      6000
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.responseContext?.visitorData || null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchVisitorDataFromEmbed(videoId) {
   try {
     const res = await fetchWithTimeout(
       `https://www.youtube.com/embed/${videoId}`,
       { headers: { "User-Agent": BROWSER_UA } },
-      6000
+      8000
     );
-    if (!res.ok) return undefined;
+    if (!res.ok) return null;
     const html = await res.text();
     const match = html.match(/"VISITOR_DATA":"([^"]+)"/);
-    return match ? match[1] : undefined;
+    return match ? match[1] : null;
   } catch {
-    return undefined;
+    return null;
   }
 }
 
@@ -90,13 +127,16 @@ async function extractYouTube(url) {
   const videoId = extractYouTubeId(url);
   if (!videoId) return null;
 
-  const visitorData = await fetchYouTubeVisitorData(videoId);
+  const vdSources = [
+    () => fetchVisitorDataFromInnertube(),
+    () => fetchVisitorDataFromEmbed(videoId),
+  ];
 
   const clients = [
     {
       name: "ANDROID",
       version: "20.03.32",
-      ua: "com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip",
+      ua: ANDROID_UA,
       id: 3,
       extra: { androidSdkVersion: 34, osName: "Android", osVersion: "14" },
     },
@@ -109,112 +149,206 @@ async function extractYouTube(url) {
     },
   ];
 
-  for (const c of clients) {
+  for (const getVd of vdSources) {
+    const visitorData = await getVd();
+    if (!visitorData) continue;
+
+    for (const c of clients) {
+      try {
+        const res = await fetchWithTimeout(
+          "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": c.ua,
+              "X-YouTube-Client-Name": String(c.id),
+              "X-YouTube-Client-Version": c.version,
+              "X-Goog-Visitor-Id": visitorData,
+            },
+            body: JSON.stringify({
+              videoId,
+              contentCheckOk: true,
+              racyCheckOk: true,
+              context: {
+                client: {
+                  clientName: c.name,
+                  clientVersion: c.version,
+                  hl: "es",
+                  gl: "US",
+                  visitorData,
+                  ...c.extra,
+                },
+              },
+            }),
+          },
+          10_000
+        );
+
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data?.playabilityStatus?.status !== "OK") {
+          log.warn("[download:yt] no reproducible", {
+            client: c.name,
+            status: data?.playabilityStatus?.status,
+            reason: data?.playabilityStatus?.reason,
+          });
+          continue;
+        }
+
+        const formats = (data?.streamingData?.formats ?? []).filter(
+          (f) => f?.url && f?.mimeType?.includes("video/mp4")
+        );
+        if (!formats.length) continue;
+
+        formats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+        const chosen = formats[0];
+
+        return {
+          platform: "YouTube",
+          author: data?.videoDetails?.author || "YouTube",
+          title: data?.videoDetails?.title || "Video de YouTube",
+          videoUrl: chosen.url,
+          sourceUrl: url,
+          userAgent: c.ua,
+        };
+      } catch (err) {
+        log.warn("[download:yt] error de cliente", { client: c.name, err: err?.message ?? String(err) });
+      }
+    }
+  }
+
+  return extractYouTubeViaNoTube(videoId, url);
+}
+
+async function pickNoTubeServer() {
+  const pool = [];
+  for (let n = 40; n <= 76; n++) pool.push(n);
+  pool.sort(() => Math.random() - 0.5);
+  const candidates = pool.slice(0, 6).map((n) => `https://s${n}.notube.im`);
+
+  try {
+    return await Promise.any(
+      candidates.map(async (host) => {
+        const res = await fetchWithTimeout(
+          `${host}/check-server-load.php`,
+          { headers: { "User-Agent": BROWSER_UA, Origin: "https://notube.im", Referer: "https://notube.im/" } },
+          4000
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = (await res.text()).trim();
+        if (text !== "OK") throw new Error(text);
+        return host;
+      })
+    );
+  } catch {
+    return "https://s60.notube.im";
+  }
+}
+
+async function extractYouTubeViaNoTube(videoId, url) {
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const host = await pickNoTubeServer();
     try {
-      const res = await fetchWithTimeout(
-        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+      const r1 = await fetchWithTimeout(
+        `${host}/recover_weight.php`,
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "User-Agent": c.ua,
-            "X-YouTube-Client-Name": String(c.id),
-            "X-YouTube-Client-Version": c.version,
-            ...(visitorData ? { "X-Goog-Visitor-Id": visitorData } : {}),
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": BROWSER_UA,
+            Origin: "https://notube.im",
+            Referer: "https://notube.im/",
           },
-          body: JSON.stringify({
-            videoId,
-            contentCheckOk: true,
-            racyCheckOk: true,
-            context: {
-              client: {
-                clientName: c.name,
-                clientVersion: c.version,
-                hl: "es",
-                gl: "US",
-                ...(visitorData ? { visitorData } : {}),
-                ...c.extra,
-              },
-            },
-          }),
+          body: new URLSearchParams({
+            url: watchUrl,
+            format: "mp4",
+            lang: "es",
+            subscribed: "false",
+          }).toString(),
         },
+        15_000
+      );
+      if (!r1.ok) continue;
+      const weightData = await r1.json();
+      if (!weightData?.token || !weightData?.name_mp4) continue;
+
+      const r2 = await fetchWithTimeout(
+        `${host}/recover_file.php`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": BROWSER_UA,
+            Origin: "https://notube.im",
+            Referer: "https://notube.im/",
+          },
+          body: new URLSearchParams({
+            url: watchUrl,
+            format: "mp4",
+            name_mp4: weightData.name_mp4,
+            lang: "es",
+            token: weightData.token,
+            subscribed: "false",
+            playlist: "false",
+            adblock: "false",
+          }).toString(),
+        },
+        25_000
+      );
+      if (!r2.ok) continue;
+
+      let finalToken = weightData.token;
+      try {
+        const rfJson = await r2.json();
+        if (rfJson?.token) finalToken = rfJson.token;
+      } catch {}
+
+      await fetchWithTimeout(
+        `${host}/conversion.php`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": BROWSER_UA,
+            Origin: "https://notube.im",
+            Referer: "https://notube.im/",
+          },
+          body: new URLSearchParams({ token: finalToken }).toString(),
+        },
+        15_000
+      ).catch(() => null);
+
+      const pageRes = await fetchWithTimeout(
+        `https://notube.im/es/download?token=${encodeURIComponent(finalToken)}`,
+        { headers: { "User-Agent": BROWSER_UA, Referer: "https://notube.im/" } },
         10_000
       );
+      if (!pageRes.ok) continue;
+      const pageHtml = await pageRes.text();
+      const dlMatch = pageHtml.match(/href="(https:\/\/[^"]+download\.php\?[^"]+)"/i);
+      if (!dlMatch?.[1]) continue;
 
-      if (!res.ok) {
-        log.warn("[download:yt] HTTP no OK", { client: c.name, status: res.status });
-        continue;
-      }
-      const data = await res.json();
-      if (data?.playabilityStatus?.status !== "OK") {
-        log.warn("[download:yt] no reproducible", {
-          client: c.name,
-          status: data?.playabilityStatus?.status,
-          reason: data?.playabilityStatus?.reason,
-        });
-        continue;
-      }
-
-      const formats = (data?.streamingData?.formats ?? []).filter(
-        (f) => f?.url && f?.mimeType?.includes("video/mp4")
-      );
-      if (!formats.length) {
-        log.warn("[download:yt] sin formatos mp4 con url", { client: c.name });
-        continue;
-      }
-
-      formats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
-      const chosen = formats[0];
+      const decodedTitle = weightData.titre_mp4
+        ? decodeURIComponent(weightData.titre_mp4.replace(/\+/g, " "))
+        : "Video de YouTube";
 
       return {
         platform: "YouTube",
-        author: data?.videoDetails?.author || "YouTube",
-        title: data?.videoDetails?.title || "Video de YouTube",
-        videoUrl: chosen.url,
+        author: "YouTube",
+        title: decodedTitle,
+        videoUrl: dlMatch[1],
         sourceUrl: url,
-        userAgent: c.ua,
+        userAgent: BROWSER_UA,
+        headers: { Referer: "https://notube.im/" },
       };
     } catch (err) {
-      log.warn("[download:yt] error de cliente", { client: c.name, err: err?.message ?? String(err) });
+      log.warn("[download:yt] notube error", { host, err: err?.message ?? String(err) });
     }
   }
 
-  return extractYouTubeViaPiped(videoId, url);
-}
-
-const PIPED_APIS = ["https://api.piped.private.coffee", "https://pipedapi.kavin.rocks"];
-
-async function extractYouTubeViaPiped(videoId, url) {
-  for (const base of PIPED_APIS) {
-    try {
-      const res = await fetchWithTimeout(
-        `${base}/streams/${videoId}`,
-        { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } },
-        10_000
-      );
-      if (!res.ok) {
-        log.warn("[download:yt] piped HTTP no OK", { base, status: res.status });
-        continue;
-      }
-      const data = await res.json();
-      const streams = (data?.videoStreams ?? []).filter(
-        (s) => !s.videoOnly && s.format === "MPEG_4" && s.url
-      );
-      if (!streams.length) {
-        log.warn("[download:yt] piped sin streams", { base });
-        continue;
-      }
-      return {
-        platform: "YouTube",
-        author: data.uploader || "YouTube",
-        title: data.title || "Video de YouTube",
-        videoUrl: streams[0].url,
-        sourceUrl: url,
-      };
-    } catch (err) {
-      log.warn("[download:yt] piped error", { base, err: err?.message ?? String(err) });
-    }
-  }
   log.error("[download:yt] todos los métodos fallaron", { videoId });
   return null;
 }
@@ -459,14 +593,14 @@ async function resolveVideoMetadata(rawUrl) {
   return extractOpenGraphVideo(rawUrl, host.replace(/^www\./, ""), rawUrl);
 }
 
-async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA) {
+async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, extraHeaders = {}) {
   const ua = userAgent || BROWSER_UA;
 
   if (/googlevideo\.com/i.test(videoUrl)) {
     const probe = await fetchWithTimeout(
       videoUrl,
       {
-        headers: { "User-Agent": ua, Range: "bytes=0-0" },
+        headers: { "User-Agent": ua, Range: "bytes=0-0", ...extraHeaders },
         redirect: "follow",
       },
       10_000
@@ -494,7 +628,7 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA) {
           const r = await fetchWithTimeout(
             videoUrl,
             {
-              headers: { "User-Agent": ua, Range: `bytes=${start}-${end}` },
+              headers: { "User-Agent": ua, Range: `bytes=${start}-${end}`, ...extraHeaders },
               redirect: "follow",
             },
             45_000
@@ -519,6 +653,7 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA) {
       headers: {
         "User-Agent": ua,
         Accept: "*/*",
+        ...extraHeaders,
       },
       redirect: "follow",
     },
@@ -547,6 +682,10 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA) {
     buffer: Buffer.from(arrayBuf),
     size: arrayBuf.byteLength,
   };
+}
+
+async function downloadMeta(meta, maxBytes) {
+  return downloadVideoBuffer(meta.videoUrl, maxBytes, meta.userAgent, meta.headers);
 }
 
 const ACCENT_COLOR =
@@ -611,5 +750,6 @@ module.exports = {
   getGuildUploadLimitBytes,
   resolveVideoMetadata,
   downloadVideoBuffer,
+  downloadMeta,
   buildDownloadV2Payload,
 };

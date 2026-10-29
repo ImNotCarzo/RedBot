@@ -1,7 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
-const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadVideoBuffer, buildDownloadV2Payload } = require("../../src/downloader");
+const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN } = require("../../src/config");
 const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
 const {
@@ -427,7 +427,7 @@ const data = {
         }
 
         const maxBytes = getGuildUploadLimitBytes(ctx.guild);
-        const downloadResult = await downloadVideoBuffer(meta.videoUrl, maxBytes, meta.userAgent);
+        const downloadResult = await downloadMeta(meta, maxBytes);
         const payload = buildDownloadV2Payload(meta, downloadResult);
 
         try {
