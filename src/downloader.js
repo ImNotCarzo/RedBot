@@ -127,96 +127,65 @@ async function extractYouTube(url) {
   const videoId = extractYouTubeId(url);
   if (!videoId) return null;
 
-  const vdSources = [
-    () => fetchVisitorDataFromInnertube(),
-    () => fetchVisitorDataFromEmbed(videoId),
-  ];
+  try {
+    const visitorData =
+      (await fetchVisitorDataFromInnertube()) ||
+      (await fetchVisitorDataFromEmbed(videoId));
 
-  const clients = [
-    {
-      name: "ANDROID",
-      version: "20.03.32",
-      ua: ANDROID_UA,
-      id: 3,
-      extra: { androidSdkVersion: 34, osName: "Android", osVersion: "14" },
-    },
-    {
-      name: "ANDROID_VR",
-      version: "1.60.19",
-      ua: "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-      id: 28,
-      extra: { androidSdkVersion: 32, osName: "Android", osVersion: "12L", deviceMake: "Oculus", deviceModel: "Quest 3" },
-    },
-  ];
-
-  for (const getVd of vdSources) {
-    const visitorData = await getVd();
-    if (!visitorData) continue;
-
-    for (const c of clients) {
-      try {
-        const res = await fetchWithTimeout(
-          "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "User-Agent": c.ua,
-              "X-YouTube-Client-Name": String(c.id),
-              "X-YouTube-Client-Version": c.version,
-              "X-Goog-Visitor-Id": visitorData,
-            },
-            body: JSON.stringify({
-              videoId,
-              contentCheckOk: true,
-              racyCheckOk: true,
-              context: {
-                client: {
-                  clientName: c.name,
-                  clientVersion: c.version,
-                  hl: "es",
-                  gl: "US",
-                  visitorData,
-                  ...c.extra,
-                },
-              },
-            }),
+    if (visitorData) {
+      const res = await fetchWithTimeout(
+        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": ANDROID_UA,
+            "X-YouTube-Client-Name": "3",
+            "X-YouTube-Client-Version": "20.03.32",
+            "X-Goog-Visitor-Id": visitorData,
           },
-          10_000
-        );
+          body: JSON.stringify({
+            videoId,
+            contentCheckOk: true,
+            racyCheckOk: true,
+            context: {
+              client: {
+                clientName: "ANDROID",
+                clientVersion: "20.03.32",
+                hl: "es",
+                gl: "US",
+                visitorData,
+                androidSdkVersion: 34,
+                osName: "Android",
+                osVersion: "14",
+              },
+            },
+          }),
+        },
+        10_000
+      );
 
-        if (!res.ok) continue;
+      if (res.ok) {
         const data = await res.json();
-        if (data?.playabilityStatus?.status !== "OK") {
-          log.warn("[download:yt] no reproducible", {
-            client: c.name,
-            status: data?.playabilityStatus?.status,
-            reason: data?.playabilityStatus?.reason,
-          });
-          continue;
+        if (data?.playabilityStatus?.status === "OK") {
+          const formats = (data?.streamingData?.formats ?? []).filter(
+            (f) => f?.url && f?.mimeType?.includes("video/mp4")
+          );
+          if (formats.length) {
+            formats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+            return {
+              platform: "YouTube",
+              author: data?.videoDetails?.author || "YouTube",
+              title: data?.videoDetails?.title || "Video de YouTube",
+              videoUrl: formats[0].url,
+              sourceUrl: url,
+              userAgent: ANDROID_UA,
+            };
+          }
         }
-
-        const formats = (data?.streamingData?.formats ?? []).filter(
-          (f) => f?.url && f?.mimeType?.includes("video/mp4")
-        );
-        if (!formats.length) continue;
-
-        formats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
-        const chosen = formats[0];
-
-        return {
-          platform: "YouTube",
-          author: data?.videoDetails?.author || "YouTube",
-          title: data?.videoDetails?.title || "Video de YouTube",
-          videoUrl: chosen.url,
-          sourceUrl: url,
-          userAgent: c.ua,
-        };
-      } catch (err) {
-        log.warn("[download:yt] error de cliente", { client: c.name, err: err?.message ?? String(err) });
       }
     }
-  }
+  } catch {}
 
   return extractYouTubeViaNoTube(videoId, url);
 }
