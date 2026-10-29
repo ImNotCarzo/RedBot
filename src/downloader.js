@@ -11,8 +11,10 @@ const {
   ButtonStyle,
   MessageFlags,
 } = require("discord.js");
-const { fetchWithTimeout } = require("./runtime");
+const { fetchWithTimeout, Logger } = require("./runtime");
 const { RED } = require("./config");
+
+const log = new Logger("DOWNLOAD");
 
 const DISCORD_BOT_UA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -139,14 +141,27 @@ async function extractYouTube(url) {
         10_000
       );
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        log.warn("[download:yt] HTTP no OK", { client: c.name, status: res.status });
+        continue;
+      }
       const data = await res.json();
-      if (data?.playabilityStatus?.status !== "OK") continue;
+      if (data?.playabilityStatus?.status !== "OK") {
+        log.warn("[download:yt] no reproducible", {
+          client: c.name,
+          status: data?.playabilityStatus?.status,
+          reason: data?.playabilityStatus?.reason,
+        });
+        continue;
+      }
 
       const formats = (data?.streamingData?.formats ?? []).filter(
         (f) => f?.url && f?.mimeType?.includes("video/mp4")
       );
-      if (!formats.length) continue;
+      if (!formats.length) {
+        log.warn("[download:yt] sin formatos mp4 con url", { client: c.name });
+        continue;
+      }
 
       formats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
       const chosen = formats[0];
@@ -159,9 +174,48 @@ async function extractYouTube(url) {
         sourceUrl: url,
         userAgent: c.ua,
       };
-    } catch {}
+    } catch (err) {
+      log.warn("[download:yt] error de cliente", { client: c.name, err: err?.message ?? String(err) });
+    }
   }
 
+  return extractYouTubeViaPiped(videoId, url);
+}
+
+const PIPED_APIS = ["https://api.piped.private.coffee", "https://pipedapi.kavin.rocks"];
+
+async function extractYouTubeViaPiped(videoId, url) {
+  for (const base of PIPED_APIS) {
+    try {
+      const res = await fetchWithTimeout(
+        `${base}/streams/${videoId}`,
+        { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } },
+        10_000
+      );
+      if (!res.ok) {
+        log.warn("[download:yt] piped HTTP no OK", { base, status: res.status });
+        continue;
+      }
+      const data = await res.json();
+      const streams = (data?.videoStreams ?? []).filter(
+        (s) => !s.videoOnly && s.format === "MPEG_4" && s.url
+      );
+      if (!streams.length) {
+        log.warn("[download:yt] piped sin streams", { base });
+        continue;
+      }
+      return {
+        platform: "YouTube",
+        author: data.uploader || "YouTube",
+        title: data.title || "Video de YouTube",
+        videoUrl: streams[0].url,
+        sourceUrl: url,
+      };
+    } catch (err) {
+      log.warn("[download:yt] piped error", { base, err: err?.message ?? String(err) });
+    }
+  }
+  log.error("[download:yt] todos los métodos fallaron", { videoId });
   return null;
 }
 

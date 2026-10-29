@@ -419,6 +419,7 @@ const data = {
       try {
         const meta = await resolveVideoMetadata(url);
         if (!meta?.videoUrl) {
+          log.warn("[util download] sin video extraíble", { url });
           return reply({
             content: "No pude extraer ningún video de ese enlace. Verifica que sea público y contenga un video.",
             flags: MessageFlags.Ephemeral,
