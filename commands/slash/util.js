@@ -222,13 +222,13 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "afk",
-      description: "Establece tu estado como ausente (AFK)",
+      description: "Ponte en ausente",
       aliases: ["ausente"],
     }),
     params: new ParamsBuilder()
       .addString({
         name: "razon",
-        description: "Motivo de tu ausencia (opcional)",
+        description: "Motivo",
         required: false,
       }),
 
@@ -246,7 +246,7 @@ const data = {
           embeds: [
             new EmbedBuilder()
               .setAuthor({ name: invoker.username, iconURL: invoker.displayAvatarURL({ size: 128 }) })
-              .setDescription(`💤 Ahora estás **AFK**: ${razon}`)
+              .setDescription(`Ahora estás **AFK**: ${razon}`)
               .setColor(RED)
               .setTimestamp(),
           ],
