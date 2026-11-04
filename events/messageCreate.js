@@ -30,7 +30,7 @@ async function handleAfkChecks(message, prefix) {
       await removeAfk(message.guildId, message.author.id);
       const sinceTs = Math.floor(new Date(authorAfk.createdAt).getTime() / 1000);
       const welcomeEmbed = new EmbedBuilder()
-        .setDescription(`👋 Bienvenido de vuelta ${message.author}, quité tu estado **AFK** (estuviste ausente <t:${sinceTs}:R>).`)
+        .setDescription(`Bienvenido de vuelta ${message.author} (ausente por <t:${sinceTs}:R>).`)
         .setColor(RED);
 
       message
@@ -50,7 +50,7 @@ async function handleAfkChecks(message, prefix) {
       const targetAfk = await getAfk(message.guildId, targetUser.id);
       if (targetAfk) {
         const sinceTs = Math.floor(new Date(targetAfk.createdAt).getTime() / 1000);
-        afkLines.push(`💤 **${targetUser.username}** está AFK (<t:${sinceTs}:R>): ${targetAfk.reason}`);
+        afkLines.push(`**${targetUser.username}** está AFK (<t:${sinceTs}:R>): ${targetAfk.reason}`);
       }
     }
 
