@@ -1,5 +1,6 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
+  ChannelType,
   EmbedBuilder,
   ComponentType,
   MessageFlags,
@@ -16,6 +17,7 @@ const {
   listWarnsForUser,
   upsertTempBan,
   scheduleTempUnban,
+  cancelTempBan,
 } = require("../../src/moderation");
 const { sendLog, setLogChannel, clearLogChannel } = require("../../src/guild");
 
@@ -67,6 +69,7 @@ const data = {
           }).catch(() => {});
 
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `${tag}: ${reason}` });
+          await cancelTempBan(ctx.guild.id, member.id);
 
           const username = member.user.globalName || member.user.username;
 
@@ -112,6 +115,7 @@ const data = {
           }).catch(() => {});
 
           await ctx.guild.members.unban(userId, `${tag}: ${reason}`);
+          await cancelTempBan(ctx.guild.id, userId);
 
           const username = ban.user.globalName || ban.user.username;
 
@@ -294,6 +298,7 @@ const data = {
             }).catch(() => {});
 
             await ctx.guild.members.ban(member, { reason: `[MASSBAN] ${tag}: ${reason}` });
+            await cancelTempBan(ctx.guild.id, member.id);
             banned.push(member);
           } catch {
             failed.push(member);
@@ -517,7 +522,8 @@ const data = {
             return ctx.send({ content: "No hay mensajes recientes para borrar", flags: MessageFlags.Ephemeral });
           }
 
-          if (cmdMessage) toDelete.push(cmdMessage);
+          if (cmdMessage && toDelete.length < 100) toDelete.push(cmdMessage);
+          else if (cmdMessage) cmdMessage.delete().catch(() => {});
           const deleted = await ctx.channel.bulkDelete(toDelete, true);
           const cantidad = Math.max(0, deleted.size - (cmdMessage && deleted.has(cmdMessage.id) ? 1 : 0));
           const texto = target
@@ -566,14 +572,24 @@ const data = {
         }
 
         try {
-          const warnId = generateId();
-          const { total } = await addWarn({
-            guildId: ctx.guild.id,
-            userId: member.id,
-            moderatorId: ctx.user?.id ?? ctx.author?.id,
-            reason,
-            warnId,
-          });
+          let warnId;
+          let total;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            warnId = generateId();
+            try {
+              ({ total } = await addWarn({
+                guildId: ctx.guild.id,
+                userId: member.id,
+                moderatorId: ctx.user?.id ?? ctx.author?.id,
+                reason,
+                warnId,
+              }));
+              break;
+            } catch (dupErr) {
+              if (dupErr?.code === 11000 && attempt < 2) continue;
+              throw dupErr;
+            }
+          }
           const username = member.user.globalName || member.user.username;
 
           await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue advertido`).setColor(YELLOW)] });
@@ -729,7 +745,12 @@ const data = {
     })
     .addCommand({
       data: new CommandBuilder({ name: "setlogs", description: "Establece el canal de logs para RedBot" }),
-      params: new ParamsBuilder().addChannel({ name: "canal", description: "Canal de texto para los logs", required: true }),
+      params: new ParamsBuilder().addChannel({
+        name: "canal",
+        description: "Canal de texto para los logs",
+        required: true,
+        channel_types: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+      }),
       plugins: [Plugins.hasPerms("ManageGuild")],
 
       async code(ctx) {

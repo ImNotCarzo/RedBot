@@ -1,5 +1,6 @@
 const { ActivityType, REST, Routes } = require("discord.js");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/moderation");
+const { restoreReminders } = require("../src/reminders");
 const { Logger, sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
 const { setId, COMMANDS_TO_UPDATE } = require("../src/config");
 
@@ -141,6 +142,7 @@ const event = {
     });
 
     await restoreTempBans(client);
+    await restoreReminders(client);
     startPresenceRotation(client);
 
     try {

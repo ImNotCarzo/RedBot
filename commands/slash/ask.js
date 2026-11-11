@@ -56,7 +56,8 @@ const data = {
         thinking = await sendThinkingReply(ctx);
       }
 
-      const prev = getConversacion(userId);
+      const scope = ctx.guild?.id ?? "dm";
+      const prev = getConversacion(userId, scope);
       const historial = [...(prev?.historial ?? [])];
       historial.push({ role: "user", content: pregunta });
 
@@ -76,10 +77,10 @@ const data = {
       if (isSlash) {
         await ctx.interaction.editReply({ embeds: [embed] });
         const sent = await ctx.interaction.fetchReply();
-        setConversacion(userId, historial, sent.id);
+        setConversacion(userId, historial, sent.id, scope);
       } else {
         await thinking?.edit?.({ content: "", embeds: [embed] }).catch(() => null);
-        setConversacion(userId, historial, thinking.id);
+        setConversacion(userId, historial, thinking?.id ?? null, scope);
       }
 
     } catch (err) {

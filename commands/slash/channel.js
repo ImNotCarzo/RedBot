@@ -2,7 +2,9 @@ const { ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder, MessageFlags
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
 const { sendLog } = require("../../src/guild");
-const { Logger, noGuildReply, uniqueId, handleCommandError, failWith } = require("../../src/runtime");
+const { Logger, noGuildReply, uniqueId, handleCommandError, failWith, prepareReply } = require("../../src/runtime");
+const { getMessageText } = require("../../src/adapter");
+const { generateText } = require("../../src/ai");
 
 const log = new Logger("CMD_CHANNEL", process.env.LOG_LEVEL);
 
@@ -508,5 +510,68 @@ const data = {
       })
     ),
 };
+
+const recapCommand = {
+  data: new CommandBuilder({
+    name: "recap",
+    description: "Resume los últimos mensajes del canal",
+  }),
+  params: new ParamsBuilder().addString({
+    name: "cantidad",
+    description: "Mensajes a resumir (10-100, por defecto 50)",
+    required: false,
+  }),
+  plugins: [Plugins.hasBotPerms("ViewChannel", "ReadMessageHistory")],
+  async code(ctx) {
+    if (!ctx.guild) return noGuildReply(ctx);
+
+    const reply = await prepareReply(ctx, { thinking: true });
+
+    try {
+      const amount = Math.min(100, Math.max(10, Number.parseInt(ctx.get("cantidad"), 10) || 50));
+      const fetched = await ctx.channel.messages.fetch({ limit: amount });
+      const commandMessageId = ctx.message?.id ?? null;
+
+      const lines = [...fetched.values()]
+        .reverse()
+        .filter((m) => !m.author.bot && m.id !== commandMessageId)
+        .map((m) => {
+          const text = (m.cleanContent?.trim() || getMessageText(m)).replace(/\s+/g, " ").trim();
+          return text ? `${m.member?.displayName ?? m.author.username}: ${text.slice(0, 400)}` : null;
+        })
+        .filter(Boolean);
+
+      if (lines.length < 3) {
+        return reply({ content: "No hay suficientes mensajes para resumir", flags: MessageFlags.Ephemeral });
+      }
+
+      const prompt =
+        "Resume la siguiente conversación de un canal de Discord. Indica los temas principales y, cuando sea relevante, quién dijo qué. " +
+        "Solo el resumen, objetivo, sin opiniones ni frases previas. Responde en español, máximo 3 párrafos.\n\n" +
+        lines.join("\n").slice(0, 12000);
+
+      const resumen = await generateText(prompt);
+
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(`Resumen de #${ctx.channel.name}`)
+            .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
+            .setColor(RED)
+            .setFooter({ text: `${lines.length} mensajes analizados` })
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      log.error("Error en channel recap", { err: err?.message ?? String(err) });
+      if (err?.code === 50013 || err?.code === 50001) {
+        return failWith(ctx, err, "No pude leer el historial de este canal", reply);
+      }
+      return handleCommandError(ctx, err);
+    }
+  },
+};
+
+data.data.addCommand(recapCommand);
 
 module.exports = { data };

@@ -22,15 +22,18 @@ function getCachedPrefix(guildId) {
     prefixCache.delete(guildId);
     return undefined;
   }
+  prefixCache.delete(guildId);
+  prefixCache.set(guildId, entry);
   return entry.value;
 }
 
-function setCachedPrefix(guildId, value) {
+function setCachedPrefix(guildId, value, ttl = PREFIX_CACHE_TTL_MS) {
   if (prefixCache.size >= PREFIX_CACHE_MAX) {
     const oldest = prefixCache.keys().next().value;
     if (oldest) prefixCache.delete(oldest);
   }
-  prefixCache.set(guildId, { value, expiresAt: Date.now() + PREFIX_CACHE_TTL_MS });
+  prefixCache.delete(guildId);
+  prefixCache.set(guildId, { value, expiresAt: Date.now() + ttl });
 }
 
 async function getPrefix(guildId) {
@@ -46,7 +49,8 @@ async function getPrefix(guildId) {
     setCachedPrefix(guildId, prefix);
     return prefix;
   } catch {
-    setCachedPrefix(guildId, DEFAULT_PREFIX);
+    // Fallo transitorio de DB: cache corta para no fijar el prefijo por defecto durante media hora
+    setCachedPrefix(guildId, DEFAULT_PREFIX, 15_000);
     return DEFAULT_PREFIX;
   }
 }
@@ -71,6 +75,7 @@ function setCachedAfk(key, value) {
     const oldest = afkCache.keys().next().value;
     if (oldest) afkCache.delete(oldest);
   }
+  afkCache.delete(key);
   afkCache.set(key, { value, expiresAt: Date.now() + AFK_CACHE_TTL_MS });
 }
 
@@ -79,8 +84,11 @@ async function getAfk(guildId, userId) {
   const key = `${guildId}:${userId}`;
   const cached = afkCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
+    afkCache.delete(key);
+    afkCache.set(key, cached);
     return cached.value;
   }
+  if (cached) afkCache.delete(key);
   try {
     const doc = await Afk.findOne({ guildId, userId }).lean();
     const val = doc ? { reason: doc.reason, createdAt: doc.createdAt } : null;

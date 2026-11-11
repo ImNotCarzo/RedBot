@@ -11,7 +11,9 @@ const {
   ButtonStyle,
   MessageFlags,
 } = require("discord.js");
-const { fetchWithTimeout, Logger } = require("./runtime");
+const { Logger } = require("./runtime");
+// Todas las peticiones del downloader pasan por validacion de host publico (anti-SSRF) y redirecciones controladas
+const { fetchPublic: fetchWithTimeout, readBodyLimited } = require("./security");
 const { RED } = require("./config");
 
 const log = new Logger("DOWNLOAD");
@@ -19,6 +21,7 @@ const log = new Logger("DOWNLOAD");
 const DISCORD_BOT_UA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const ANDROID_UA = "com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip";
+const DOWNLOAD_CONCURRENCY = 4;
 
 function extractFirstUrl(text) {
   if (!text || typeof text !== "string") return null;
@@ -609,6 +612,7 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
     const totalSize = contentRange
       ? Number(contentRange.split("/")[1])
       : Number(probe.headers.get("content-length") ?? 0);
+    await probe.body?.cancel?.().catch(() => {});
 
     if (totalSize > maxBytes) {
       return { tooLarge: true, size: totalSize };
@@ -621,8 +625,12 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
         ranges.push([start, Math.min(start + chunkSize - 1, totalSize - 1)]);
       }
 
-      const buffers = await Promise.all(
-        ranges.map(async ([start, end]) => {
+      const buffers = new Array(ranges.length);
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < ranges.length) {
+          const index = cursor++;
+          const [start, end] = ranges[index];
           const r = await fetchWithTimeout(
             videoUrl,
             {
@@ -632,9 +640,10 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
             45_000
           );
           if (!r.ok && r.status !== 206) throw new Error(`HTTP ${r.status}`);
-          return Buffer.from(await r.arrayBuffer());
-        })
-      );
+          buffers[index] = Buffer.from(await r.arrayBuffer());
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, ranges.length) }, worker));
 
       const full = Buffer.concat(buffers);
       return {
@@ -665,20 +674,15 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
     throw new Error("URL resolved to HTML instead of a video stream");
   }
 
-  const contentLength = Number(res.headers.get("content-length") ?? 0);
-  if (contentLength > maxBytes) {
-    return { tooLarge: true, size: contentLength };
-  }
-
-  const arrayBuf = await res.arrayBuffer();
-  if (arrayBuf.byteLength > maxBytes) {
-    return { tooLarge: true, size: arrayBuf.byteLength };
+  const body = await readBodyLimited(res, maxBytes);
+  if (body.tooLarge) {
+    return { tooLarge: true, size: body.size };
   }
 
   return {
     tooLarge: false,
-    buffer: Buffer.from(arrayBuf),
-    size: arrayBuf.byteLength,
+    buffer: body.buffer,
+    size: body.size,
   };
 }
 

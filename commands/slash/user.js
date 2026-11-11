@@ -66,7 +66,8 @@ async function resolveUser(ctx, input) {
   if (!input) return invoker ?? null;
   if (typeof input === "object") return input.user ?? input;
   const match = String(input).trim().match(/^(?:<@!?)?(\d{17,20})>?$/);
-  if (match) return (ctx.client ?? ctx.bot).users.fetch(match[1]).catch(() => null);
+  const client = ctx.bot ?? ctx.client ?? ctx.data?.client;
+  if (match && client?.users) return client.users.fetch(match[1]).catch(() => null);
   return null;
 }
 
@@ -170,7 +171,7 @@ const data = {
 
           if (!guild) {
             const user = await resolveUser(ctx, input);
-            if (!user) return ctx.send("No se encontró ningún usuario");
+            if (!user) return ctx.send("No pude encontrar al usuario");
             const fetched = await user.fetch(true).catch(() => user);
             const createdTs = Math.floor(fetched.createdTimestamp / 1000);
             const insignias = formatUserBadges(fetched);
@@ -241,7 +242,7 @@ const data = {
           }
 
           const member = await resolveMember(ctx, input);
-          if (!member) return ctx.send("No se encontró ningún usuario");
+          if (!member) return ctx.send("No pude encontrar al usuario");
 
           const user = await member.user.fetch(true).catch(() => member.user);
           const fullMember = await member.fetch(true).catch(() => member);
@@ -395,6 +396,9 @@ const data = {
                 avCollector.on("collect", async (i) => {
                   await i.update({ embeds: [buildAv(i.values[0])], components: [makeSelectRow(selectId, true, baseOptions), avRow] });
                 });
+                avCollector.on("end", async (_c, reason) => {
+                  if (reason === "time") reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {});
+                });
               } else {
                 await interaction.update({ embeds: [buildAv("server")], components: [makeSelectRow(selectId, true, baseOptions)] });
               }
@@ -454,7 +458,9 @@ const data = {
                   components: [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)],
                 });
               });
-              subCollector.on("end", async () => reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {}));
+              subCollector.on("end", async (_c, reason) => {
+                if (reason === "time") reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {});
+              });
             }
           });
 

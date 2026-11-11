@@ -1,6 +1,7 @@
 const { GoogleGenAI } = require("@google/genai");
 const { MAX_HISTORIAL, SYSTEM_PROMPT } = require("./config");
 const { Logger, wait } = require("./runtime");
+const { fetchPublic, readBodyLimited } = require("./security");
 
 const log = new Logger("AI_SERVICE");
 const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
@@ -67,7 +68,8 @@ async function generateWithFallback(params, customChain = null) {
   const chain = Array.isArray(customChain) && customChain.length > 0 ? customChain : FALLBACK_CHAIN;
   const maxAttempts = Math.max(chain.length, 2);
   const triedModels = new Set([params.model]);
-  const requestParams = { ...params, config: { ...params.config } };
+  const { timeoutMs: _timeoutIgnored, ...baseParams } = params;
+  const requestParams = { ...baseParams, config: { ...params.config } };
   const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let lastErr;
@@ -214,7 +216,8 @@ function shouldSearchWeb(text) {
     return false;
   }
 
-  return true;
+  // Solo busca en la web cuando el mensaje pide informacion actual o factual, no en cada charla
+  return /(noticia|actual|último|ultimo|reciente|precio|cotizaci|clima|resultado|quién es|quien es|qué pasó|que paso|cuándo|cuando sale|estreno|lanzamiento|202\d|presidente|campe[óo]n|sale el|salió|salio)/i.test(t);
 }
 
 async function performWebSearch(query) {
@@ -293,7 +296,12 @@ async function generateChatReply(historial) {
   return response.text?.trim() || "No pude generar una respuesta";
 }
 
-function setConversacion(userId, historial, lastBotMessageId = null) {
+function sessionKey(userId, scope = "global") {
+  return `${scope}:${userId}`;
+}
+
+function setConversacion(rawUserId, historial, lastBotMessageId = null, scope = "global") {
+  const userId = sessionKey(rawUserId, scope);
   const current = sessions.get(userId);
   if (current?.timeout) clearTimeout(current.timeout);
 
@@ -319,7 +327,8 @@ function setConversacion(userId, historial, lastBotMessageId = null) {
   });
 }
 
-function getConversacion(userId) {
+function getConversacion(rawUserId, scope = "global") {
+  const userId = sessionKey(rawUserId, scope);
   const session = sessions.get(userId);
   if (!session) return null;
   sessions.delete(userId);
@@ -327,26 +336,29 @@ function getConversacion(userId) {
   return session;
 }
 
-function deleteConversacion(userId) {
+function deleteConversacion(rawUserId) {
+  for (const key of [...sessions.keys()]) {
+    if (key.endsWith(`:${rawUserId}`)) deleteSessionKey(key);
+  }
+}
+
+function deleteSessionKey(userId) {
   const session = sessions.get(userId);
   if (session?.timeout) clearTimeout(session.timeout);
   sessions.delete(userId);
 }
 
 async function fetchImageAsInlineData(url, timeoutMs = 10_000) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  const res = await fetchPublic(url, {}, timeoutMs);
   if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status})`);
 
-  const declared = Number(res.headers.get("content-length") ?? 0);
-  if (declared > MAX_IMAGE_BYTES) throw new Error("La imagen supera el tamaño máximo permitido");
-
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength > MAX_IMAGE_BYTES) throw new Error("La imagen supera el tamaño máximo permitido");
+  const body = await readBodyLimited(res, MAX_IMAGE_BYTES);
+  if (body.tooLarge) throw new Error("La imagen supera el tamaño máximo permitido");
 
   return {
     inlineData: {
       mimeType: (res.headers.get("content-type") || "image/png").split(";")[0].trim(),
-      data: Buffer.from(buf).toString("base64"),
+      data: body.buffer.toString("base64"),
     },
   };
 }

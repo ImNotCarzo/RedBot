@@ -44,7 +44,7 @@ const CATEGORY_LABELS = {
 //  COMANDOS
 // ─────────────────────────────────────────────
 
-const getCommands = () => ({
+const getBaseCommands = () => ({
   utilidad: {
     ask:       { short: "ask",       slash: "ask",            id: IDS.ask(),  usage: ".ask <pregunta>",            aliases: ["ai", "ia"],                    description: "Hazle una pregunta a la IA." },
     afk:       { short: "afk",       slash: "util afk",       id: IDS.util(), usage: ".afk [razón]",               aliases: ["ausente"],                     description: "Establece tu estado como ausente (AFK)." },
@@ -137,6 +137,15 @@ const getCommands = () => ({
 //  HELPERS
 // ─────────────────────────────────────────────
 
+const getCommands = () => {
+  const commands = getBaseCommands();
+  commands.utilidad.poll   = { short: "poll",   slash: "util poll",   id: IDS.util(),    usage: ".poll <pregunta> | <op1> | <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
+  commands.utilidad.remind = { short: "remind", slash: "util remind", id: IDS.util(),    usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." };
+  commands.utilidad.ocr    = { short: "ocr",    slash: "util ocr",    id: IDS.util(),    usage: ".ocr <url | adjunto>",             aliases: ["leer", "extraer"],                      description: "Extrae el texto de una imagen." };
+  commands.canal.recap     = { short: "recap",  slash: "channel recap", id: IDS.channel(), usage: ".recap [cantidad]",              aliases: ["resumen", "tldr"],                      description: "Resume los últimos mensajes del canal." };
+  return commands;
+};
+
 const COLLECTOR_TIMEOUT = 5 * 60 * 1000;
 const SEP = "||";
 
@@ -216,6 +225,13 @@ const data = {
         return builder.build()[0];
       };
 
+      const buildStaticContainer = (category) =>
+        new ComponentsV2Builder()
+          .addText("## <:redbot:1474109778044260478> RedBot")
+          .addSeparator("small")
+          .addText(buildCommandList(category))
+          .build()[0];
+
       let currentCategory = "utilidad";
 
       const message = await ctx.send({
@@ -280,10 +296,12 @@ const data = {
         await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral }).catch(() => {});
       });
 
-      buttonCollector.on("end", () => {
+      buttonCollector.on("end", (_collected, reason) => {
+        if (reason !== "time") return;
+        selectCollector.stop();
         message.edit({
           flags: ComponentsV2Builder.flags,
-          components: [buildContainer(currentCategory)],
+          components: [buildStaticContainer(currentCategory)],
         }).catch(() => {});
       });
 

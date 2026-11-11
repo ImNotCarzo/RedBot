@@ -368,6 +368,25 @@ const data = {
 
         let subCollector = null;
 
+        const attachPageCollector = (buildEmbed, pages) => {
+          let page = 0;
+          subCollector = msg.createMessageComponentCollector({
+            componentType: ComponentType.Button,
+            time: 2 * 60 * 1000,
+            filter: (i) => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
+          });
+          subCollector.on("collect", async (i) => {
+            page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
+            await i.update({
+              embeds: [buildEmbed(page)],
+              components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)],
+            });
+          });
+          subCollector.on("end", (_c, reason) => {
+            if (reason === "time") msg.edit({ components: [buildNavRow(true)] }).catch(() => {});
+          });
+        };
+
         const collector = msg.createMessageComponentCollector({
           time: 5 * 60 * 1000,
           filter: (i) => i.customId === navId || [prevId, nextId].includes(i.customId),
@@ -383,7 +402,6 @@ const data = {
 
           const selected = interaction.values?.[0];
           if (!selected) return;
-          if (subCollector) { subCollector.stop(); subCollector = null; }
 
           if (!isAuthor) {
             if (selected === "info") {
@@ -415,6 +433,8 @@ const data = {
             return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
           }
 
+          if (subCollector) { subCollector.stop(); subCollector = null; }
+
           if (selected === "info") {
             return interaction.update({ embeds: [buildRoleInfoEmbed(role)], components: [buildNavRow(false)] });
           }
@@ -442,8 +462,6 @@ const data = {
             if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
 
             const pages = paginateArray(perms, 15);
-            let page = 0;
-
             const buildPermsEmbed = (pg) => new EmbedBuilder()
               .setTitle(`Permisos de ${role.name}`)
               .setDescription(pages[pg].join("\n"))
@@ -451,24 +469,11 @@ const data = {
               .setTimestamp();
 
             await interaction.update({
-              embeds: [buildPermsEmbed(page)],
-              components: pages.length > 1 ? [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildNavRow(true)],
+              embeds: [buildPermsEmbed(0)],
+              components: pages.length > 1 ? [buildNavRow(true), buildPagRow(prevId, nextId, 0, pages.length)] : [buildNavRow(true)],
             });
 
-            if (pages.length <= 1) return;
-
-            subCollector = msg.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 2 * 60 * 1000,
-              filter: (i) => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
-            });
-
-            subCollector.on("collect", async (i) => {
-              if (i.customId === prevId) page--;
-              if (i.customId === nextId) page++;
-              page = clampPage(page, pages.length);
-              await i.update({ embeds: [buildPermsEmbed(page)], components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] });
-            });
+            if (pages.length > 1) attachPageCollector(buildPermsEmbed, pages);
             return;
           }
 
@@ -476,12 +481,11 @@ const data = {
             if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
               await ctx.guild.members.fetch().catch(() => {});
             }
-            const sortedMembers = role.members.sort((a, b) => b.joinedTimestamp - a.joinedTimestamp);
+            const sortedMembers = role.members.sort((a, b) => (b.joinedTimestamp ?? 0) - (a.joinedTimestamp ?? 0));
             if (!sortedMembers.size) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
 
             const numberedMembers = Array.from(sortedMembers.values()).map((m, i) => `${i + 1}. ${m}`);
             const pages = paginateArray(numberedMembers, 15);
-            let page = 0;
 
             const buildUsersEmbed = (pg) => new EmbedBuilder()
               .setTitle(`Usuarios con ${role.name} (${pg + 1}/${pages.length})`)
@@ -491,24 +495,11 @@ const data = {
               .setTimestamp();
 
             await interaction.update({
-              embeds: [buildUsersEmbed(page)],
-              components: pages.length > 1 ? [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildNavRow(true)],
+              embeds: [buildUsersEmbed(0)],
+              components: pages.length > 1 ? [buildNavRow(true), buildPagRow(prevId, nextId, 0, pages.length)] : [buildNavRow(true)],
             });
 
-            if (pages.length <= 1) return;
-
-            subCollector = msg.createMessageComponentCollector({
-              componentType: ComponentType.Button,
-              time: 2 * 60 * 1000,
-              filter: (i) => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
-            });
-
-            subCollector.on("collect", async (i) => {
-              if (i.customId === prevId) page--;
-              if (i.customId === nextId) page++;
-              page = clampPage(page, pages.length);
-              await i.update({ embeds: [buildUsersEmbed(page)], components: [buildNavRow(true), buildPagRow(prevId, nextId, page, pages.length)] });
-            });
+            if (pages.length > 1) attachPageCollector(buildUsersEmbed, pages);
           }
         });
 

@@ -5,6 +5,7 @@ const {
   generateChatReply,
 } = require("../src/ai");
 const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk } = require("../src/guild");
+const { getMessageText } = require("../src/adapter");
 const { Logger } = require("../src/runtime");
 const {
   MAX_HISTORIAL,
@@ -35,7 +36,7 @@ async function handleAfkChecks(message, prefix) {
 
       message
         .reply({ embeds: [welcomeEmbed], allowedMentions: SAFE_MENTIONS })
-        .then((sent) => setTimeout(() => sent.delete().catch(() => {}), 8000))
+        .then((sent) => setTimeout(() => sent.delete().catch(() => {}), 8000).unref())
         .catch(() => {});
     }
   }
@@ -93,14 +94,14 @@ const event = {
 
       await message.channel.sendTyping().catch(() => {});
 
-      const userData = getConversacion(message.author.id);
+      const userData = getConversacion(message.author.id, message.guildId ?? "dm");
       let historial = Array.isArray(userData?.historial)
         ? [...userData.historial.slice(-MAX_HISTORIAL)]
         : [];
 
       // Si no había sesión activa o el usuario responde a un mensaje distinto al último guardado,
       // inyectamos el texto del mensaje respondido para que la IA sepa exactamente de qué le hablan
-      const prevTexto = repliedMsg.embeds?.[0]?.description || repliedMsg.content;
+      const prevTexto = repliedMsg.embeds?.[0]?.description || getMessageText(repliedMsg);
       if (prevTexto) {
         const cleanPrev = prevTexto.slice(0, 1200);
         const alreadyInHistory = historial.some(
@@ -145,7 +146,7 @@ const event = {
         }
       }
 
-      setConversacion(message.author.id, historialFinal, botMsg.id);
+      setConversacion(message.author.id, historialFinal, botMsg.id, message.guildId ?? "dm");
     } catch (err) {
       log.error("messageCreate IA", { err: err?.message ?? String(err) });
       const isRateLimit = err?.status === 429 || (err?.message ?? "").includes("429");

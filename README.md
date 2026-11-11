@@ -17,43 +17,38 @@ A Discord bot built with [discord.js](https://discord.js.org) and [gralonium](ht
 
 ```
 RedBot/
-├── src/                       
-│   ├── index.js                # startup
-│   ├── bot.js                  # prefix resolver
-│   ├── adapter.js              # adapters prefix -> slash
-│   ├── config.js               # validations
-│   ├── database.js             # mongoy db
-│   ├── logger.js               # levels, timestamps...
-│   ├── runtime.js              # loader and handlers
-│   ├── guild.js                # prefix caching, logs and more data
-│   ├── ai.js                   # rotation, ai memory
-│   ├── moderation.js           # schedules
-│   └── commandIds.js           # IDs for help command
+├── src/
+│   ├── index.js                # entrypoint
+│   ├── config.js               # env validation, intents, colors & IDs
+│   ├── database.js             # mongoose schemas (GuildConfig, JoinRole, Log, TempBan, Warn, Afk, Reminder)
+│   ├── runtime.js              # logger, bot lifecycle, reply & pagination helpers
+│   ├── adapter.js              # prefix -> slash argument adapter & snapshot readers
+│   ├── guild.js                # prefix, log & AFK caching
+│   ├── moderation.js           # warns, durations & persistent tempban scheduler
+│   ├── reminders.js            # persistent reminder scheduler & DM delivery
+│   ├── ai.js                   # Gemini model rotation, search & scoped memory
+│   ├── downloader.js           # video metadata extraction & chunked downloads
+│   ├── security.js             # anti-SSRF URL validation, public fetch & bounded body reader
+│   └── api.js                  # HTTP stats/commands/health server with rate limiting
 │
-├── commands/                   
-│   ├── slash/                  # slash command groups (code here)
-│   │   ├── ask.js              
-│   │   ├── channel.js          
-│   │   ├── help.js             
-│   │   ├── mod.js              
-│   │   ├── role.js             
-│   │   ├── server.js           
-│   │   ├── user.js             
-│   │   └── util.js             
-│   ├── prefixed/               # carcases for prefix commands, no code needed there.
-│   └── _shared/                # helpers (pagination, fetch, URLs, replies)
-│       ├── runtime.js
-│       └── thinking.js
-├── events/                     
+├── commands/
+│   ├── slash/                  # slash command groups & /help (ask, channel, fun, help, mod, role, server, user, util)
+│   ├── prefixed/               # prefixed command definitions delegating through adapter.js
+│   │   └── catalog.js
+│   └── interactions/           # native interaction handlers (autocomplete)
+│       └── utilAutocomplete.js
+│
+├── events/                     # gateway event handlers loaded at startup
+│   ├── autoModerationActionExecution.js
 │   ├── error.js                # frameworkError handler
-│   ├── guildMemberAdd.js       # autorole asigner
-│   ├── messageCreate.js        # ai memory for conversations
-│   └── ready.js                # presence, tempban restore & command sync
-├── models/                     # mongoose schemas (GuildConfig, JoinRole, Log, TempBan, Warn)
-├── utils/                      
-│   └── colors.js
-├── gralonium/                  # just for reference
-├── .env                        # fill it with your keys
+│   ├── guildMemberAdd.js       # autorole assigner
+│   ├── messageCreate.js        # AFK checks & AI reply continuation
+│   └── ready.js                # presence, tempban/reminder restore & command sync
+│
+├── scripts/
+│   └── dev.js                  # dev launcher
+├── gralonium/                  # local framework reference
+├── .env.example                # environment variables template
 └── package.json
 ```
 
@@ -61,9 +56,11 @@ RedBot/
 
 ## Adding a new slash command
 
-1. Create (or extend) a file in `commands/slash/` using the Gralonium command/group structure.
-2. The bot auto-loads all command files via `bot.load("commands")`.
-3. If you need a prefixed alias, add a file in `commands/prefixed/` with `as_prefix: true, as_slash: false`. The adapter will match and delegate to the slash implementation automatically.
+1. Create (or extend) a file in `commands/slash/` using the Gralonium `CommandBuilder` / `GroupBuilder` structure.
+2. `bot.load("commands")` auto-loads all files under `commands/` (including `commands/interactions/`).
+3. If you want a prefixed alias, add an entry in `commands/prefixed/catalog.js` (and `PREFIXED_TO_SLASH_MAP` in `src/adapter.js` when names differ), then document it in `commands/slash/help.js`.
+
+Recent additions in this structure include `util poll`, `util remind`, `util ocr`, `channel recap`, `/util translate` language autocomplete, and AutoMod log forwarding.
 
 ## Adding a new event
 

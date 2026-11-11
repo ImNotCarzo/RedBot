@@ -45,12 +45,23 @@ const afkSchema = new Schema({
 });
 afkSchema.index({ guildId: 1, userId: 1 }, { unique: true });
 
+const reminderSchema = new Schema({
+  userId:    { type: String, required: true },
+  guildId:   { type: String, default: null },
+  channelId: { type: String, default: null },
+  text:      { type: String, required: true, trim: true, maxlength: 500 },
+  remindAt:  { type: Date, required: true },
+}, { timestamps: true });
+reminderSchema.index({ userId: 1 });
+reminderSchema.index({ remindAt: 1 });
+
 const GuildConfig = models.GuildConfig || model("GuildConfig", guildSchema);
 const JoinRole    = models.JoinRole    || model("JoinRole", joinRoleSchema);
 const Log         = models.Log         || model("Log", logSchema);
 const TempBan     = models.TempBan     || model("TempBan", tempBanSchema);
 const Warn        = models.Warn        || model("Warn", warnSchema);
 const Afk         = models.Afk         || model("Afk", afkSchema);
+const Reminder    = models.Reminder    || model("Reminder", reminderSchema);
 
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
@@ -92,4 +103,5 @@ module.exports = {
   TempBan,
   Warn,
   Afk,
+  Reminder,
 };

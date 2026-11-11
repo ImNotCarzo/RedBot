@@ -1,4 +1,5 @@
 const http = require("http");
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { ChannelType } = require("discord.js");
 const { Logger } = require("./runtime");
@@ -12,15 +13,21 @@ let log = null;
 const rateStore = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 30;
+const MAX_RATE_ENTRIES = 5000;
 let ratePruneTimer = null;
 
 function checkRate(ip) {
   const now = Date.now();
   let entry = rateStore.get(ip);
   if (!entry || now - entry.start > RATE_WINDOW_MS) {
+    if (rateStore.size >= MAX_RATE_ENTRIES && !rateStore.has(ip)) {
+      const oldest = rateStore.keys().next().value;
+      if (oldest !== undefined) rateStore.delete(oldest);
+    }
     entry = { start: now, hits: 0 };
-    rateStore.set(ip, entry);
   }
+  rateStore.delete(ip);
+  rateStore.set(ip, entry);
   entry.hits++;
   return {
     remaining: Math.max(0, RATE_MAX - entry.hits),
@@ -50,7 +57,10 @@ function isAuthorized(req) {
   const key = apiConfig?.API_KEY;
   if (!key) return true;
   const [scheme, token] = (req.headers.authorization ?? "").split(" ");
-  return scheme?.toLowerCase() === "bearer" && token === key;
+  if (scheme?.toLowerCase() !== "bearer" || !token) return false;
+  const provided = Buffer.from(token);
+  const expected = Buffer.from(key);
+  return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
 }
 
 function formatUptime(ms) {
@@ -269,7 +279,8 @@ function handleRequest(req, res) {
     return json(res, 405, { error: "Method not allowed" });
   }
 
-  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
+  // X-Forwarded-For solo se respeta con TRUST_PROXY=true (detras de un proxy que lo sobrescriba)
+  const ip = (apiConfig?.TRUST_PROXY ? req.headers["x-forwarded-for"]?.split(",")[0]?.trim() : null)
     || req.socket?.remoteAddress
     || "unknown";
   const { remaining, exceeded } = checkRate(ip);

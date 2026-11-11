@@ -145,7 +145,18 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
   tempBanTimers.set(key, timeout);
 }
 
+async function cancelTempBan(guildId, userId) {
+  const key = `${guildId}:${userId}`;
+  const timer = tempBanTimers.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    tempBanTimers.delete(key);
+  }
+  await TempBan.deleteOne({ guildId, userId }).catch(() => {});
+}
+
 module.exports = {
+  cancelTempBan,
   generateId,
   parseDuration,
   formatDuration,

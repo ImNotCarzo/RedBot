@@ -17,7 +17,11 @@ const PREFIXED_TO_SLASH_MAP = {
   emojis: "server/emojis",
   jumbo: "util/jumbo",
   logo: "server/logo",
+  ocr: "util/ocr",
+  poll: "util/poll",
   randomuser: "user/random",
+  recap: "channel/recap",
+  remind: "util/remind",
   rename: "channel/rename",
   role: "role/info",
   roleadd: "role/add",
@@ -155,7 +159,63 @@ function buildAttachmentFromUrl(input, paramName = "") {
 
 const TRUTHY_TOKENS = ["true", "si", "sí", "yes", "1", "s", "bots"];
 
-async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
+// Comandos cuyo unico parametro de usuario es opcional: si el texto no resuelve a nadie, se avisa en vez de usar al autor
+const USER_LOOKUP_COMMANDS = new Set([
+  "user/info",
+  "user/avatar",
+  "user/banner",
+  "user/roles",
+  "user/permissions",
+  "fun/roast",
+]);
+
+function getMessageText(message) {
+  const direct = message?.content?.trim();
+  if (direct) return direct;
+  const snapshots = message?.messageSnapshots?.values ? [...message.messageSnapshots.values()] : [];
+  return snapshots.map((s) => s.content?.trim()).filter(Boolean).join("\n");
+}
+
+function getFirstAttachment(message) {
+  const direct = message?.attachments?.first?.();
+  if (direct) return direct;
+  const snapshots = message?.messageSnapshots?.values ? [...message.messageSnapshots.values()] : [];
+  for (const snap of snapshots) {
+    const nested = snap?.attachments?.first?.();
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function parsePollArgs(rawArgs) {
+  let text = rawArgs.join(" ");
+  let duracion = null;
+  let multiple = null;
+
+  const hours = text.match(/--horas\s+(\d+)/i);
+  if (hours) {
+    duracion = hours[1];
+    text = text.replace(hours[0], " ");
+  }
+
+  const multi = text.match(/--multi\b/i);
+  if (multi) {
+    multiple = "true";
+    text = text.replace(multi[0], " ");
+  }
+
+  const parts = text.split("|").map((s) => s.trim()).filter(Boolean);
+  const pregunta = parts.shift() ?? null;
+  const opciones = parts.length ? parts.join("|") : null;
+
+  return {
+    values: { pregunta, opciones, duracion, multiple },
+    missingRequired: !pregunta || !opciones,
+    notFound: false,
+  };
+}
+
+async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey = "") {
   const defs = slashCommand?.params?.params ?? [];
   const args = [...(ctx.args ?? [])];
   const replyMsg = ctx?.message?.reference?.messageId
@@ -163,6 +223,9 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     : null;
   const values = {};
   let missingRequired = false;
+  let notFound = false;
+
+  if (slashName === "poll") return parsePollArgs(args);
 
   if (slashName === "purge" && args.length >= 2 && !/^\d{1,3}$/.test(args[0]) && /^\d{1,3}$/.test(args[1])) {
     [args[0], args[1]] = [args[1], args[0]];
@@ -177,6 +240,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     if (def.type === 6) {
       if (token) {
         value = await resolveMemberFlexible(ctx, token, { strictMentionOrId: slashName === "massban" && !def.required });
+        if (!value && !def.required && USER_LOOKUP_COMMANDS.has(slashKey)) notFound = true;
         if (value) args.shift();
       } else if (def.required && replyMsg?.author?.id) {
         value = await resolveMemberFlexible(ctx, replyMsg.author.id);
@@ -194,8 +258,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         value = ctx.channel;
       }
     } else if (def.type === 11) {
-      value = ctx.message?.attachments?.first?.() ?? buildAttachmentFromUrl(token, def.name) ?? replyMsg?.attachments?.first?.() ?? null;
-      if (!ctx.message?.attachments?.size && value) args.shift();
+      value = getFirstAttachment(ctx.message) ?? buildAttachmentFromUrl(token, def.name) ?? getFirstAttachment(replyMsg);
+      if (value && token && value.url === token) args.shift();
     } else if (def.type === 5 || (def.type === 3 && (def.name === "incluir_bots" || def.name === "ignorar_bots"))) {
       if (args.length) {
         value = TRUTHY_TOKENS.includes(String(args.shift()).toLowerCase()) ? "true" : "false";
@@ -223,10 +287,11 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
         } else {
           value = args.shift();
         }
-      } else if (def.required && replyMsg?.content?.trim()) {
-        value = replyMsg.content.trim();
-      } else if (def.required && slashName === "download" && replyMsg?.attachments?.first?.()?.url) {
-        value = replyMsg.attachments.first().url;
+      } else if (def.required && getMessageText(replyMsg)) {
+        value = getMessageText(replyMsg);
+      } else if (def.required && slashName === "download") {
+        const replyAtt = getFirstAttachment(replyMsg);
+        if (replyAtt?.url) value = replyAtt.url;
       }
     } else if (args.length) {
       value = args.shift();
@@ -236,7 +301,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName) {
     if (def.required && values[def.name] === null) missingRequired = true;
   }
 
-  return { values, missingRequired };
+  return { values, missingRequired, notFound };
 }
 
 function loadSlashCommandMap(log) {
@@ -310,7 +375,8 @@ function wrapSingleCommand(command, file, log) {
           ctx.command = prevCommand;
         }
 
-        const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName);
+        const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey);
+        if (parsedValues.notFound) return ctx.send("No encontré a ese usuario");
         if (parsedValues.missingRequired) {
           const fallbackResult = await originalCode.call(this, ctx, ...args);
           if (fallbackResult !== undefined) return fallbackResult;
@@ -365,4 +431,4 @@ function wrapPrefixedCommands(log) {
   }
 }
 
-module.exports = { wrapPrefixedCommands, resolveMemberFlexible };
+module.exports = { wrapPrefixedCommands, resolveMemberFlexible, parsePrefixedArgsForSlash, getMessageText };

@@ -18,6 +18,9 @@ const {
   buildDmAllLogEmbed,
 } = require("../../src/runtime");
 const { version: botVersion } = require("../../package.json");
+const { fetchPublic, readBodyLimited } = require("../../src/security");
+const { createReminder } = require("../../src/reminders");
+const { parseDuration } = require("../../src/moderation");
 
 let graloniumVersion = "0.2.0";
 try { graloniumVersion = require("gralonium/package.json").version; } catch {}
@@ -354,6 +357,7 @@ const data = {
       name: "idioma",
       description: "Idioma destino (ej: es, en, fr, de) por defecto español",
       required: false,
+      autocomplete: true,
     }),
 
   async code(ctx) {
@@ -518,6 +522,9 @@ const data = {
     async code(ctx) {
       const reply      = await prepareReply(ctx, { thinking: true });
       const attachment = ctx.get("archivo");
+      if (!attachment) {
+        return reply({ content: "Debes adjuntar un audio o video", flags: MessageFlags.Ephemeral });
+      }
 
       const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i;
 
@@ -525,17 +532,21 @@ const data = {
         return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac, mov", flags: MessageFlags.Ephemeral });
       }
 
-      if (attachment.size > 25 * 1024 * 1024) {
+      const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+      if (attachment.size > MAX_MEDIA_BYTES) {
         return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
       }
 
       const isMov = /\.mov$/i.test(attachment.name ?? "") || attachment.contentType === "video/quicktime";
 
       try {
-        const fileRes = await fetchWithTimeout(attachment.url, {}, 15_000);
+        const fileRes = await fetchPublic(attachment.url, {}, 15_000);
         if (!fileRes.ok) throw new Error(`No se pudo descargar archivo (${fileRes.status})`);
-        const arrayBuf = await fileRes.arrayBuffer();
-        const buffer   = Buffer.from(arrayBuf);
+        const body = await readBodyLimited(fileRes, MAX_MEDIA_BYTES);
+        if (body.tooLarge) {
+          return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
+        }
+        const buffer = body.buffer;
 
         let texto = null;
 
@@ -715,5 +726,202 @@ const data = {
     },
   }),
 };
+
+const pollCommand = {
+  data: new CommandBuilder({
+    name: "poll",
+    description: "Crea una encuesta nativa",
+  }),
+  params: new ParamsBuilder()
+    .addString({
+      name: "pregunta",
+      description: "Pregunta de la encuesta",
+      required: true,
+      max_length: 300,
+    })
+    .addString({
+      name: "opciones",
+      description: "Opciones separadas por | (de 2 a 10)",
+      required: true,
+    })
+    .addString({
+      name: "duracion",
+      description: "Horas de duración (1-768, por defecto 24)",
+      required: false,
+    })
+    .addString({
+      name: "multiple",
+      description: "¿Permitir varias respuestas?",
+      required: false,
+      choices: [{ name: "Sí", value: "true" }],
+    }),
+
+  async code(ctx) {
+    try {
+      const pregunta = String(ctx.get("pregunta") ?? "").trim();
+      const opciones = String(ctx.get("opciones") ?? "")
+        .split("|")
+        .map((o) => o.trim())
+        .filter(Boolean);
+
+      if (!pregunta || pregunta.length > 300) {
+        return ctx.send({ content: "La pregunta debe tener entre 1 y 300 caracteres", flags: MessageFlags.Ephemeral });
+      }
+      if (opciones.length < 2 || opciones.length > 10) {
+        return ctx.send({ content: "Debes dar entre 2 y 10 opciones separadas por `|`", flags: MessageFlags.Ephemeral });
+      }
+      if (opciones.some((o) => o.length > 55)) {
+        return ctx.send({ content: "Cada opción puede tener como máximo 55 caracteres", flags: MessageFlags.Ephemeral });
+      }
+
+      const horas = Math.min(768, Math.max(1, Number.parseInt(ctx.get("duracion"), 10) || 24));
+
+      await ctx.send({
+        poll: {
+          question: { text: pregunta },
+          answers: opciones.map((text) => ({ text })),
+          duration: horas,
+          allowMultiselect: ctx.get("multiple") === "true",
+        },
+        allowedMentions: { parse: [], repliedUser: false },
+      });
+    } catch (err) {
+      log.error("[util poll]", { err: err?.message ?? String(err) });
+      handleCommandError(ctx, err);
+    }
+  },
+};
+
+const remindCommand = {
+  data: new CommandBuilder({
+    name: "remind",
+    description: "Crea un recordatorio personal",
+    aliases: ["recordar"],
+  }),
+  params: new ParamsBuilder()
+    .addString({
+      name: "tiempo",
+      description: "Tiempo de espera (ej: 30m, 2h, 1d)",
+      required: true,
+    })
+    .addString({
+      name: "texto",
+      description: "Qué quieres que te recuerde",
+      required: true,
+      max_length: 500,
+    }),
+
+  async code(ctx) {
+    try {
+      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+
+      const duration = parseDuration(String(ctx.get("tiempo") ?? ""));
+      const texto = String(ctx.get("texto") ?? "").trim().slice(0, 500);
+
+      if (!duration || duration < 10_000 || duration > 365 * 86_400_000) {
+        return ctx.send({
+          content: "Tiempo inválido. Usa `30s`, `10m`, `2h`, `1d` o `1w` (entre 10s y 365d)",
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      if (!texto) {
+        return ctx.send({ content: "Debes indicar qué quieres que te recuerde", flags: MessageFlags.Ephemeral });
+      }
+
+      const invoker = ctx.user ?? ctx.author;
+      const remindAt = new Date(Date.now() + duration);
+
+      const result = await createReminder(ctx.bot, {
+        userId: invoker.id,
+        guildId: ctx.guild?.id ?? null,
+        channelId: ctx.channel?.id ?? null,
+        text: texto,
+        remindAt,
+      });
+
+      if (result.error === "limit") {
+        return ctx.send({
+          content: `Ya tienes ${result.max} recordatorios pendientes, espera a que alguno se cumpla`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      await ctx.send({
+        embeds: [
+          new EmbedBuilder()
+            .setDescription(`Te lo recordaré <t:${Math.floor(remindAt.getTime() / 1000)}:R>`)
+            .setColor(GREEN)
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      log.error("[util remind]", { err: err?.message ?? String(err) });
+      handleCommandError(ctx, err);
+    }
+  },
+};
+
+const ocrCommand = {
+  data: new CommandBuilder({
+    name: "ocr",
+    description: "Extrae el texto de una imagen",
+  }),
+  params: new ParamsBuilder().addAttachment({
+    name: "imagen",
+    description: "Imagen con texto (jpg, png, gif, webp)",
+    required: true,
+  }),
+
+  async code(ctx) {
+    const reply = await prepareReply(ctx, { thinking: true });
+    const attachment = ctx.get("imagen");
+    if (!attachment) {
+      return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
+    }
+
+    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!validTypes.some((t) => attachment.contentType?.startsWith(t))) {
+      return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
+    }
+
+    if (attachment.size > 8 * 1024 * 1024) {
+      return reply({ content: "La imagen no puede superar los 8MB", flags: MessageFlags.Ephemeral });
+    }
+
+    try {
+      const prompt =
+        "Extrae todo el texto visible en esta imagen tal como aparece, respetando los saltos de línea. " +
+        "No traduzcas, no describas la imagen y no agregues comentarios. Si no hay texto legible responde únicamente: SIN_TEXTO";
+      const texto = await generateVision(prompt, attachment.url);
+
+      if (!texto || texto.includes("SIN_TEXTO")) {
+        return reply({ content: "No se detectó texto legible en la imagen", flags: MessageFlags.Ephemeral });
+      }
+
+      if (texto.length > 3900) {
+        return reply({
+          content: "El texto es muy largo, se envió como archivo:",
+          files: [{ attachment: Buffer.from(texto, "utf-8"), name: "texto.txt" }],
+        });
+      }
+
+      await reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("Texto extraído")
+            .setDescription(texto)
+            .setThumbnail(attachment.url)
+            .setColor(RED)
+            .setTimestamp(),
+        ],
+      });
+    } catch (err) {
+      log.error("[util ocr]", { err: err?.message ?? String(err) });
+      handleCommandError(ctx, err);
+    }
+  },
+};
+
+data.data.addCommand(pollCommand).addCommand(remindCommand).addCommand(ocrCommand);
 
 module.exports = { data };
