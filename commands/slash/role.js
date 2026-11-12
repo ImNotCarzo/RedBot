@@ -8,7 +8,6 @@ const {
   V2Text,
   V2View,
 } = require("gralonium");
-const { EmbedBuilder } = require("discord.js");
 const {
   Logger,
   noGuildReply,
@@ -19,9 +18,10 @@ const {
   avatarUrl,
   roleIconUrl,
   failWith,
+  wait,
 } = require("../../src/runtime");
 const { JoinRole } = require("../../src/database");
-const { sendLog } = require("../../src/guild");
+const { logAction } = require("../../src/guild");
 const { RED, GREEN, DARK } = require("../../src/config");
 
 const PAGE_SIZE = 15;
@@ -127,7 +127,7 @@ async function executeBulkRole({
         consecutiveFails++;
       }
 
-      await new Promise((r) => setTimeout(r, 1100));
+      await wait(1100);
 
       const processed = done + failed;
       if (processed % 10 === 0 || processed === total) {
@@ -151,19 +151,17 @@ async function executeBulkRole({
 
     await msg.edit(finalCard.toPayload()).catch(() => {});
 
-    const logEmbed = new EmbedBuilder()
-      .setTitle(`${title} ejecutado`)
-      .setColor(color)
-      .addFields(
+    await logAction(guild, {
+      title: `${title} ejecutado`,
+      color,
+      fields: [
         { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
         { name: "Moderador", value: modTag, inline: true },
         { name: pastWord, value: `${done}`, inline: true },
         { name: "Fallidos", value: `${failed}`, inline: true },
-        ...extraLogFields
-      )
-      .setTimestamp();
-
-    await sendLog(guild, logEmbed).catch(() => {});
+        ...extraLogFields,
+      ],
+    });
   } finally {
     activeRoleOps.delete(lockKey);
   }
@@ -270,18 +268,15 @@ function createMemberRoleCommand({ name, description, isAdd }) {
           })
         );
 
-        await sendLog(
-          ctx.guild,
-          new EmbedBuilder()
-            .setTitle(isAdd ? "Rol añadido" : "Rol removido")
-            .setColor(color)
-            .addFields(
-              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-              { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
-              { name: "Moderador", value: modTag, inline: true },
-            )
-            .setTimestamp()
-        );
+        await logAction(ctx.guild, {
+          title: isAdd ? "Rol añadido" : "Rol removido",
+          color,
+          fields: [
+            { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+            { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
+            { name: "Moderador", value: modTag, inline: true },
+          ],
+        });
       } catch (err) {
         return failWith(ctx, err, isAdd ? "No se pudo asignar el rol" : "No se pudo quitar el rol");
       }
@@ -324,18 +319,15 @@ function createRoleToggleCommand({ name, description, prop, setter, label, logTi
           })
         );
 
-        await sendLog(
-          ctx.guild,
-          new EmbedBuilder()
-            .setTitle(logTitle)
-            .setColor(color)
-            .addFields(
-              { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
-              { name: "Moderador", value: modTag, inline: true },
-              { name: "Estado", value: estado, inline: true },
-            )
-            .setTimestamp()
-        );
+        await logAction(ctx.guild, {
+          title: logTitle,
+          color,
+          fields: [
+            { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
+            { name: "Moderador", value: modTag, inline: true },
+            { name: "Estado", value: estado, inline: true },
+          ],
+        });
       } catch (err) {
         return failWith(ctx, err, errorMsg);
       }
@@ -629,19 +621,16 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Rol renombrado")
-              .setColor(role.color || DARK)
-              .addFields(
-                { name: "Rol", value: `\`${role.id}\``, inline: true },
-                { name: "Moderador", value: modTag, inline: true },
-                { name: "Antes", value: `\`${oldName}\``, inline: true },
-                { name: "Ahora", value: `\`${newName}\``, inline: true },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Rol renombrado",
+            color: role.color || DARK,
+            fields: [
+              { name: "Rol", value: `\`${role.id}\``, inline: true },
+              { name: "Moderador", value: modTag, inline: true },
+              { name: "Antes", value: `\`${oldName}\``, inline: true },
+              { name: "Ahora", value: `\`${newName}\``, inline: true },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo renombrar el rol");
         }
@@ -809,12 +798,10 @@ const data = {
             })
           );
 
-          const embed = new EmbedBuilder()
-            .setDescription("Rol automático al entrar desactivado")
-            .setColor(RED)
-            .setTimestamp();
-
-          return sendLog(ctx.guild, embed);
+          return logAction(ctx.guild, {
+            description: "Rol automático al entrar desactivado",
+            color: RED,
+          });
         }
 
         const hierr = roleHierarchyCheck(ctx, role);
@@ -838,18 +825,15 @@ const data = {
             color: GREEN,
           })
         );
-        await sendLog(
-          ctx.guild,
-          new EmbedBuilder()
-            .setTitle("Rol join configurado")
-            .setColor(GREEN)
-            .addFields(
-              { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
-              { name: "Moderador", value: modTag, inline: true },
-              { name: "Ignorar bots", value: ignoreBots ? "Sí" : "No", inline: true },
-            )
-            .setTimestamp()
-        );
+        await logAction(ctx.guild, {
+          title: "Rol join configurado",
+          color: GREEN,
+          fields: [
+            { name: "Rol", value: `${role.name} (\`${role.id}\`)`, inline: true },
+            { name: "Moderador", value: modTag, inline: true },
+            { name: "Ignorar bots", value: ignoreBots ? "Sí" : "No", inline: true },
+          ],
+        });
       },
     })
     .addCommand({

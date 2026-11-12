@@ -1,3 +1,4 @@
+const { EmbedBuilder } = require("discord.js");
 const { GuildConfig, Log, Afk } = require("./database");
 const { Logger, parsePositiveInt, withTimeout } = require("./runtime");
 
@@ -172,6 +173,17 @@ async function sendLog(guild, embed, context = {}) {
   }
 }
 
+function logAction(guild, { title = null, description = null, color = null, fields = null, footer = null, timestamp = true }, context = {}) {
+  const embed = new EmbedBuilder();
+  if (color != null) embed.setColor(color);
+  if (title) embed.setTitle(title);
+  if (description) embed.setDescription(description);
+  if (fields?.length) embed.addFields(fields);
+  if (footer) embed.setFooter(typeof footer === "string" ? { text: footer } : footer);
+  if (timestamp) embed.setTimestamp();
+  return module.exports.sendLog(guild, embed, context);
+}
+
 module.exports = {
   DEFAULT_PREFIX,
   getPrefix,
@@ -182,4 +194,5 @@ module.exports = {
   setLogChannel,
   clearLogChannel,
   sendLog,
+  logAction,
 };

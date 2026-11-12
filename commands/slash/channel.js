@@ -1,7 +1,7 @@
-const { EmbedBuilder, ChannelType } = require("discord.js");
+const { ChannelType } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
-const { sendLog } = require("../../src/guild");
+const { logAction } = require("../../src/guild");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
@@ -68,17 +68,14 @@ function createEveryoneOverwriteCommand({ name, description, paramDesc, overwrit
           })
         );
 
-        await sendLog(
-          ctx.guild,
-          new EmbedBuilder()
-            .setTitle(logTitle)
-            .setColor(color)
-            .addFields(
-              { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
-              { name: "Moderador", value: modTag, inline: true },
-            )
-            .setTimestamp()
-        );
+        await logAction(ctx.guild, {
+          title: logTitle,
+          color,
+          fields: [
+            { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
+            { name: "Moderador", value: modTag, inline: true },
+          ],
+        });
       } catch (err) {
         return failWith(ctx, err, errorMsg);
       }
@@ -119,18 +116,15 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
           })
         );
 
-        await sendLog(
-          ctx.guild,
-          new EmbedBuilder()
-            .setTitle(logTitle)
-            .setColor(color)
-            .addFields(
-              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-              { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
-              { name: "Moderador", value: modTag, inline: true },
-            )
-            .setTimestamp()
-        );
+        await logAction(ctx.guild, {
+          title: logTitle,
+          color,
+          fields: [
+            { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+            { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
+            { name: "Moderador", value: modTag, inline: true },
+          ],
+        });
       } catch (err) {
         return failWith(ctx, err, errorMsg);
       }
@@ -229,19 +223,16 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Canal renombrado")
-              .setColor(GREEN)
-              .addFields(
-                { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
-                { name: "Moderador", value: modTag, inline: true },
-                { name: "Antes", value: `\`${oldName}\``, inline: true },
-                { name: "Ahora", value: `\`${newName}\``, inline: true },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Canal renombrado",
+            color: GREEN,
+            fields: [
+              { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
+              { name: "Moderador", value: modTag, inline: true },
+              { name: "Antes", value: `\`${oldName}\``, inline: true },
+              { name: "Ahora", value: `\`${newName}\``, inline: true },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo renombrar el canal");
         }
@@ -308,18 +299,15 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Slowmode actualizado")
-              .setColor(color)
-              .addFields(
-                { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
-                { name: "Moderador", value: modTag, inline: true },
-                { name: "Slowmode", value: formatted, inline: true },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Slowmode actualizado",
+            color,
+            fields: [
+              { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
+              { name: "Moderador", value: modTag, inline: true },
+              { name: "Slowmode", value: formatted, inline: true },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo cambiar el slowmode");
         }
@@ -397,18 +385,15 @@ const data = {
                   )
                   .catch(() => {});
 
-                await sendLog(
-                  guild,
-                  new EmbedBuilder()
-                    .setTitle("Canal nukeado")
-                    .setColor(RED)
-                    .addFields(
-                      { name: "Canal", value: `\`#${newChannel.name}\``, inline: true },
-                      { name: "Nuevo ID", value: `\`${newChannel.id}\``, inline: true },
-                      { name: "Moderador", value: modTag, inline: true }
-                    )
-                    .setTimestamp()
-                ).catch(() => {});
+                await logAction(guild, {
+                  title: "Canal nukeado",
+                  color: RED,
+                  fields: [
+                    { name: "Canal", value: `\`#${newChannel.name}\``, inline: true },
+                    { name: "Nuevo ID", value: `\`${newChannel.id}\``, inline: true },
+                    { name: "Moderador", value: modTag, inline: true },
+                  ],
+                });
 
                 await interaction
                   .update(ComponentsV2Builder.card({ description: "Canal nukeado correctamente", color: RED }).toPayload())
@@ -463,18 +448,15 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Canal clonado")
-              .setColor(GREEN)
-              .addFields(
-                { name: "Original", value: `${channel} (\`${channel.id}\`)`, inline: true },
-                { name: "Clon", value: `${cloned} (\`${cloned.id}\`)`, inline: true },
-                { name: "Moderador", value: modTag, inline: true },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Canal clonado",
+            color: GREEN,
+            fields: [
+              { name: "Original", value: `${channel} (\`${channel.id}\`)`, inline: true },
+              { name: "Clon", value: `${cloned} (\`${cloned.id}\`)`, inline: true },
+              { name: "Moderador", value: modTag, inline: true },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo clonar el canal");
         }

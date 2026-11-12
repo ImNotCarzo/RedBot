@@ -1,9 +1,9 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2Paginator } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text } = require("gralonium");
 const {
   ChannelType,
   EmbedBuilder,
 } = require("discord.js");
-const { buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
+const { buildActionCard, createListPaginator, avatarUrl, failWith } = require("../../src/runtime");
 const { RED, YELLOW, GREEN } = require("../../src/config");
 const {
   generateId,
@@ -17,7 +17,13 @@ const {
   scheduleTempUnban,
   cancelTempBan,
 } = require("../../src/moderation");
-const { sendLog, setLogChannel, clearLogChannel } = require("../../src/guild");
+const { logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
+
+function notifyUser(user, { description, color = RED, fields = null }) {
+  const embed = new EmbedBuilder().setColor(color).setDescription(description);
+  if (fields?.length) embed.addFields(fields);
+  return user.send({ embeds: [embed] }).catch(() => {});
+}
 
 function hierarchyChecks(ctx, member, action = "actuar sobre") {
   if (!member?.roles) return "No pude obtener al miembro en el servidor";
@@ -67,9 +73,9 @@ const data = {
         if (hierr) return ctx.ephemeral(hierr);
 
         try {
-          await member.user.send({
-            embeds: [new EmbedBuilder().setColor(RED).setDescription(`Fuiste baneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            description: `Fuiste baneado de **${ctx.guild.name}**\nRazón: ${reason}`,
+          });
 
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `${tag}: ${reason}` });
           await cancelTempBan(ctx.guild.id, member.id);
@@ -88,19 +94,16 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario baneado")
-              .setColor(RED)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Razón", value: reason, inline: false },
-                { name: "Mensajes borrados", value: `${days} días`, inline: true },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario baneado",
+            color: RED,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Razón", value: reason, inline: false },
+              { name: "Mensajes borrados", value: `${days} días`, inline: true },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No pude banear al usuario");
         }
@@ -123,9 +126,10 @@ const data = {
           const ban = await ctx.guild.bans.fetch(userId).catch(() => null);
           if (!ban) return ctx.ephemeral("Ese usuario no está baneado");
 
-          await ban.user.send({
-            embeds: [new EmbedBuilder().setColor(GREEN).setDescription(`Fuiste desbaneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
-          }).catch(() => {});
+          await notifyUser(ban.user, {
+            color: GREEN,
+            description: `Fuiste desbaneado de **${ctx.guild.name}**\nRazón: ${reason}`,
+          });
 
           await ctx.guild.members.unban(userId, `${tag}: ${reason}`);
           await cancelTempBan(ctx.guild.id, userId);
@@ -143,18 +147,15 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario desbaneado")
-              .setColor(GREEN)
-              .addFields(
-                { name: "Usuario", value: `${ban.user.tag} (\`${userId}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Razón", value: reason, inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario desbaneado",
+            color: GREEN,
+            fields: [
+              { name: "Usuario", value: `${ban.user.tag} (\`${userId}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Razón", value: reason, inline: false },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo desbanear al usuario, verifica que el ID sea correcto");
         }
@@ -180,9 +181,9 @@ const data = {
         if (hierr) return ctx.ephemeral(hierr);
 
         try {
-          await member.user.send({
-            embeds: [new EmbedBuilder().setColor(RED).setDescription(`Fuiste softbaneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            description: `Fuiste softbaneado de **${ctx.guild.name}**\nRazón: ${reason}`,
+          });
 
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `[SOFTBAN] ${tag}: ${reason}` });
           await ctx.guild.members.unban(member.id, `[SOFTBAN] ${tag}`);
@@ -201,20 +202,17 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario softbaneado")
-              .setColor(RED)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Razón", value: reason, inline: false },
-                { name: "Mensajes", value: `${days} días borrados`, inline: true },
-              )
-              .setFooter({ text: "El usuario puede volver a entrar al servidor" })
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario softbaneado",
+            color: RED,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Razón", value: reason, inline: false },
+              { name: "Mensajes", value: `${days} días borrados`, inline: true },
+            ],
+            footer: "El usuario puede volver a entrar al servidor",
+          });
         } catch (err) {
           return failWith(ctx, err, "No pude softbanear al usuario");
         }
@@ -250,14 +248,13 @@ const data = {
         try {
           const unbanAt = new Date(Date.now() + duration);
 
-          await member.user.send({
-            embeds: [new EmbedBuilder().setColor(RED)
-              .setDescription(`Fuiste tempbaneado de **${ctx.guild.name}**`)
-              .addFields(
-                { name: "Razón", value: reason, inline: true },
-                { name: "Duración", value: formatDuration(duration), inline: true },
-              )],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            description: `Fuiste tempbaneado de **${ctx.guild.name}**`,
+            fields: [
+              { name: "Razón", value: reason, inline: true },
+              { name: "Duración", value: formatDuration(duration), inline: true },
+            ],
+          });
 
           await member.ban({ reason: `[TEMPBAN ${formatDuration(duration)}] ${tag}: ${reason}` });
 
@@ -278,20 +275,17 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario tempbaneado")
-              .setColor(RED)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Duración", value: formatDuration(duration), inline: true },
-                { name: "Expira", value: `<t:${Math.floor(unbanAt.getTime() / 1000)}:R>`, inline: true },
-                { name: "Razón", value: reason, inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario tempbaneado",
+            color: RED,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Duración", value: formatDuration(duration), inline: true },
+              { name: "Expira", value: `<t:${Math.floor(unbanAt.getTime() / 1000)}:R>`, inline: true },
+              { name: "Razón", value: reason, inline: false },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No pude hacer el tempban");
         }
@@ -330,9 +324,9 @@ const data = {
           }
 
           try {
-            await member.user.send({
-              embeds: [new EmbedBuilder().setColor(RED).setDescription(`Fuiste baneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
-            }).catch(() => {});
+            await notifyUser(member.user, {
+              description: `Fuiste baneado de **${ctx.guild.name}**\nRazón: ${reason}`,
+            });
 
             await ctx.guild.members.ban(member, { reason: `[MASSBAN] ${tag}: ${reason}` });
             await cancelTempBan(ctx.guild.id, member.id);
@@ -358,22 +352,21 @@ const data = {
           })
         );
 
-        const logEmbed = new EmbedBuilder()
-          .setTitle("Massban ejecutado")
-          .setColor(RED)
-          .addFields(
-            { name: "Moderador", value: tag, inline: true },
-            { name: "Baneados", value: `${banned.length}`, inline: true },
-            { name: "Fallidos", value: `${failed.length}`, inline: true },
-            { name: "Razón", value: reason, inline: false },
-          )
-          .setTimestamp();
-
+        const logFields = [
+          { name: "Moderador", value: tag, inline: true },
+          { name: "Baneados", value: `${banned.length}`, inline: true },
+          { name: "Fallidos", value: `${failed.length}`, inline: true },
+          { name: "Razón", value: reason, inline: false },
+        ];
         if (failed.length) {
-          logEmbed.addFields({ name: "No se pudo banear a", value: failed.map((m) => m.user.tag).join(", ") });
+          logFields.push({ name: "No se pudo banear a", value: failed.map((m) => m.user.tag).join(", ") });
         }
 
-        await sendLog(ctx.guild, logEmbed);
+        await logAction(ctx.guild, {
+          title: "Massban ejecutado",
+          color: RED,
+          fields: logFields,
+        });
       },
     })
     .addCommand({
@@ -394,9 +387,9 @@ const data = {
         if (hierr) return ctx.ephemeral(hierr);
 
         try {
-          await member.user.send({
-            embeds: [new EmbedBuilder().setColor(RED).setDescription(`Fuiste expulsado de **${ctx.guild.name}**\nRazón: ${reason}`)],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            description: `Fuiste expulsado de **${ctx.guild.name}**\nRazón: ${reason}`,
+          });
 
           await member.kick(`${tag}: ${reason}`);
 
@@ -413,18 +406,15 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario expulsado")
-              .setColor(RED)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Razón", value: reason, inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario expulsado",
+            color: RED,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Razón", value: reason, inline: false },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo expulsar al usuario");
         }
@@ -477,26 +467,22 @@ const data = {
             })
           );
 
-          await member.user.send({
-            embeds: [new EmbedBuilder().setColor(RED)
-              .setDescription(`Fuiste silenciado en **${ctx.guild.name}** por **${tiempo}**`)
-              .addFields({ name: "Razón", value: reason })],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            description: `Fuiste silenciado en **${ctx.guild.name}** por **${tiempo}**`,
+            fields: [{ name: "Razón", value: reason }],
+          });
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario silenciado")
-              .setColor(RED)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Duración", value: tiempo, inline: true },
-                { name: "Expira", value: `<t:${expireTs}:R>`, inline: true },
-                { name: "Razón", value: reason, inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario silenciado",
+            color: RED,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Duración", value: tiempo, inline: true },
+              { name: "Expira", value: `<t:${expireTs}:R>`, inline: true },
+              { name: "Razón", value: reason, inline: false },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo silenciar al usuario");
         }
@@ -535,22 +521,20 @@ const data = {
             })
           );
 
-          await member.user.send({
-            embeds: [new EmbedBuilder().setColor(GREEN).setDescription(`Tu silencio en **${ctx.guild.name}** fue removido`)],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            color: GREEN,
+            description: `Tu silencio en **${ctx.guild.name}** fue removido`,
+          });
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Silencio removido")
-              .setColor(GREEN)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Razón", value: reason, inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Silencio removido",
+            color: GREEN,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Razón", value: reason, inline: false },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo quitar el timeout");
         }
@@ -611,19 +595,16 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Purge ejecutado")
-              .setColor(GREEN)
-              .addFields(
-                { name: "Canal", value: `${ctx.channel}`, inline: true },
-                { name: "Mensajes eliminados", value: `${cantidad}`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "Filtro", value: target ? `${target.user.tag} (\`${target.id}\`)` : "Ninguno", inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Purge ejecutado",
+            color: GREEN,
+            fields: [
+              { name: "Canal", value: `${ctx.channel}`, inline: true },
+              { name: "Mensajes eliminados", value: `${cantidad}`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "Filtro", value: target ? `${target.user.tag} (\`${target.id}\`)` : "Ninguno", inline: false },
+            ],
+          });
 
           setTimeout(() => reply.delete().catch(() => {}), 5000);
         } catch (err) {
@@ -685,31 +666,27 @@ const data = {
             })
           );
 
-          await sendLog(
-            ctx.guild,
-            new EmbedBuilder()
-              .setTitle("Usuario Advertido")
-              .setColor(YELLOW)
-              .addFields(
-                { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
-                { name: "Moderador", value: tag, inline: true },
-                { name: "ID", value: `\`${warnId}\``, inline: true },
-                { name: "Total warns", value: `${total}`, inline: true },
-                { name: "Razón", value: reason, inline: false },
-              )
-              .setTimestamp()
-          );
+          await logAction(ctx.guild, {
+            title: "Usuario Advertido",
+            color: YELLOW,
+            fields: [
+              { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+              { name: "Moderador", value: tag, inline: true },
+              { name: "ID", value: `\`${warnId}\``, inline: true },
+              { name: "Total warns", value: `${total}`, inline: true },
+              { name: "Razón", value: reason, inline: false },
+            ],
+          });
 
-          await member.user.send({
-            embeds: [new EmbedBuilder()
-              .setDescription(`Fuiste advertido en **${ctx.guild.name}**`)
-              .setColor(YELLOW)
-              .addFields(
-                { name: "Razón", value: reason },
-                { name: "Total warns", value: `${total}`, inline: true },
-                { name: "ID", value: `\`${warnId}\``, inline: true },
-              )],
-          }).catch(() => {});
+          await notifyUser(member.user, {
+            color: YELLOW,
+            description: `Fuiste advertido en **${ctx.guild.name}**`,
+            fields: [
+              { name: "Razón", value: reason },
+              { name: "Total warns", value: `${total}`, inline: true },
+              { name: "ID", value: `\`${warnId}\``, inline: true },
+            ],
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo registrar la advertencia");
         }
@@ -747,11 +724,11 @@ const data = {
             })
           );
 
-          const logEmbed = new EmbedBuilder()
-            .setDescription(`Advertencia \`${warnId}\` de **${username}** eliminada`)
-            .setColor(GREEN);
-
-          await sendLog(ctx.guild, logEmbed);
+          await logAction(ctx.guild, {
+            description: `Advertencia \`${warnId}\` de **${username}** eliminada`,
+            color: GREEN,
+            timestamp: false,
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudo eliminar la advertencia");
         }
@@ -788,12 +765,10 @@ const data = {
             })
           );
 
-          const logEmbed = new EmbedBuilder()
-            .setDescription(`Se eliminaron **${deletedCount}** advertencia${deletedCount !== 1 ? "s" : ""} de **${username}**`)
-            .setColor(GREEN)
-            .setTimestamp();
-
-          await sendLog(ctx.guild, logEmbed);
+          await logAction(ctx.guild, {
+            description: `Se eliminaron **${deletedCount}** advertencia${deletedCount !== 1 ? "s" : ""} de **${username}**`,
+            color: GREEN,
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudieron limpiar las advertencias");
         }
@@ -815,18 +790,11 @@ const data = {
             return ctx.ephemeral(`${member.user.tag} no tiene advertencias`);
           }
 
-          const paginator = new V2Paginator({
+          const paginator = createListPaginator({
             items: warns,
             perPage: 5,
             ownerId: authorId,
-            thirdPartyMode: "reject",
-            thirdPartyMessage: "No es tu comando",
-            wrap: false,
-            prevButton: { label: "◀" },
-            nextButton: { label: "▶" },
-            showPageIndicator: false,
-            timeout: 2 * 60 * 1000,
-            renderPage: ({ items: pageWarns, pageIndex, totalPages, isEnded, controls }) => {
+            render: ({ items: pageWarns, pageIndex, totalPages, controls }) => {
               const builder = new ComponentsV2Builder({ color: YELLOW }).addSection(
                 [
                   V2Text.heading(`Advertencias de ${V2Text.clip(member.user.tag, 100)}`, 3),
@@ -846,7 +814,7 @@ const data = {
                 );
               }
 
-              if (!isEnded && totalPages > 1) {
+              if (controls?.length) {
                 builder.addSeparator("small").addButtonsRow(controls);
               }
 

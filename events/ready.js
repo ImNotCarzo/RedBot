@@ -38,32 +38,26 @@ async function restoreTempBans(client) {
   }
 }
 
-async function syncSlashAndContexts(client) {
-  const token = process.env.TOKEN;
-  const clientId = process.env.CLIENT_ID;
-
-  await runWithRetry(
-    () => withTimeout(client.sync(), READY_API_TIMEOUT_MS, "Sincronización de comandos slash"),
+const runReadyStep = (label, fn) =>
+  runWithRetry(
+    () => withTimeout(fn(), READY_API_TIMEOUT_MS, label),
     log,
-    "Sincronización de comandos slash",
+    label,
     READY_RETRY_ATTEMPTS,
     READY_RETRY_BASE_DELAY_MS,
     READY_RETRY_MAX_DELAY_MS
   );
+
+async function syncSlashAndContexts(client) {
+  const token = process.env.TOKEN;
+  const clientId = process.env.CLIENT_ID;
+
+  await runReadyStep("Sincronización de comandos slash", () => client.sync());
   log.info("Comandos slash sincronizados");
 
   const rest = new REST().setToken(token);
-  const commands = await runWithRetry(
-    () => withTimeout(
-      rest.get(Routes.applicationCommands(clientId)),
-      READY_API_TIMEOUT_MS,
-      "Lectura de comandos de aplicación"
-    ),
-    log,
-    "Lectura de comandos de aplicación",
-    READY_RETRY_ATTEMPTS,
-    READY_RETRY_BASE_DELAY_MS,
-    READY_RETRY_MAX_DELAY_MS
+  const commands = await runReadyStep("Lectura de comandos de aplicación", () =>
+    rest.get(Routes.applicationCommands(clientId))
   );
 
   for (const cmd of commands) {
@@ -75,22 +69,13 @@ async function syncSlashAndContexts(client) {
     if (hasIntegrationTypes && hasContexts) continue;
 
     try {
-      await runWithRetry(
-        () => withTimeout(
-          rest.patch(Routes.applicationCommand(clientId, cmd.id), {
-            body: {
-              integration_types: [0, 1],
-              contexts: [0, 1, 2],
-            },
-          }),
-          READY_API_TIMEOUT_MS,
-          `Patch de contextos para ${cmd.name}`
-        ),
-        log,
-        `Patch de contextos para ${cmd.name}`,
-        READY_RETRY_ATTEMPTS,
-        READY_RETRY_BASE_DELAY_MS,
-        READY_RETRY_MAX_DELAY_MS
+      await runReadyStep(`Patch de contextos para ${cmd.name}`, () =>
+        rest.patch(Routes.applicationCommand(clientId, cmd.id), {
+          body: {
+            integration_types: [0, 1],
+            contexts: [0, 1, 2],
+          },
+        })
       );
       log.info(`Contextos actualizados: ${cmd.name}`);
     } catch (patchErr) {
