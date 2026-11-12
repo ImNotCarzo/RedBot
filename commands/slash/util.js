@@ -1,8 +1,18 @@
-const { EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
+const {
+  ButtonBuilder,
+  ButtonStyle,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
+  MessageFlags,
+  SectionBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
+  version: djsVersion,
+} = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
-const { RED, GREEN } = require("../../src/config");
+const { RED, GREEN, YELLOW } = require("../../src/config");
 const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
 const {
   Logger,
@@ -18,6 +28,7 @@ const {
   buildDmAllLogEmbed,
 } = require("../../src/runtime");
 const {
+  V2_MAX_MESSAGE_TEXT,
   createContainer,
   addHeaderSection,
   addSeparator,
@@ -25,8 +36,7 @@ const {
   addLinkButtons,
   addAttachmentFile,
   clipV2Text,
-  buildSimpleContainer,
-  buildImageViewContainer,
+  budgetBodyText,
   buildV2Payload,
 } = require("../../src/v2");
 const { version: botVersion } = require("../../package.json");
@@ -34,10 +44,146 @@ const { fetchPublic, readBodyLimited } = require("../../src/security");
 const { createReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
 
-let graloniumVersion = "0.2.0";
+let graloniumVersion = "0.3.0";
 try { graloniumVersion = require("gralonium/package.json").version; } catch {}
 
 const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
+
+const TRANSLATE_LANG_NAMES = {
+  auto: "Automático",
+  es: "Español",
+  en: "Inglés",
+  pt: "Portugués",
+  fr: "Francés",
+  de: "Alemán",
+  it: "Italiano",
+  ja: "Japonés",
+  ko: "Coreano",
+  "zh-cn": "Chino",
+  "zh-tw": "Chino tradicional",
+  ru: "Ruso",
+  ar: "Árabe",
+  nl: "Neerlandés",
+};
+
+// ─────────────────────────────────────────────
+//  HELPERS DE FORMATO Y COMPONENTES V2
+// ─────────────────────────────────────────────
+
+const code = (v) => `\`${v}\``;
+const num = (n) => Number(n).toLocaleString("es-ES");
+const cleanVersion = (v) => `v${String(v ?? "").replace(/^v/i, "")}`;
+
+/** Lista de campos en cita: > **Etiqueta:** valor */
+const fields = (rows) =>
+  rows
+    .filter(Boolean)
+    .map(([label, value]) => `> **${label}:** ${value}`)
+    .join("\n");
+
+/** Bloque con subtítulo ### y campos alineados al estilo de RedBot */
+const sectionBlock = (heading, rows) => `### ${heading}\n${fields(rows)}`;
+
+/** Convierte texto multilínea en cita sin cortar líneas vacías intermedias */
+const quote = (text, maxLen = null) => {
+  const quoted = String(text ?? "")
+    .trimEnd()
+    .split("\n")
+    .map((line) => (line ? `> ${line}` : ">"))
+    .join("\n") || "> -";
+  return maxLen ? clipV2Text(quoted, maxLen) : quoted;
+};
+
+/** "2d 4h 3m", omitiendo unidades vacías */
+const formatUptime = (ms) => {
+  const s = Math.floor(ms / 1000) % 60;
+  const m = Math.floor(ms / 60000) % 60;
+  const h = Math.floor(ms / 3600000) % 24;
+  const d = Math.floor(ms / 86400000);
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (h) parts.push(`${h}h`);
+  if (m) parts.push(`${m}m`);
+  if (!parts.length || s) parts.push(`${s}s`);
+  return parts.join(" ");
+};
+
+const formatBytes = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatAttachmentMeta = (attachment, fallbackName) => {
+  const parts = [clipV2Text(attachment?.name ?? fallbackName, 80)];
+  if (attachment?.width && attachment?.height) parts.push(`${attachment.width}×${attachment.height}`);
+  const size = formatBytes(attachment?.size);
+  if (size) parts.push(size);
+  return parts.join(" · ");
+};
+
+const formatLanguage = (langCode) => {
+  const key = clipV2Text(langCode, 40, "");
+  const label = TRANSLATE_LANG_NAMES[key.toLowerCase()];
+  if (!label) return key || "desconocido";
+  return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
+};
+
+function addButtonSection(container, texts, linkLabel, linkUrl) {
+  const list = (Array.isArray(texts) ? texts : [texts])
+    .map((t) => String(t ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const section = new SectionBuilder().setButtonAccessory(
+    new ButtonBuilder()
+      .setLabel(String(linkLabel).slice(0, 80))
+      .setStyle(ButtonStyle.Link)
+      .setURL(linkUrl.trim())
+  );
+
+  for (const entry of list) {
+    section.addTextDisplayComponents(new TextDisplayBuilder().setContent(clipV2Text(entry, V2_MAX_MESSAGE_TEXT)));
+  }
+
+  container.addSectionComponents(section);
+  return container;
+}
+
+function buildCompactCard({ title, subtitle = null, body = null, color = RED, thumbnailUrl = null, divider = false, links = [] }) {
+  const container = createContainer(color);
+  const header = subtitle ? `## ${clipV2Text(title, 180)}\n-# ${clipV2Text(subtitle, 180)}` : `## ${clipV2Text(title, 200)}`;
+
+  if (thumbnailUrl && body) {
+    addHeaderSection(container, [header, body], thumbnailUrl);
+  } else {
+    addHeaderSection(container, [header], thumbnailUrl);
+    if (body) {
+      addSeparator(container, SeparatorSpacingSize.Small, divider);
+      addTextBlock(container, body);
+    }
+  }
+
+  if (links.length) {
+    addSeparator(container, SeparatorSpacingSize.Small, false);
+    addLinkButtons(container, links);
+  }
+
+  return container;
+}
+
+function buildDmStatusContainer({ title, guildName, iconUrl = null, rows = [], filters = [], color = RED }) {
+  const container = createContainer(color);
+  const header = `## ${clipV2Text(title, 120)}\n-# ${clipV2Text(guildName, 80)}`;
+  const bodyParts = [fields(rows)];
+  if (filters.length) bodyParts.push(sectionBlock("Filtros", filters));
+
+  addHeaderSection(container, [header], iconUrl);
+  addSeparator(container);
+  addTextBlock(container, bodyParts.join("\n\n"));
+  return container;
+}
 
 // ─────────────────────────────────────────────
 //  DATA
@@ -62,20 +208,24 @@ const data = {
 
     async code(ctx) {
       try {
-        const before  = Date.now();
-        const sent    = await ctx.send(buildV2Payload(buildSimpleContainer({ body: THINKING_TEXT, color: RED })));
-        const msgPing = Date.now() - before;
-        const apiPing = ctx.bot?.ws?.ping ?? 0;
+        const thinking = createContainer(RED);
+        addTextBlock(thinking, THINKING_TEXT);
 
-        await sent.edit(
-          buildV2Payload(
-            buildSimpleContainer({
-              title: "Pong!",
-              body: `> **Mensaje:** \`${msgPing}ms\`\n> **API:** \`${apiPing}ms\``,
-              color: RED,
-            })
-          )
-        );
+        const before = Date.now();
+        const sent = await ctx.send(buildV2Payload(thinking));
+        const msgPing = Date.now() - before;
+        const apiPing = Math.max(0, ctx.bot?.ws?.ping ?? 0);
+
+        const result = buildCompactCard({
+          title: "Pong!",
+          body: fields([
+            ["Mensaje", code(`${msgPing}ms`)],
+            ["API", code(`${apiPing}ms`)],
+          ]),
+          color: RED,
+        });
+
+        await sent.edit(buildV2Payload(result));
       } catch (err) {
         log.error("[util ping]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -97,44 +247,47 @@ const data = {
         const bot = ctx.bot;
         if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
 
-        const formatUptime = (ms) => {
-          const s = Math.floor(ms / 1000) % 60;
-          const m = Math.floor(ms / 60000) % 60;
-          const h = Math.floor(ms / 3600000) % 24;
-          const d = Math.floor(ms / 86400000);
-          return `${d}d/${h}h/${m}m/${s}s`;
-        };
-
-        const servers   = bot.guilds.cache.size;
-        const users     = bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
+        const servers = bot.guilds.cache.size;
+        const users = bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
         const createdAt = Math.floor(bot.user.createdTimestamp / 1000);
 
-        const botInfoContainer = createContainer(RED);
+        const container = createContainer(RED);
+
         addHeaderSection(
-          botInfoContainer,
+          container,
           [
             `## ${clipV2Text(bot.user.username, 100)}`,
-            `### Básico\n> **ID:** \`${bot.user.id}\`\n> **Creación:** <t:${createdAt}:d>\n> **Versión:** \`${botVersion}\``,
+            sectionBlock("General", [
+              ["ID", code(bot.user.id)],
+              ["Versión", code(cleanVersion(botVersion))],
+              ["Creación", `<t:${createdAt}:D> (<t:${createdAt}:R>)`],
+            ]),
           ],
-          bot.user.displayAvatarURL({ size: 256 })
+          bot.user.displayAvatarURL({ size: 1024 })
         );
-        addSeparator(botInfoContainer);
+        addSeparator(container);
+
         addTextBlock(
-          botInfoContainer,
-          `### Estadísticas\n> **Servidores:** \`${servers}\`\n> **Usuarios:** \`${users}\`\n> **Tiempo activo:** \`${formatUptime(bot.uptime)}\``
+          container,
+          `${sectionBlock("Estadísticas", [
+            ["Servidores", code(num(servers))],
+            ["Usuarios", code(num(users))],
+            ["Tiempo activo", code(formatUptime(bot.uptime ?? 0))],
+          ])}\n\n${sectionBlock("Extra", [
+            ["Creador", code("carzo.")],
+            ["Node.js", code(process.version)],
+            ["discord.js", code(cleanVersion(djsVersion))],
+            ["Gralonium", code(cleanVersion(graloniumVersion))],
+          ])}`
         );
-        addSeparator(botInfoContainer);
-        addTextBlock(
-          botInfoContainer,
-          `### Extra\n> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Gralonium:** \`v${graloniumVersion}\``
-        );
-        addSeparator(botInfoContainer);
-        addLinkButtons(botInfoContainer, [
+        addSeparator(container, SeparatorSpacingSize.Small, false);
+
+        addLinkButtons(container, [
           { label: "Invitar", url: INVITE_URL },
           { label: "Soporte", url: SUPPORT_URL },
         ]);
 
-        await ctx.send(buildV2Payload(botInfoContainer));
+        await ctx.send(buildV2Payload(container));
       } catch (err) {
         log.error("[util botinfo]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -153,9 +306,10 @@ const data = {
 
     async code(ctx) {
       try {
-        const container = buildSimpleContainer({
+        const container = buildCompactCard({
           title: ctx.bot?.user?.username ?? "RedBot",
-          body: "Invítame a tu servidor o únete al servidor de soporte usando los enlaces de abajo.",
+          subtitle: cleanVersion(botVersion),
+          body: "Invítame a tu servidor o únete al servidor de soporte.",
           thumbnailUrl: ctx.bot?.user?.displayAvatarURL?.({ size: 256 }) ?? null,
           color: RED,
           links: [
@@ -188,36 +342,47 @@ const data = {
 
     async code(ctx) {
       try {
-        if (!ctx.guild)
-          return ctx.send({ content: "Este comando solo funciona en servidores", flags: MessageFlags.Ephemeral });
+        if (!ctx.guild) return noGuildReply(ctx);
 
-        const nuevo = ctx.get("nuevo");
+        const nuevo = ctx.get("nuevo")?.trim();
+        const guildIcon = ctx.guild.iconURL({ size: 256 });
 
         if (!nuevo) {
           const prefix = await getPrefix(ctx.guild.id);
-          return ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("Prefix actual")
-                .setDescription(`\`${prefix}\``)
-                .setColor(RED),
-            ],
-          });
+          return ctx.send(
+            buildV2Payload(
+              buildCompactCard({
+                title: "Prefix actual",
+                subtitle: ctx.guild.name,
+                body: fields([["Prefix", code(prefix)]]),
+                thumbnailUrl: guildIcon,
+                color: RED,
+              })
+            )
+          );
         }
 
-        if (nuevo.length > 3)
+        if (nuevo.length > 3) {
           return ctx.send({ content: "El prefix no puede tener más de 3 caracteres", flags: MessageFlags.Ephemeral });
+        }
 
+        const anterior = await getPrefix(ctx.guild.id);
         await setPrefix(ctx.guild.id, nuevo);
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Prefix actualizado")
-              .setDescription(`Nuevo prefix: \`${nuevo}\``)
-              .setColor(GREEN),
-          ],
-        });
+        await ctx.send(
+          buildV2Payload(
+            buildCompactCard({
+              title: "Prefix actualizado",
+              subtitle: ctx.guild.name,
+              body: fields([
+                ["Anterior", code(anterior)],
+                ["Nuevo", code(nuevo)],
+              ]),
+              thumbnailUrl: guildIcon,
+              color: GREEN,
+            })
+          )
+        );
       } catch (err) {
         log.error("[util setprefix]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -235,9 +400,22 @@ const data = {
     params: new ParamsBuilder(),
 
     async code(ctx) {
-      const userId = ctx.user?.id ?? ctx.author?.id;
-      deleteConversacion(userId);
-      await ctx.send({ content: "Tu historial de conversación fue reiniciado." });
+      try {
+        const userId = ctx.user?.id ?? ctx.author?.id;
+        deleteConversacion(userId);
+        await ctx.send(
+          buildV2Payload(
+            buildCompactCard({
+              title: "Historial reiniciado",
+              body: "Se limpió tu conversación con la IA.",
+              color: GREEN,
+            })
+          )
+        );
+      } catch (err) {
+        log.error("[util askreset]", { err: err?.message ?? String(err) });
+        handleCommandError(ctx, err);
+      }
     },
   })
 
@@ -261,19 +439,26 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
 
         const invoker = ctx.user ?? ctx.author;
-        const razon = ctx.get("razon")?.trim() || "AFK";
+        const customReason = ctx.get("razon")?.trim();
+        const reason = customReason ? clipV2Text(customReason, 256) : "Sin motivo";
 
-        await setAfk(ctx.guild.id, invoker.id, razon);
+        const saved = await setAfk(ctx.guild.id, invoker.id, reason);
+        const sinceTs = Math.floor(new Date(saved?.createdAt ?? Date.now()).getTime() / 1000);
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setAuthor({ name: invoker.username, iconURL: invoker.displayAvatarURL({ size: 128 }) })
-              .setDescription(`Ahora estás **AFK**: ${razon}`)
-              .setColor(RED)
-              .setTimestamp(),
-          ],
-        });
+        await ctx.send(
+          buildV2Payload(
+            buildCompactCard({
+              title: invoker.username,
+              subtitle: "Estado AFK activado",
+              body: fields([
+                ["Motivo", clipV2Text(reason, 256)],
+                ["Desde", `<t:${sinceTs}:R>`],
+              ]),
+              thumbnailUrl: invoker.displayAvatarURL({ size: 256 }),
+              color: RED,
+            })
+          )
+        );
       } catch (err) {
         log.error("[util afk]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -311,16 +496,19 @@ const data = {
           const ext = animated ? "gif" : "png";
           const url = `https://cdn.discordapp.com/emojis/${id}.${ext}?size=4096&quality=lossless`;
 
-          return ctx.send(
-            buildV2Payload(
-              buildImageViewContainer({
-                title: `:${name}:`,
-                imageUrl: url,
-                footer: `ID: ${id}`,
-                color: RED,
-              })
-            )
+          const container = createContainer(RED);
+          addButtonSection(
+            container,
+            `## :${clipV2Text(name, 80)}:\n-# ID ${code(id)} · ${animated ? "Animado (GIF)" : "Estático (PNG)"}`,
+            "Abrir imagen",
+            url
           );
+          addSeparator(container, SeparatorSpacingSize.Small, false);
+          container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(url))
+          );
+
+          return ctx.send(buildV2Payload(container));
         }
 
         const chars = [...raw];
@@ -341,16 +529,21 @@ const data = {
         }
 
         const highResUrl = `https://emojicdn.elk.sh/${encodeURIComponent(raw)}?style=twitter`;
+        const codepoints = filteredCps.map((cp) => `U+${cp.toUpperCase()}`).join(" ");
 
-        return ctx.send(
-          buildV2Payload(
-            buildImageViewContainer({
-              title: `Emoji ${raw}`,
-              imageUrl: highResUrl,
-              color: RED,
-            })
-          )
+        const container = createContainer(RED);
+        addButtonSection(
+          container,
+          `## ${raw}\n-# Código ${code(codepoints)}`,
+          "Abrir imagen",
+          highResUrl
         );
+        addSeparator(container, SeparatorSpacingSize.Small, false);
+        container.addMediaGalleryComponents(
+          new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(highResUrl))
+        );
+
+        return ctx.send(buildV2Payload(container));
       } catch (err) {
         log.error("[util jumbo]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -359,58 +552,58 @@ const data = {
   })
 
   // ── TRANSLATE ─────────────────────────────────
-.addCommand({
-  data: new CommandBuilder({
-    name: "translate",
-    description: "Traduce texto a otro idioma",
-    aliases: ["traducir", "trans"],
-  }),
-  params: new ParamsBuilder()
-    .addString({
-      name: "texto",
-      description: "Texto a traducir",
-      required: true,
-    })
-    .addString({
-      name: "idioma",
-      description: "Idioma destino (ej: es, en, fr, de) por defecto español",
-      required: false,
-      autocomplete: true,
+  .addCommand({
+    data: new CommandBuilder({
+      name: "translate",
+      description: "Traduce texto a otro idioma",
+      aliases: ["traducir", "trans"],
     }),
+    params: new ParamsBuilder()
+      .addString({
+        name: "texto",
+        description: "Texto a traducir",
+        required: true,
+      })
+      .addString({
+        name: "idioma",
+        description: "Idioma destino (ej: es, en, fr, de) por defecto español",
+        required: false,
+        autocomplete: true,
+      }),
 
-  async code(ctx) {
-    const reply  = await prepareReply(ctx);
-    const texto  = ctx.get("texto");
-    const idioma = ctx.get("idioma") ?? "es";
+    async code(ctx) {
+      const reply = await prepareReply(ctx);
+      const texto = ctx.get("texto");
+      const idioma = ctx.get("idioma") ?? "es";
 
-    try {
-      const { translate } = require("@vitalets/google-translate-api");
-      const result = await translate(texto, { to: idioma });
+      try {
+        const { translate } = require("@vitalets/google-translate-api");
+        const result = await translate(texto, { to: idioma });
 
-      const origen     = result.raw?.src ?? "auto";
-      const traduccion = result.text;
+        const origen = result.raw?.src ?? "auto";
+        const traduccion = result.text;
 
-      if (!traduccion)
-        return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
+        if (!traduccion) {
+          return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
+        }
 
-      const translateContainer = createContainer(RED);
-      addTextBlock(translateContainer, "## Traducción");
-      addSeparator(translateContainer);
-      addTextBlock(
-        translateContainer,
-        `**Original:**\n${clipV2Text(texto, 1500)}\n\n**Traducción:**\n${clipV2Text(traduccion, 1800)}`
-      );
-      addTextBlock(translateContainer, `-# ${origen} → ${idioma}`, 210);
+        const container = createContainer(RED);
+        addTextBlock(container, `## Traducción\n-# ${formatLanguage(origen)} → ${formatLanguage(idioma)}`);
+        addSeparator(container);
+        addTextBlock(container, `### Original\n${quote(texto, 1300)}`);
+        addSeparator(container, SeparatorSpacingSize.Small, false);
+        addTextBlock(container, `### Resultado\n${quote(traduccion, 2100)}`);
 
-      await reply(buildV2Payload(translateContainer));
-    } catch (err) {
-      log.error("[util translate]", { err: err?.message ?? String(err) });
-      if (err.name === "TooManyRequestsError")
-        return reply({ content: "Google Translate está saturado, intenta en unos segundos", flags: MessageFlags.Ephemeral });
-      await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
-    }
-  },
-})
+        await reply(buildV2Payload(container));
+      } catch (err) {
+        log.error("[util translate]", { err: err?.message ?? String(err) });
+        if (err.name === "TooManyRequestsError") {
+          return reply({ content: "Google Translate está saturado, intenta en unos segundos", flags: MessageFlags.Ephemeral });
+        }
+        await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
+      }
+    },
+  })
 
   // ── DOWNLOAD ──────────────────────────────────
   .addCommand({
@@ -485,14 +678,14 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply      = await prepareReply(ctx, { thinking: true });
+      const reply = await prepareReply(ctx, { thinking: true });
       const attachment = ctx.get("imagen");
       if (!attachment) {
         return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
       }
 
       const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-      if (!validTypes.some(t => attachment.contentType?.startsWith(t))) {
+      if (!validTypes.some((t) => attachment.contentType?.startsWith(t))) {
         return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
       }
 
@@ -504,15 +697,13 @@ const data = {
         const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
         const texto = await generateVision(prompt, attachment.url);
 
-        const describeContainer = buildSimpleContainer({
-          title: "Descripción de imagen",
-          subtitle: attachment.name ?? "Imagen",
-          body: texto ?? "No pude generar una descripción",
-          thumbnailUrl: attachment.url,
-          color: RED,
-        });
+        const header = `## Descripción de imagen\n-# ${formatAttachmentMeta(attachment, "imagen")}`;
+        const container = createContainer(RED);
+        addHeaderSection(container, [header], attachment.url);
+        addSeparator(container);
+        addTextBlock(container, budgetBodyText(texto ?? "No pude generar una descripción", header.length));
 
-        await reply(buildV2Payload(describeContainer));
+        await reply(buildV2Payload(container));
       } catch (err) {
         log.error("[util describe]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -534,7 +725,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply      = await prepareReply(ctx, { thinking: true });
+      const reply = await prepareReply(ctx, { thinking: true });
       const attachment = ctx.get("archivo");
       if (!attachment) {
         return reply({ content: "Debes adjuntar un audio o video", flags: MessageFlags.Ephemeral });
@@ -589,28 +780,31 @@ const data = {
 
         if (!texto) return reply({ content: "No se detectó voz inteligible en el archivo", flags: MessageFlags.Ephemeral });
 
-        if (texto.length > 3850) {
+        const meta = formatAttachmentMeta(attachment, "audio");
+
+        if (texto.length > 3600) {
           const fileContainer = createContainer(RED);
-          addTextBlock(fileContainer, "## Transcripción\nLa transcripción es muy larga, se adjunta como archivo:");
+          addTextBlock(fileContainer, `## Transcripción\n-# ${meta} · ${num(texto.length)} caracteres`);
+          addSeparator(fileContainer);
+          addTextBlock(fileContainer, "El texto supera el límite del mensaje, se adjunta como archivo.");
+          addSeparator(fileContainer, SeparatorSpacingSize.Small, false);
           const fileAtt = addAttachmentFile(fileContainer, Buffer.from(texto, "utf-8"), "transcripcion.txt");
           return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
         }
 
-        const transcribeContainer = buildSimpleContainer({
-          title: "Transcripción",
-          subtitle: attachment.name ?? "Audio",
-          body: texto,
-          color: RED,
-        });
+        const header = `## Transcripción\n-# ${meta}`;
+        const container = createContainer(RED);
+        addTextBlock(container, header);
+        addSeparator(container);
+        addTextBlock(container, budgetBodyText(texto, header.length));
 
-        await reply(buildV2Payload(transcribeContainer));
+        await reply(buildV2Payload(container));
       } catch (err) {
         log.error("[util transcribe]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
       }
     },
   })
-
 
   // ── DMALL ─────────────────────────────────────
   .addCommand({
@@ -649,25 +843,41 @@ const data = {
         description: "Imagen opcional para adjuntar al embed",
         required: false,
       }),
- 
+
     plugins: [Plugins.hasPerms("Administrator")],
- 
+
     async code(ctx) {
       if (!ctx.guild) return noGuildReply(ctx);
- 
-      const titulo          = ctx.get("titulo");
-      const texto           = ctx.get("texto");
-      const soloRol         = ctx.get("solo_rol");
-      const rolExcluido     = ctx.get("excluir_rol");
+
+      const titulo = ctx.get("titulo");
+      const texto = ctx.get("texto");
+      const soloRol = ctx.get("solo_rol");
+      const rolExcluido = ctx.get("excluir_rol");
       const usuarioExcluido = ctx.get("excluir_usuario");
-      const imagen          = ctx.get("imagen");
- 
+      const imagen = ctx.get("imagen");
+
       const isSlash = Boolean(ctx.interaction);
       if (isSlash) await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const sendStatus = isSlash ? (p) => ctx.interaction.editReply(p) : (p) => ctx.send(p);
+
+      let statusMsg = null;
+      const sendStatus = async (container) => {
+        const payload = buildV2Payload(container);
+        if (isSlash) return ctx.interaction.editReply(payload);
+        if (!statusMsg) {
+          statusMsg = await ctx.send(payload);
+          return statusMsg;
+        }
+        return statusMsg.edit(payload);
+      };
 
       const author = ctx.user ?? ctx.author;
-      const embed  = buildDmAllEmbed({ titulo, texto, author, guild: ctx.guild, imagenUrl: imagen?.url });
+      const embed = buildDmAllEmbed({ titulo, texto, author, guild: ctx.guild, imagenUrl: imagen?.url });
+      const guildIcon = ctx.guild.iconURL({ size: 256 });
+      const displayFilters = [
+        soloRol ? ["Solo rol", `${soloRol}`] : null,
+        rolExcluido ? ["Rol excluido", `${rolExcluido}`] : null,
+        usuarioExcluido ? ["Usuario excluido", `${usuarioExcluido.user.tag}`] : null,
+      ].filter(Boolean);
 
       const result = await broadcastDm({
         guild: ctx.guild,
@@ -675,26 +885,58 @@ const data = {
         soloRolId: soloRol?.id,
         excluirRolId: rolExcluido?.id,
         excluirUserId: usuarioExcluido?.id,
-        onProgress: (done, total) => sendStatus({ content: `enviando... ${done}/${total}` }).catch(() => null),
+        onProgress: (done, total) => {
+          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+          return sendStatus(
+            buildDmStatusContainer({
+              title: "Enviando DM masivo",
+              guildName: ctx.guild.name,
+              iconUrl: guildIcon,
+              rows: [["Progreso", `${code(`${num(done)} / ${num(total)}`)} (${pct}%)`]],
+              filters: displayFilters,
+              color: RED,
+            })
+          ).catch(() => null);
+        },
       });
 
-      if (!result) return sendStatus({ content: "Ya hay un DM masivo en curso en este servidor, espera a que termine" });
+      if (!result) {
+        return sendStatus(
+          buildCompactCard({
+            title: "DM masivo en curso",
+            subtitle: ctx.guild.name,
+            body: "Ya hay un envío activo en este servidor, espera a que termine.",
+            thumbnailUrl: guildIcon,
+            color: YELLOW,
+          })
+        ).catch(() => null);
+      }
 
-      const { enviados, fallidos } = result;
-      const filtros = [
-        soloRol         ? `Solo rol: ${soloRol} (\`${soloRol.id}\`)`                              : null,
-        rolExcluido     ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)`                  : null,
+      const { enviados, fallidos, total } = result;
+      const filtrosLog = [
+        soloRol ? `Solo rol: ${soloRol} (\`${soloRol.id}\`)` : null,
+        rolExcluido ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)` : null,
         usuarioExcluido ? `Usuario excluido: ${usuarioExcluido.user.tag} (\`${usuarioExcluido.id}\`)` : null,
       ].filter(Boolean);
 
-      await sendLog(ctx.guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros })).catch(() => null);
+      await sendLog(ctx.guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros: filtrosLog })).catch(() => null);
 
-      await sendStatus({
-        content: `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`,
-      }).catch(() => null);
+      await sendStatus(
+        buildDmStatusContainer({
+          title: "DM masivo completado",
+          guildName: ctx.guild.name,
+          iconUrl: guildIcon,
+          rows: [
+            ["Enviados", code(num(enviados))],
+            ["Fallidos", code(num(fallidos))],
+            ["Total", code(num(total))],
+          ],
+          filters: displayFilters,
+          color: enviados === 0 && fallidos > 0 ? YELLOW : GREEN,
+        })
+      ).catch(() => null);
     },
   })
-
 
   // ── RESUME ────────────────────────────────────
   .addCommand({
@@ -723,13 +965,15 @@ const data = {
           `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
         );
 
-        const resumenContainer = buildSimpleContainer({
-          title: "Resumen",
-          body: resumen ?? "No pude generar un resumen",
-          color: RED,
-        });
+        const header = resumen
+          ? `## Resumen\n-# ${num(texto.length)} → ${num(resumen.length)} caracteres`
+          : "## Resumen";
+        const container = createContainer(RED);
+        addTextBlock(container, header);
+        addSeparator(container);
+        addTextBlock(container, budgetBodyText(resumen || "No pude generar un resumen", header.length));
 
-        await reply(buildV2Payload(resumenContainer));
+        await reply(buildV2Payload(container));
       } catch (err) {
         log.error("[util resume]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -737,6 +981,10 @@ const data = {
     },
   }),
 };
+
+// ─────────────────────────────────────────────
+//  COMANDOS EXTRA
+// ─────────────────────────────────────────────
 
 const pollCommand = {
   data: new CommandBuilder({
@@ -857,14 +1105,13 @@ const remindCommand = {
         });
       }
 
-      await ctx.send({
-        embeds: [
-          new EmbedBuilder()
-            .setDescription(`Te lo recordaré <t:${Math.floor(remindAt.getTime() / 1000)}:R>`)
-            .setColor(GREEN)
-            .setTimestamp(),
-        ],
-      });
+      const ts = Math.floor(remindAt.getTime() / 1000);
+      const container = createContainer(GREEN);
+      addTextBlock(container, `## Recordatorio creado\n-# <t:${ts}:f> · <t:${ts}:R>`);
+      addSeparator(container);
+      addTextBlock(container, quote(texto, 1200));
+
+      await ctx.send(buildV2Payload(container));
     } catch (err) {
       log.error("[util remind]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);
@@ -909,26 +1156,30 @@ const ocrCommand = {
         return reply({ content: "No se detectó texto legible en la imagen", flags: MessageFlags.Ephemeral });
       }
 
-      if (texto.length > 3850) {
+      const meta = formatAttachmentMeta(attachment, "imagen");
+
+      if (texto.length > 3600) {
         const fileContainer = createContainer(RED);
         addHeaderSection(
           fileContainer,
-          ["## Texto extraído", "El texto es muy largo, se adjunta como archivo:"],
+          [
+            `## Texto extraído\n-# ${meta} · ${num(texto.length)} caracteres`,
+            "El texto supera el límite del mensaje, se adjunta como archivo.",
+          ],
           attachment.url
         );
+        addSeparator(fileContainer, SeparatorSpacingSize.Small, false);
         const fileAtt = addAttachmentFile(fileContainer, Buffer.from(texto, "utf-8"), "texto.txt");
         return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
       }
 
-      const ocrContainer = buildSimpleContainer({
-        title: "Texto extraído",
-        subtitle: attachment.name ?? "Imagen",
-        body: texto,
-        thumbnailUrl: attachment.url,
-        color: RED,
-      });
+      const header = `## Texto extraído\n-# ${meta}`;
+      const container = createContainer(RED);
+      addHeaderSection(container, [header], attachment.url);
+      addSeparator(container);
+      addTextBlock(container, budgetBodyText(texto, header.length));
 
-      await reply(buildV2Payload(ocrContainer));
+      await reply(buildV2Payload(container));
     } catch (err) {
       log.error("[util ocr]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);
