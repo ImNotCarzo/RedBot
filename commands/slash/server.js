@@ -397,7 +397,8 @@ async function sendCustomBotPanel(ctx) {
           return false;
         }
 
-        await submitted.deferReply();
+        const isPrefix = Boolean(ctx.message);
+        await submitted.deferReply(isPrefix ? { flags: MessageFlags.Ephemeral } : undefined);
 
         try {
           const res = await applyCustomBotChanges({
@@ -409,19 +410,35 @@ async function sendCustomBotPanel(ctx) {
             biografia: rawBio || undefined,
           });
           if (res.error) {
-            await submitted.deleteReply().catch(() => {});
-            await submitted.followUp({ content: res.error, flags: MessageFlags.Ephemeral }).catch(() => {});
+            if (isPrefix) {
+              await submitted.editReply({ content: res.error }).catch(() => {});
+            } else {
+              await submitted.deleteReply().catch(() => {});
+              await submitted.followUp({ content: res.error, flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
             return false;
           }
 
           await activeView.message?.delete?.().catch(() => {});
           activeView.stop("deleted");
-          await submitted.editReply({ embeds: [res.embed] }).catch(() => {});
+
+          if (isPrefix) {
+            await submitted.deleteReply().catch(() => {});
+            await ctx.message
+              .reply({ embeds: [res.embed], allowedMentions: { repliedUser: false } })
+              .catch(() => (interaction.channel ?? ctx.channel)?.send?.({ embeds: [res.embed] }));
+          } else {
+            await submitted.editReply({ embeds: [res.embed] }).catch(() => {});
+          }
         } catch (err) {
           log.error("Error en modal custombot", { err: err?.message ?? String(err) });
           const friendly = mapCustomBotApiError(err) ?? "No se pudo actualizar el perfil del bot";
-          await submitted.deleteReply().catch(() => {});
-          await submitted.followUp({ content: friendly, flags: MessageFlags.Ephemeral }).catch(() => {});
+          if (isPrefix) {
+            await submitted.editReply({ content: friendly }).catch(() => {});
+          } else {
+            await submitted.deleteReply().catch(() => {});
+            await submitted.followUp({ content: friendly, flags: MessageFlags.Ephemeral }).catch(() => {});
+          }
         }
         return false;
       },
@@ -436,7 +453,13 @@ async function sendCustomBotPanel(ctx) {
           await activeView.message?.delete?.().catch(() => {});
           activeView.stop("deleted");
           const ch = interaction.channel ?? ctx.channel;
-          if (ch?.send) await ch.send({ embeds: [res.embed] }).catch(() => {});
+          if (ctx.message) {
+            await ctx.message
+              .reply({ embeds: [res.embed], allowedMentions: { repliedUser: false } })
+              .catch(() => ch?.send?.({ embeds: [res.embed] }));
+          } else if (ch?.send) {
+            await ch.send({ embeds: [res.embed] }).catch(() => {});
+          }
         } catch (err) {
           log.error("Error en boton customreset", { err: err?.message ?? String(err) });
           const friendly = mapCustomBotApiError(err) ?? "No se pudo restablecer el perfil del bot";
