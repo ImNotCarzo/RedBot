@@ -8,6 +8,14 @@ const {
 const { clampPage, paginateArray, buildPagRow, uniqueId, failWith } = require("../../src/runtime");
 const { RED, YELLOW, GREEN } = require("../../src/config");
 const {
+  createContainer,
+  addHeaderSection,
+  addSeparator,
+  addTextBlock,
+  clipV2Text,
+  buildV2Payload,
+} = require("../../src/v2");
+const {
   generateId,
   parseDuration,
   formatDuration,
@@ -703,23 +711,36 @@ const data = {
           const prevId = uniqueId("warns_prev");
           const nextId = uniqueId("warns_next");
 
-          const buildEmbed = () => {
-            const embed = new EmbedBuilder()
-              .setTitle(`Advertencias de ${member.user.tag}`)
-              .setColor(YELLOW)
-              .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-              .setFooter({ text: `${page + 1}/${pages.length} · ${warns.length} en total` });
-            pages[page].forEach((w) => embed.addFields({
-              name: `\`${w.warnId}\` — <t:${Math.floor(w.createdAt.getTime() / 1000)}:d>`,
-              value: `> **Razón:** ${w.reason}\n> **Mod:** <@${w.moderator}>`,
-            }));
-            return embed;
+          const buildWarningsPayload = (interactive = true) => {
+            const container = createContainer(YELLOW);
+            addHeaderSection(
+              container,
+              [
+                `## Advertencias de ${clipV2Text(member.user.tag, 100)}`,
+                `-# Página ${page + 1}/${pages.length} · ${warns.length} en total`,
+              ],
+              member.user.displayAvatarURL({ size: 256 })
+            );
+
+            for (const w of pages[page]) {
+              addSeparator(container);
+              const ts = Math.floor(w.createdAt.getTime() / 1000);
+              const reason = clipV2Text(w.reason, 500, "Sin razón");
+              addTextBlock(
+                container,
+                `**\`${w.warnId}\`** — <t:${ts}:d>\n> **Razón:** ${reason}\n> **Mod:** <@${w.moderator}>`
+              );
+            }
+
+            if (interactive && pages.length > 1) {
+              addSeparator(container);
+              container.addActionRowComponents(buildPagRow(prevId, nextId, page, pages.length));
+            }
+
+            return buildV2Payload(container);
           };
 
-          const msg = await ctx.send({
-            embeds: [buildEmbed()],
-            components: pages.length > 1 ? [buildPagRow(prevId, nextId, page, pages.length)] : [],
-          });
+          const msg = await ctx.send(buildWarningsPayload(true));
 
           if (pages.length <= 1) return;
 
@@ -734,10 +755,12 @@ const data = {
             if (i.customId === prevId) page--;
             if (i.customId === nextId) page++;
             page = clampPage(page, pages.length);
-            await i.update({ embeds: [buildEmbed()], components: [buildPagRow(prevId, nextId, page, pages.length)] });
+            await i.update(buildWarningsPayload(true));
           });
 
-          collector.on("end", async () => msg.edit({ components: [] }).catch(() => {}));
+          collector.on("end", async (_c, reason) => {
+            if (reason === "time") await msg.edit(buildWarningsPayload(false)).catch(() => {});
+          });
         } catch (err) {
           return failWith(ctx, err, "No se pudieron obtener las advertencias");
         }

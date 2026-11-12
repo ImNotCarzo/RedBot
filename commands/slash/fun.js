@@ -1,8 +1,9 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
-const { EmbedBuilder, MessageFlags } = require("discord.js");
+const { MessageFlags } = require("discord.js");
 const { Logger, prepareReply, noGuildReply, handleCommandError } = require("../../src/runtime");
 const { generateText, generateVision, fetchImageAsInlineData } = require("../../src/ai");
 const { RED } = require("../../src/config");
+const { buildSimpleContainer, buildV2Payload } = require("../../src/v2");
 
 const log = new Logger("CMD_FUN", process.env.LOG_LEVEL);
 
@@ -51,14 +52,13 @@ async function runTextFunCommand(ctx, { logTag, prompt, fallbackText, title, foo
   const reply = await prepareReply(ctx, { thinking: true });
   try {
     const raw = await generateText(prompt);
-    const texto = raw?.slice(0, 4000) || fallbackText;
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(texto)
-      .setColor(RED)
-      .setTimestamp();
-    if (footerText) embed.setFooter({ text: footerText });
-    await reply({ embeds: [embed] });
+    const container = buildSimpleContainer({
+      title,
+      body: raw || fallbackText,
+      footer: footerText,
+      color: RED,
+    });
+    await reply(buildV2Payload(container));
   } catch (err) {
     log.error(logTag, { err: err?.message ?? String(err) });
     handleCommandError(ctx, err);
@@ -228,19 +228,15 @@ Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos
 ${datosUsuario}`;
 
           const generated = imagePart ? await generateVision(prompt, imagePart) : await generateText(prompt);
-          const texto = generated?.slice(0, 4000)
-            ?? "Ocurrió un error con la IA, intenta de nuevo";
-
-          await reply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle(`Roast de ${username}`)
-                .setThumbnail(avatarUrl)
-                .setDescription(texto)
-                .setColor(RED)
-                .setTimestamp(),
-            ],
+          const container = buildSimpleContainer({
+            title: `Roast de ${username}`,
+            subtitle: `@${usertag}`,
+            body: generated || "Ocurrió un error con la IA, intenta de nuevo",
+            thumbnailUrl: avatarUrl,
+            color: RED,
           });
+
+          await reply(buildV2Payload(container));
         } catch (err) {
           log.error("[fun roast]", { err: err?.message ?? String(err) });
           handleCommandError(ctx, err);
@@ -283,18 +279,15 @@ ${datosUsuario}`;
 
           const eleccion = items[Math.floor(Math.random() * items.length)];
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("Decisión tomada")
-                .setDescription(
-                  `> **Opciones:** ${items.map((i) => `\`${i}\``).join(", ")}\n` +
-                  `> **Elección:** **${eleccion}**`
-                )
-                .setColor(RED)
-                .setTimestamp(),
-            ],
+          const container = buildSimpleContainer({
+            title: "Decisión tomada",
+            body:
+              `> **Opciones:** ${items.map((i) => `\`${i}\``).join(", ")}\n` +
+              `> **Elección:** **${eleccion}**`,
+            color: RED,
           });
+
+          await ctx.send(buildV2Payload(container));
         } catch (err) {
           log.error("[fun choose]", { err: err?.message ?? String(err) });
           handleCommandError(ctx, err);

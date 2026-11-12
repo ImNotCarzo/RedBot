@@ -1,7 +1,7 @@
 const { CommandBuilder, GroupBuilder, ParamsBuilder } = require("gralonium");
 const {
-  EmbedBuilder,
   ActionRowBuilder,
+  SeparatorSpacingSize,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ComponentType,
@@ -11,7 +11,6 @@ const {
   Logger,
   clampPage,
   noGuildReply,
-  buildPaginationRow,
   uniqueId,
   formatPermissionName: formatPermName,
   paginateArray,
@@ -19,6 +18,17 @@ const {
 } = require("../../src/runtime");
 const { resolveMemberFlexible: resolveMember } = require("../../src/adapter");
 const { RED, DARK } = require("../../src/config");
+const {
+  createContainer,
+  addHeaderSection,
+  addSeparator,
+  addTextBlock,
+  clipV2Text,
+  buildSimpleContainer,
+  buildImageViewContainer,
+  buildPaginatedListContainer,
+  buildV2Payload,
+} = require("../../src/v2");
 
 const log = new Logger("CMD_USER", process.env.LOG_LEVEL);
 
@@ -75,25 +85,97 @@ function getMemberColor(member, fallback = DARK) {
   return member?.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : fallback;
 }
 
-function buildRolesEmbed(member, user, username, roles, page, totalPages) {
-  const numbered = roles.map((r, i) => `${page * 15 + i + 1}. ${r}`);
-  const embed = new EmbedBuilder()
-    .setAuthor({ name: username, iconURL: user.displayAvatarURL({ size: 128 }) })
-    .setDescription(numbered.join("\n"))
-    .setColor(getMemberColor(member, DARK))
-    .setTimestamp();
-  if (totalPages > 1) embed.setFooter({ text: `Página ${page + 1}/${totalPages}` });
-  return embed;
+function buildRolesPayload(member, user, username, roles, page, totalPages, { prevId = null, nextId = null, extraRows = [], interactive = true, ephemeral = false } = {}) {
+  const container = buildPaginatedListContainer({
+    title: username,
+    subtitle: "Roles del usuario",
+    lines: roles.map((r, i) => `${page * 15 + i + 1}. ${r}`),
+    footer: totalPages > 1 ? `Página ${page + 1}/${totalPages}` : null,
+    thumbnailUrl: user.displayAvatarURL({ size: 256 }),
+    color: getMemberColor(member, DARK),
+    page,
+    totalPages,
+    prevId,
+    nextId,
+    extraRows,
+    interactive,
+  });
+  return buildV2Payload(container, { ephemeral });
 }
 
-function buildPermsEmbed(user, perms, page, totalPages, color) {
-  const embed = new EmbedBuilder()
-    .setAuthor({ name: `Permisos de ${user.username}`, iconURL: user.displayAvatarURL({ size: 128 }) })
-    .setDescription(perms.join("\n"))
-    .setColor(color || DARK)
-    .setTimestamp();
-  if (totalPages > 1) embed.setFooter({ text: `Página ${page + 1}/${totalPages}` });
-  return embed;
+function buildPermsPayload(user, perms, page, totalPages, color, { prevId = null, nextId = null, extraRows = [], interactive = true, ephemeral = false } = {}) {
+  const container = buildPaginatedListContainer({
+    title: `Permisos de ${user.username}`,
+    lines: perms,
+    footer: totalPages > 1 ? `Página ${page + 1}/${totalPages}` : null,
+    thumbnailUrl: user.displayAvatarURL({ size: 256 }),
+    color: color || DARK,
+    page,
+    totalPages,
+    prevId,
+    nextId,
+    extraRows,
+    interactive,
+  });
+  return buildV2Payload(container, { ephemeral });
+}
+
+function buildUserImagePayload(user, { title, imageUrl, color, extraRows = [], ephemeral = false } = {}) {
+  return buildV2Payload(
+    buildImageViewContainer({
+      authorName: user.username,
+      title,
+      imageUrl,
+      color,
+      extraRows,
+    }),
+    { ephemeral }
+  );
+}
+
+function buildUserInfoPayload({ user, member = null, color = RED, extraRows = [], ephemeral = false } = {}) {
+  const createdTs = Math.floor(user.createdTimestamp / 1000);
+  const insignias = formatUserBadges(user);
+  const generalBlock =
+    `### General\n` +
+    `> **ID:** \`${user.id}\`\n` +
+    (member ? `> **Color del rol:** \`${color}\`\n` : "") +
+    `> **Insignias:** ${insignias}\n` +
+    `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`;
+
+  const extraSections = [];
+  if (member) {
+    const joinedTs = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
+    extraSections.push(
+      `### Servidor\n` +
+      `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n` +
+      `> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`
+    );
+  }
+  for (const field of buildExtendedFields(member, user)) {
+    extraSections.push(`### ${field.name}\n${field.value}`);
+  }
+
+  const container = createContainer(color);
+  addHeaderSection(
+    container,
+    [`## ${clipV2Text(user.username, 100)}`, generalBlock],
+    user.displayAvatarURL({ size: 1024 })
+  );
+
+  if (extraSections.length) {
+    addSeparator(container);
+    addTextBlock(container, extraSections.join("\n\n"));
+  }
+
+  if (extraRows.length) {
+    addSeparator(container, SeparatorSpacingSize.Small, false);
+    for (const row of extraRows) {
+      if (row) container.addActionRowComponents(row);
+    }
+  }
+
+  return buildV2Payload(container, { ephemeral });
 }
 
 function makeSelectRow(customId, includeInfo, options) {
@@ -173,25 +255,6 @@ const data = {
             const user = await resolveUser(ctx, input);
             if (!user) return ctx.send("No pude encontrar al usuario");
             const fetched = await user.fetch(true).catch(() => user);
-            const createdTs = Math.floor(fetched.createdTimestamp / 1000);
-            const insignias = formatUserBadges(fetched);
-
-            const embed = new EmbedBuilder()
-              .setThumbnail(fetched.displayAvatarURL({ size: 1024 }))
-              .setColor(RED)
-              .setTitle(`${fetched.username}`)
-              .addFields(
-                {
-                  name: "General",
-                  value:
-                    `> **ID:** \`${fetched.id}\`\n` +
-                    `> **Insignias:** ${insignias}\n` +
-                    `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
-                },
-                ...buildExtendedFields(null, fetched)
-              )
-              .setTimestamp();
-
             const hasBanner = !!fetched.banner;
             const baseOptions = [
               { label: "Avatar", value: "avatar", description: "Avatar del usuario" },
@@ -199,10 +262,14 @@ const data = {
             ];
             const selectId = uniqueId("user_info_dm");
 
-            const reply = await ctx.send({
-              embeds: [embed],
-              components: [makeSelectRow(selectId, false, baseOptions)],
-            });
+            let renderCurrent = (interactive = true) =>
+              buildUserInfoPayload({
+                user: fetched,
+                color: RED,
+                extraRows: interactive ? [makeSelectRow(selectId, false, baseOptions)] : [],
+              });
+
+            const reply = await ctx.send(renderCurrent(true));
 
             const collector = reply.createMessageComponentCollector({
               componentType: ComponentType.StringSelect,
@@ -215,29 +282,49 @@ const data = {
               const isAuthor = interaction.user.id === invoker.id;
 
               if (selected === "info") {
-                if (!isAuthor) return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-                return interaction.update({ embeds: [embed], components: [makeSelectRow(selectId, false, baseOptions)] });
+                if (!isAuthor) return interaction.reply(buildUserInfoPayload({ user: fetched, color: RED, ephemeral: true }));
+                renderCurrent = (interactive = true) =>
+                  buildUserInfoPayload({
+                    user: fetched,
+                    color: RED,
+                    extraRows: interactive ? [makeSelectRow(selectId, false, baseOptions)] : [],
+                  });
+                return interaction.update(renderCurrent(true));
               }
               if (selected === "avatar") {
                 const url = fetched.displayAvatarURL({ size: 4096, extension: "png" });
-                const av = new EmbedBuilder()
-                  .setAuthor({ name: fetched.username, iconURL: fetched.displayAvatarURL({ size: 128 }) })
-                  .setTitle("Avatar").setURL(url).setImage(url).setColor(RED).setTimestamp();
-                if (!isAuthor) return interaction.reply({ embeds: [av], flags: MessageFlags.Ephemeral });
-                return interaction.update({ embeds: [av], components: [makeSelectRow(selectId, true, baseOptions)] });
+                if (!isAuthor) {
+                  return interaction.reply(buildUserImagePayload(fetched, { title: "Avatar", imageUrl: url, color: RED, ephemeral: true }));
+                }
+                renderCurrent = (interactive = true) =>
+                  buildUserImagePayload(fetched, {
+                    title: "Avatar",
+                    imageUrl: url,
+                    color: RED,
+                    extraRows: interactive ? [makeSelectRow(selectId, true, baseOptions)] : [],
+                  });
+                return interaction.update(renderCurrent(true));
               }
               if (selected === "banner") {
                 const bannerURL = fetched.bannerURL({ size: 4096 });
                 if (!bannerURL) return interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral });
-                const bn = new EmbedBuilder()
-                  .setAuthor({ name: fetched.username, iconURL: fetched.displayAvatarURL({ size: 128 }) })
-                  .setTitle("Banner").setURL(bannerURL).setImage(bannerURL).setColor(RED).setTimestamp();
-                if (!isAuthor) return interaction.reply({ embeds: [bn], flags: MessageFlags.Ephemeral });
-                return interaction.update({ embeds: [bn], components: [makeSelectRow(selectId, true, baseOptions)] });
+                if (!isAuthor) {
+                  return interaction.reply(buildUserImagePayload(fetched, { title: "Banner", imageUrl: bannerURL, color: RED, ephemeral: true }));
+                }
+                renderCurrent = (interactive = true) =>
+                  buildUserImagePayload(fetched, {
+                    title: "Banner",
+                    imageUrl: bannerURL,
+                    color: RED,
+                    extraRows: interactive ? [makeSelectRow(selectId, true, baseOptions)] : [],
+                  });
+                return interaction.update(renderCurrent(true));
               }
             });
 
-            collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
+            collector.on("end", async (_c, reason) => {
+              if (reason === "time") await reply.edit(renderCurrent(false)).catch(() => {});
+            });
             return;
           }
 
@@ -247,36 +334,8 @@ const data = {
           const user = await member.user.fetch(true).catch(() => member.user);
           const fullMember = await member.fetch(true).catch(() => member);
           const getBannerUrl = () => fullMember.bannerURL?.({ size: 4096 }) ?? user.bannerURL({ size: 4096 }) ?? null;
-          const insignias = formatUserBadges(user);
           const colorRol = getMemberColor(member, DARK);
-          const createdTs = Math.floor(user.createdTimestamp / 1000);
-          const joinedTs = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
           const hasBanner = !!(user.banner || fullMember.banner);
-
-          const fields = [
-            {
-              name: "General",
-              value:
-                `> **ID:** \`${user.id}\`\n` +
-                `> **Color del rol:** \`${colorRol}\`\n` +
-                `> **Insignias:** ${insignias}\n` +
-                `> **Cuenta creada:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
-            },
-            {
-              name: "Servidor",
-              value:
-                `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n` +
-                `> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`,
-            },
-            ...buildExtendedFields(fullMember, user),
-          ];
-
-          const infoEmbed = new EmbedBuilder()
-            .setThumbnail(user.displayAvatarURL({ size: 1024 }))
-            .setColor(colorRol)
-            .setTitle(`${user.username}`)
-            .addFields(fields)
-            .setTimestamp();
 
           const baseOptions = [
             { label: "Avatar", value: "avatar", description: "Avatar del usuario" },
@@ -297,10 +356,15 @@ const data = {
             activeSubCollectors.clear();
           };
 
-          const reply = await ctx.send({
-            embeds: [infoEmbed],
-            components: [makeSelectRow(selectId, false, baseOptions)],
-          });
+          let renderCurrent = (interactive = true) =>
+            buildUserInfoPayload({
+              user,
+              member: fullMember,
+              color: colorRol,
+              extraRows: interactive ? [makeSelectRow(selectId, false, baseOptions)] : [],
+            });
+
+          const reply = await ctx.send(renderCurrent(true));
 
           const collector = reply.createMessageComponentCollector({
             componentType: ComponentType.StringSelect,
@@ -314,45 +378,52 @@ const data = {
 
             if (!isAuthor) {
               if (selected === "info") {
-                return interaction.reply({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
+                return interaction.reply(buildUserInfoPayload({ user, member: fullMember, color: colorRol, ephemeral: true }));
               }
               if (selected === "avatar") {
                 const url = member.displayAvatarURL({ extension: "png", size: 4096 });
-                const av = new EmbedBuilder()
-                  .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                  .setTitle("Avatar").setURL(url).setImage(url).setColor(colorRol).setTimestamp();
-                return interaction.reply({ embeds: [av], flags: MessageFlags.Ephemeral });
+                return interaction.reply(buildUserImagePayload(user, { title: "Avatar", imageUrl: url, color: colorRol, ephemeral: true }));
               }
               if (selected === "banner") {
                 const bannerURL = getBannerUrl();
                 if (!bannerURL) return interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral });
-                const bn = new EmbedBuilder()
-                  .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                  .setTitle("Banner").setURL(bannerURL).setImage(bannerURL).setColor(colorRol).setTimestamp();
-                return interaction.reply({ embeds: [bn], flags: MessageFlags.Ephemeral });
+                return interaction.reply(buildUserImagePayload(user, { title: "Banner", imageUrl: bannerURL, color: colorRol, ephemeral: true }));
               }
               if (selected === "roles") {
-                const roles = member.roles.cache
-                  .filter((r) => r.id !== guild.id)
-                  .sort((a, b) => b.position - a.position)
-                  .map((r, i) => `${i + 1}. <@&${r.id}>`);
+                const roles = Array.from(
+                  member.roles.cache
+                    .filter((r) => r.id !== guild.id)
+                    .sort((a, b) => b.position - a.position)
+                    .values()
+                ).map((r, i) => `${i + 1}. <@&${r.id}>`);
                 if (!roles.length) return interaction.reply({ content: "Este usuario no tiene roles", flags: MessageFlags.Ephemeral });
-                let desc = roles.join("\n");
-                if (desc.length > 4000) desc = desc.slice(0, 3990) + "\n...";
-                const embed = new EmbedBuilder()
-                  .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                  .setDescription(desc).setColor(colorRol).setTimestamp();
-                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+                return interaction.reply(
+                  buildV2Payload(
+                    buildSimpleContainer({
+                      title: user.username,
+                      subtitle: "Roles del usuario",
+                      body: roles.join("\n"),
+                      thumbnailUrl: user.displayAvatarURL({ size: 256 }),
+                      color: colorRol,
+                    }),
+                    { ephemeral: true }
+                  )
+                );
               }
               if (selected === "permissions") {
                 const perms = member.permissions.toArray().sort().map(formatPermName);
                 if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
-                let desc = perms.join("\n");
-                if (desc.length > 4000) desc = desc.slice(0, 3990) + "\n...";
-                const embed = new EmbedBuilder()
-                  .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                  .setDescription(desc).setColor(colorRol).setTimestamp();
-                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+                return interaction.reply(
+                  buildV2Payload(
+                    buildSimpleContainer({
+                      title: `Permisos de ${user.username}`,
+                      body: perms.join("\n"),
+                      thumbnailUrl: user.displayAvatarURL({ size: 256 }),
+                      color: colorRol,
+                    }),
+                    { ephemeral: true }
+                  )
+                );
               }
               return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
             }
@@ -360,7 +431,14 @@ const data = {
             stopSubCollectors();
 
             if (selected === "info") {
-              return interaction.update({ embeds: [infoEmbed], components: [makeSelectRow(selectId, false, baseOptions)] });
+              renderCurrent = (interactive = true) =>
+                buildUserInfoPayload({
+                  user,
+                  member: fullMember,
+                  color: colorRol,
+                  extraRows: interactive ? [makeSelectRow(selectId, false, baseOptions)] : [],
+                });
+              return interaction.update(renderCurrent(true));
             }
 
             if (selected === "avatar") {
@@ -369,12 +447,13 @@ const data = {
               const globalAvatar = user.displayAvatarURL(avatarOpts);
               const hasDistinct = !!(member.avatar && member.avatar !== user.avatar);
 
-              const buildAv = (type) => new EmbedBuilder()
-                .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                .setTitle(hasDistinct ? (type === "server" ? "Avatar del servidor" : "Avatar global") : "Avatar")
-                .setURL(type === "server" ? serverAvatar : globalAvatar)
-                .setImage(type === "server" ? serverAvatar : globalAvatar)
-                .setColor(colorRol).setTimestamp();
+              const buildAv = (type, rows = []) =>
+                buildUserImagePayload(user, {
+                  title: hasDistinct ? (type === "server" ? "Avatar del servidor" : "Avatar global") : "Avatar",
+                  imageUrl: type === "server" ? serverAvatar : globalAvatar,
+                  color: colorRol,
+                  extraRows: rows,
+                });
 
               if (hasDistinct) {
                 const avSelectId = uniqueId("user_av");
@@ -385,7 +464,11 @@ const data = {
                       new StringSelectMenuOptionBuilder().setLabel("Avatar Global").setValue("global").setDescription("Avatar global"),
                     )
                 );
-                await interaction.update({ embeds: [buildAv("server")], components: [makeSelectRow(selectId, true, baseOptions), avRow] });
+                let avType = "server";
+                renderCurrent = (interactive = true, includeAvSelect = true) =>
+                  buildAv(avType, interactive ? (includeAvSelect ? [makeSelectRow(selectId, true, baseOptions), avRow] : [makeSelectRow(selectId, true, baseOptions)]) : []);
+
+                await interaction.update(renderCurrent(true, true));
 
                 const avCollector = reply.createMessageComponentCollector({
                   componentType: ComponentType.StringSelect,
@@ -394,13 +477,20 @@ const data = {
                 });
                 setSubCollector("avatar", avCollector);
                 avCollector.on("collect", async (i) => {
-                  await i.update({ embeds: [buildAv(i.values[0])], components: [makeSelectRow(selectId, true, baseOptions), avRow] });
+                  avType = i.values[0];
+                  await i.update(renderCurrent(true, true));
                 });
                 avCollector.on("end", async (_c, reason) => {
-                  if (reason === "time") reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {});
+                  if (reason === "time") {
+                    renderCurrent = (interactive = true) =>
+                      buildAv(avType, interactive ? [makeSelectRow(selectId, true, baseOptions)] : []);
+                    reply.edit(renderCurrent(true)).catch(() => {});
+                  }
                 });
               } else {
-                await interaction.update({ embeds: [buildAv("server")], components: [makeSelectRow(selectId, true, baseOptions)] });
+                renderCurrent = (interactive = true) =>
+                  buildAv("server", interactive ? [makeSelectRow(selectId, true, baseOptions)] : []);
+                await interaction.update(renderCurrent(true));
               }
               return;
             }
@@ -408,12 +498,14 @@ const data = {
             if (selected === "banner") {
               const bannerURL = getBannerUrl();
               if (!bannerURL) return interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral });
-              return interaction.update({
-                embeds: [new EmbedBuilder()
-                  .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-                  .setTitle("Banner").setURL(bannerURL).setImage(bannerURL).setColor(colorRol).setTimestamp()],
-                components: [makeSelectRow(selectId, true, baseOptions)],
-              });
+              renderCurrent = (interactive = true) =>
+                buildUserImagePayload(user, {
+                  title: "Banner",
+                  imageUrl: bannerURL,
+                  color: colorRol,
+                  extraRows: interactive ? [makeSelectRow(selectId, true, baseOptions)] : [],
+                });
+              return interaction.update(renderCurrent(true));
             }
 
             if (selected === "roles" || selected === "permissions") {
@@ -433,16 +525,18 @@ const data = {
               let page = 0;
               const prevId = uniqueId(isRoles ? "roles_prev" : "perms_prev");
               const nextId = uniqueId(isRoles ? "roles_next" : "perms_next");
-              const buildPageEmbed = (pg) => isRoles
-                ? buildRolesEmbed(member, user, user.username, pages[pg], pg, pages.length)
-                : buildPermsEmbed(user, pages[pg], pg, pages.length, colorRol);
+              const buildPagePayload = (pg, { extraRows = [], interactive = true } = {}) =>
+                isRoles
+                  ? buildRolesPayload(member, user, user.username, pages[pg], pg, pages.length, { prevId, nextId, extraRows, interactive })
+                  : buildPermsPayload(user, pages[pg], pg, pages.length, colorRol, { prevId, nextId, extraRows, interactive });
 
-              await interaction.update({
-                embeds: [buildPageEmbed(page)],
-                components: pages.length > 1
-                  ? [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)]
-                  : [makeSelectRow(selectId, true, baseOptions)],
-              });
+              renderCurrent = (interactive = true, includePag = true) =>
+                buildPagePayload(page, {
+                  extraRows: interactive ? [makeSelectRow(selectId, true, baseOptions)] : [],
+                  interactive: interactive && includePag,
+                });
+
+              await interaction.update(renderCurrent(true, true));
               if (pages.length <= 1) return;
 
               const subCollector = reply.createMessageComponentCollector({
@@ -453,20 +547,24 @@ const data = {
               setSubCollector(selected, subCollector);
               subCollector.on("collect", async (i) => {
                 page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
-                await i.update({
-                  embeds: [buildPageEmbed(page)],
-                  components: [makeSelectRow(selectId, true, baseOptions), buildPaginationRow(prevId, nextId, page, pages.length)],
-                });
+                await i.update(renderCurrent(true, true));
               });
               subCollector.on("end", async (_c, reason) => {
-                if (reason === "time") reply.edit({ components: [makeSelectRow(selectId, true, baseOptions)] }).catch(() => {});
+                if (reason === "time") {
+                  renderCurrent = (interactive = true) =>
+                    buildPagePayload(page, {
+                      extraRows: interactive ? [makeSelectRow(selectId, true, baseOptions)] : [],
+                      interactive: false,
+                    });
+                  reply.edit(renderCurrent(true)).catch(() => {});
+                }
               });
             }
           });
 
-          collector.on("end", async () => {
+          collector.on("end", async (_c, reason) => {
             stopSubCollectors();
-            await reply.edit({ components: [] }).catch(() => {});
+            if (reason === "time") await reply.edit(renderCurrent(false)).catch(() => {});
           });
         } catch (err) {
           log.error("Error en user info", { err: err?.message ?? String(err) });
@@ -501,25 +599,25 @@ const data = {
           const hasDistinct = !!(member?.avatar && member.avatar !== user.avatar);
           const color = getMemberColor(member, member ? DARK : RED);
 
-          const buildEmbed = (type) => new EmbedBuilder()
-            .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-            .setTitle(hasDistinct ? (type === "server" ? "Avatar del servidor" : "Avatar global") : "Avatar")
-            .setURL(type === "server" ? serverAvatar : globalAvatar)
-            .setImage(type === "server" ? serverAvatar : globalAvatar)
-            .setColor(color).setTimestamp();
+          const buildAvatarPayload = (type, interactive = true) =>
+            buildUserImagePayload(user, {
+              title: hasDistinct ? (type === "server" ? "Avatar del servidor" : "Avatar global") : "Avatar",
+              imageUrl: type === "server" ? serverAvatar : globalAvatar,
+              color,
+              extraRows: interactive && hasDistinct
+                ? [new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId(selectId).setPlaceholder("Tipo de avatar...")
+                      .addOptions(
+                        new StringSelectMenuOptionBuilder().setLabel("Avatar del Servidor").setDescription("Avatar de servidor").setValue("server"),
+                        new StringSelectMenuOptionBuilder().setLabel("Avatar Global").setDescription("Avatar global").setValue("global")
+                      )
+                  )]
+                : [],
+            });
 
           const selectId = uniqueId("avatar_select");
-          const selectRow = hasDistinct
-            ? [new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId(selectId).setPlaceholder("Tipo de avatar...")
-                  .addOptions(
-                    new StringSelectMenuOptionBuilder().setLabel("Avatar del Servidor").setDescription("Avatar de servidor").setValue("server"),
-                    new StringSelectMenuOptionBuilder().setLabel("Avatar Global").setDescription("Avatar global").setValue("global")
-                  )
-              )]
-            : [];
-
-          const reply = await ctx.send({ embeds: [buildEmbed("server")], components: selectRow });
+          let currentType = "server";
+          const reply = await ctx.send(buildAvatarPayload(currentType, true));
           if (!hasDistinct) return;
 
           const collector = reply.createMessageComponentCollector({
@@ -529,13 +627,24 @@ const data = {
           });
 
           collector.on("collect", async (interaction) => {
+            const selectedType = interaction.values[0];
             if (interaction.user.id !== invoker.id) {
-              return interaction.reply({ embeds: [buildEmbed(interaction.values[0])], flags: MessageFlags.Ephemeral });
+              return interaction.reply(
+                buildUserImagePayload(user, {
+                  title: selectedType === "server" ? "Avatar del servidor" : "Avatar global",
+                  imageUrl: selectedType === "server" ? serverAvatar : globalAvatar,
+                  color,
+                  ephemeral: true,
+                })
+              );
             }
-            await interaction.update({ embeds: [buildEmbed(interaction.values[0])] });
+            currentType = selectedType;
+            await interaction.update(buildAvatarPayload(currentType, true));
           });
 
-          collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
+          collector.on("end", async (_c, reason) => {
+            if (reason === "time") await reply.edit(buildAvatarPayload(currentType, false)).catch(() => {});
+          });
         } catch (err) {
           log.error("Error en user avatar", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -572,27 +681,28 @@ const data = {
           const hasDistinct = !!(serverBannerURL && globalBannerURL && serverBannerURL !== globalBannerURL);
           const color = getMemberColor(member, member ? DARK : RED);
 
-          const buildEmbed = (type) => {
+          const selectId = uniqueId("banner_select");
+          const buildBannerPayload = (type, interactive = true) => {
             const isServer = type === "server";
             const url = isServer ? serverBannerURL : globalBannerURL;
-            return new EmbedBuilder()
-              .setAuthor({ name: user.username, iconURL: user.displayAvatarURL({ size: 128 }) })
-              .setTitle(hasDistinct ? (isServer ? "Banner del servidor" : "Banner global") : "Banner")
-              .setURL(url).setImage(url).setColor(color).setTimestamp();
+            return buildUserImagePayload(user, {
+              title: hasDistinct ? (isServer ? "Banner del servidor" : "Banner global") : "Banner",
+              imageUrl: url,
+              color,
+              extraRows: interactive && hasDistinct
+                ? [new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId(selectId).setPlaceholder("Tipo de banner...")
+                      .addOptions(
+                        new StringSelectMenuOptionBuilder().setLabel("Banner del Servidor").setDescription("Banner de servidor").setValue("server"),
+                        new StringSelectMenuOptionBuilder().setLabel("Banner Global").setDescription("Banner global").setValue("global")
+                      )
+                  )]
+                : [],
+            });
           };
 
-          const selectId = uniqueId("banner_select");
-          const selectRow = hasDistinct
-            ? [new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId(selectId).setPlaceholder("Tipo de banner...")
-                  .addOptions(
-                    new StringSelectMenuOptionBuilder().setLabel("Banner del Servidor").setDescription("Banner de servidor").setValue("server"),
-                    new StringSelectMenuOptionBuilder().setLabel("Banner Global").setDescription("Banner global").setValue("global")
-                  )
-              )]
-            : [];
-
-          const reply = await ctx.send({ embeds: [buildEmbed(serverBannerURL ? "server" : "global")], components: selectRow });
+          let currentType = serverBannerURL ? "server" : "global";
+          const reply = await ctx.send(buildBannerPayload(currentType, true));
           if (!hasDistinct) return;
 
           const collector = reply.createMessageComponentCollector({
@@ -602,13 +712,25 @@ const data = {
           });
 
           collector.on("collect", async (interaction) => {
+            const selectedType = interaction.values[0];
             if (interaction.user.id !== invoker.id) {
-              return interaction.reply({ embeds: [buildEmbed(interaction.values[0])], flags: MessageFlags.Ephemeral });
+              const isServer = selectedType === "server";
+              return interaction.reply(
+                buildUserImagePayload(user, {
+                  title: isServer ? "Banner del servidor" : "Banner global",
+                  imageUrl: isServer ? serverBannerURL : globalBannerURL,
+                  color,
+                  ephemeral: true,
+                })
+              );
             }
-            await interaction.update({ embeds: [buildEmbed(interaction.values[0])] });
+            currentType = selectedType;
+            await interaction.update(buildBannerPayload(currentType, true));
           });
 
-          collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
+          collector.on("end", async (_c, reason) => {
+            if (reason === "time") await reply.edit(buildBannerPayload(currentType, false)).catch(() => {});
+          });
         } catch (err) {
           log.error("Error en user banner", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -641,10 +763,9 @@ const data = {
           const prevId = uniqueId("roles_prev");
           const nextId = uniqueId("roles_next");
 
-          const reply = await ctx.send({
-            embeds: [buildRolesEmbed(member, user, user.username, pages[page], page, pages.length)],
-            components: pages.length > 1 ? [buildPaginationRow(prevId, nextId, page, pages.length)] : [],
-          });
+          const reply = await ctx.send(
+            buildRolesPayload(member, user, user.username, pages[page], page, pages.length, { prevId, nextId, interactive: true })
+          );
           if (pages.length <= 1) return;
 
           const collector = reply.createMessageComponentCollector({
@@ -655,13 +776,18 @@ const data = {
 
           collector.on("collect", async (i) => {
             page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
-            await i.update({
-              embeds: [buildRolesEmbed(member, user, user.username, pages[page], page, pages.length)],
-              components: [buildPaginationRow(prevId, nextId, page, pages.length)],
-            });
+            await i.update(
+              buildRolesPayload(member, user, user.username, pages[page], page, pages.length, { prevId, nextId, interactive: true })
+            );
           });
 
-          collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
+          collector.on("end", async (_c, reason) => {
+            if (reason === "time") {
+              await reply.edit(
+                buildRolesPayload(member, user, user.username, pages[page], page, pages.length, { interactive: false })
+              ).catch(() => {});
+            }
+          });
         } catch (err) {
           log.error("Error en user roles", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -692,10 +818,9 @@ const data = {
           const prevId = uniqueId("perms_prev");
           const nextId = uniqueId("perms_next");
 
-          const reply = await ctx.send({
-            embeds: [buildPermsEmbed(user, pages[page], page, pages.length, color)],
-            components: pages.length > 1 ? [buildPaginationRow(prevId, nextId, page, pages.length)] : [],
-          });
+          const reply = await ctx.send(
+            buildPermsPayload(user, pages[page], page, pages.length, color, { prevId, nextId, interactive: true })
+          );
           if (pages.length <= 1) return;
 
           const collector = reply.createMessageComponentCollector({
@@ -706,13 +831,18 @@ const data = {
 
           collector.on("collect", async (i) => {
             page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
-            await i.update({
-              embeds: [buildPermsEmbed(user, pages[page], page, pages.length, color)],
-              components: [buildPaginationRow(prevId, nextId, page, pages.length)],
-            });
+            await i.update(
+              buildPermsPayload(user, pages[page], page, pages.length, color, { prevId, nextId, interactive: true })
+            );
           });
 
-          collector.on("end", async () => reply.edit({ components: [] }).catch(() => {}));
+          collector.on("end", async (_c, reason) => {
+            if (reason === "time") {
+              await reply.edit(
+                buildPermsPayload(user, pages[page], page, pages.length, color, { interactive: false })
+              ).catch(() => {});
+            }
+          });
         } catch (err) {
           log.error("Error en user permissions", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -760,19 +890,18 @@ const data = {
           const color = getMemberColor(chosen, RED);
           const joinedTs = chosen.joinedTimestamp ? Math.floor(chosen.joinedTimestamp / 1000) : null;
 
-          const embed = new EmbedBuilder()
-            .setTitle("Usuario al azar")
-            .setThumbnail(chosen.displayAvatarURL({ size: 1024 }))
-            .setDescription(
+          const randomContainer = buildSimpleContainer({
+            title: "Usuario al azar",
+            body:
               `> **Seleccionado:** ${chosen} (\`${user.username}\`)\n` +
               `> **ID:** \`${user.id}\`` +
               (role ? `\n> **Rol filtrado:** ${role}` : "") +
-              (joinedTs ? `\n> **Ingreso:** <t:${joinedTs}:R>` : "")
-            )
-            .setColor(color)
-            .setTimestamp();
+              (joinedTs ? `\n> **Ingreso:** <t:${joinedTs}:R>` : ""),
+            thumbnailUrl: chosen.displayAvatarURL({ size: 1024 }),
+            color,
+          });
 
-          await ctx.send({ embeds: [embed] });
+          await ctx.send(buildV2Payload(randomContainer));
         } catch (err) {
           log.error("Error en user random", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);

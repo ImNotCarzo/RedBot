@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
+const { EmbedBuilder, MessageFlags, version: djsVersion } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
@@ -6,17 +6,29 @@ const { RED, GREEN } = require("../../src/config");
 const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
 const {
   Logger,
+  THINKING_TEXT,
   fetchWithTimeout,
   prepareReply,
   noGuildReply,
   handleCommandError,
-  sendThinkingReply,
   INVITE_URL,
   SUPPORT_URL,
   broadcastDm,
   buildDmAllEmbed,
   buildDmAllLogEmbed,
 } = require("../../src/runtime");
+const {
+  createContainer,
+  addHeaderSection,
+  addSeparator,
+  addTextBlock,
+  addLinkButtons,
+  addAttachmentFile,
+  clipV2Text,
+  buildSimpleContainer,
+  buildImageViewContainer,
+  buildV2Payload,
+} = require("../../src/v2");
 const { version: botVersion } = require("../../package.json");
 const { fetchPublic, readBodyLimited } = require("../../src/security");
 const { createReminder } = require("../../src/reminders");
@@ -51,21 +63,19 @@ const data = {
     async code(ctx) {
       try {
         const before  = Date.now();
-        const sent    = await sendThinkingReply(ctx);
+        const sent    = await ctx.send(buildV2Payload(buildSimpleContainer({ body: THINKING_TEXT, color: RED })));
         const msgPing = Date.now() - before;
         const apiPing = ctx.bot?.ws?.ping ?? 0;
 
-        await sent.edit({
-          content: "",
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Pong!")
-              .setDescription(
-                `> **Mensaje:** \`${msgPing}ms\`\n` +
-                `> **API:** \`${apiPing}ms\``)
-              .setColor(RED),
-          ],
-        });
+        await sent.edit(
+          buildV2Payload(
+            buildSimpleContainer({
+              title: "Pong!",
+              body: `> **Mensaje:** \`${msgPing}ms\`\n> **API:** \`${apiPing}ms\``,
+              color: RED,
+            })
+          )
+        );
       } catch (err) {
         log.error("[util ping]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -99,28 +109,32 @@ const data = {
         const users     = bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
         const createdAt = Math.floor(bot.user.createdTimestamp / 1000);
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setAuthor({ name: bot.user.username, iconURL: bot.user.displayAvatarURL() })
-              .setFields(
-                {
-                  name: "Básico",
-                  value: `> **ID:** \`${bot.user.id}\`\n> **Creación:** <t:${createdAt}:d>\n> **Versión:** \`${botVersion}\``,
-                },
-                {
-                  name: "Estadísticas",
-                  value: `> **Servidores:** \`${servers}\`\n> **Usuarios:** \`${users}\`\n> **Tiempo activo:** \`${formatUptime(bot.uptime)}\``,
-                },
-                {
-                  name: "Extra",
-                  value: `> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Gralonium:** \`v${graloniumVersion}\``,
-                },
-              )
-              .setColor(RED)
-              .setTimestamp(),
+        const botInfoContainer = createContainer(RED);
+        addHeaderSection(
+          botInfoContainer,
+          [
+            `## ${clipV2Text(bot.user.username, 100)}`,
+            `### Básico\n> **ID:** \`${bot.user.id}\`\n> **Creación:** <t:${createdAt}:d>\n> **Versión:** \`${botVersion}\``,
           ],
-        });
+          bot.user.displayAvatarURL({ size: 256 })
+        );
+        addSeparator(botInfoContainer);
+        addTextBlock(
+          botInfoContainer,
+          `### Estadísticas\n> **Servidores:** \`${servers}\`\n> **Usuarios:** \`${users}\`\n> **Tiempo activo:** \`${formatUptime(bot.uptime)}\``
+        );
+        addSeparator(botInfoContainer);
+        addTextBlock(
+          botInfoContainer,
+          `### Extra\n> **Creador:** \`carzo.\`\n> **Node.js:** \`${process.version}\`\n> **discord.js:** \`v${djsVersion}\`\n> **Gralonium:** \`v${graloniumVersion}\``
+        );
+        addSeparator(botInfoContainer);
+        addLinkButtons(botInfoContainer, [
+          { label: "Invitar", url: INVITE_URL },
+          { label: "Soporte", url: SUPPORT_URL },
+        ]);
+
+        await ctx.send(buildV2Payload(botInfoContainer));
       } catch (err) {
         log.error("[util botinfo]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -139,11 +153,17 @@ const data = {
 
     async code(ctx) {
       try {
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setLabel("Invitar").setStyle(ButtonStyle.Link).setURL(INVITE_URL),
-          new ButtonBuilder().setLabel("Soporte").setStyle(ButtonStyle.Link).setURL(SUPPORT_URL),
-        );
-        await ctx.send({ content: INVITE_URL, components: [row] });
+        const container = buildSimpleContainer({
+          title: ctx.bot?.user?.username ?? "RedBot",
+          body: "Invítame a tu servidor o únete al servidor de soporte usando los enlaces de abajo.",
+          thumbnailUrl: ctx.bot?.user?.displayAvatarURL?.({ size: 256 }) ?? null,
+          color: RED,
+          links: [
+            { label: "Invitar", url: INVITE_URL },
+            { label: "Soporte", url: SUPPORT_URL },
+          ],
+        });
+        await ctx.send(buildV2Payload(container));
       } catch (err) {
         log.error("[util invite]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -291,17 +311,16 @@ const data = {
           const ext = animated ? "gif" : "png";
           const url = `https://cdn.discordapp.com/emojis/${id}.${ext}?size=4096&quality=lossless`;
 
-          return ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle(`:${name}:`)
-                .setURL(url)
-                .setImage(url)
-                .setFooter({ text: `ID: ${id}` })
-                .setColor(RED)
-                .setTimestamp(),
-            ],
-          });
+          return ctx.send(
+            buildV2Payload(
+              buildImageViewContainer({
+                title: `:${name}:`,
+                imageUrl: url,
+                footer: `ID: ${id}`,
+                color: RED,
+              })
+            )
+          );
         }
 
         const chars = [...raw];
@@ -323,16 +342,15 @@ const data = {
 
         const highResUrl = `https://emojicdn.elk.sh/${encodeURIComponent(raw)}?style=twitter`;
 
-        return ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle(`Emoji ${raw}`)
-              .setURL(highResUrl)
-              .setImage(highResUrl)
-              .setColor(RED)
-              .setTimestamp(),
-          ],
-        });
+        return ctx.send(
+          buildV2Payload(
+            buildImageViewContainer({
+              title: `Emoji ${raw}`,
+              imageUrl: highResUrl,
+              color: RED,
+            })
+          )
+        );
       } catch (err) {
         log.error("[util jumbo]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -375,19 +393,16 @@ const data = {
       if (!traduccion)
         return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
 
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Traducción")
-            .setColor(RED)
-            .addFields(
-              { name: "Original",   value: texto.slice(0, 1024),      inline: false },
-              { name: "Traducción", value: traduccion.slice(0, 1024), inline: false },
-            )
-            .setFooter({ text: `${origen} → ${idioma}` })
-            .setTimestamp(),
-        ],
-      });
+      const translateContainer = createContainer(RED);
+      addTextBlock(translateContainer, "## Traducción");
+      addSeparator(translateContainer);
+      addTextBlock(
+        translateContainer,
+        `**Original:**\n${clipV2Text(texto, 1500)}\n\n**Traducción:**\n${clipV2Text(traduccion, 1800)}`
+      );
+      addTextBlock(translateContainer, `-# ${origen} → ${idioma}`, 210);
+
+      await reply(buildV2Payload(translateContainer));
     } catch (err) {
       log.error("[util translate]", { err: err?.message ?? String(err) });
       if (err.name === "TooManyRequestsError")
@@ -489,16 +504,15 @@ const data = {
         const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
         const texto = await generateVision(prompt, attachment.url);
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Descripción de imagen")
-              .setDescription(texto?.slice(0, 4000) ?? "No pude generar una descripción")
-              .setThumbnail(attachment.url)
-              .setColor(RED)
-              .setTimestamp(),
-          ],
+        const describeContainer = buildSimpleContainer({
+          title: "Descripción de imagen",
+          subtitle: attachment.name ?? "Imagen",
+          body: texto ?? "No pude generar una descripción",
+          thumbnailUrl: attachment.url,
+          color: RED,
         });
+
+        await reply(buildV2Payload(describeContainer));
       } catch (err) {
         log.error("[util describe]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -575,22 +589,21 @@ const data = {
 
         if (!texto) return reply({ content: "No se detectó voz inteligible en el archivo", flags: MessageFlags.Ephemeral });
 
-        if (texto.length > 3900) {
-          return reply({
-            content: "La transcripción es muy larga, se envió como archivo:",
-            files: [{ attachment: Buffer.from(texto, "utf-8"), name: "transcripcion.txt" }],
-          });
+        if (texto.length > 3850) {
+          const fileContainer = createContainer(RED);
+          addTextBlock(fileContainer, "## Transcripción\nLa transcripción es muy larga, se adjunta como archivo:");
+          const fileAtt = addAttachmentFile(fileContainer, Buffer.from(texto, "utf-8"), "transcripcion.txt");
+          return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
         }
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Transcripción")
-              .setDescription(texto)
-              .setColor(RED)
-              .setTimestamp(),
-          ],
+        const transcribeContainer = buildSimpleContainer({
+          title: "Transcripción",
+          subtitle: attachment.name ?? "Audio",
+          body: texto,
+          color: RED,
         });
+
+        await reply(buildV2Payload(transcribeContainer));
       } catch (err) {
         log.error("[util transcribe]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -710,15 +723,13 @@ const data = {
           `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
         );
 
-        await reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Resumen")
-              .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-              .setColor(RED)
-              .setTimestamp(),
-          ],
+        const resumenContainer = buildSimpleContainer({
+          title: "Resumen",
+          body: resumen ?? "No pude generar un resumen",
+          color: RED,
         });
+
+        await reply(buildV2Payload(resumenContainer));
       } catch (err) {
         log.error("[util resume]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -741,7 +752,7 @@ const pollCommand = {
     })
     .addString({
       name: "opciones",
-      description: "Opciones separadas por | (de 2 a 10)",
+      description: "Opciones separadas por / (de 2 a 10)",
       required: true,
     })
     .addString({
@@ -760,7 +771,7 @@ const pollCommand = {
     try {
       const pregunta = String(ctx.get("pregunta") ?? "").trim();
       const opciones = String(ctx.get("opciones") ?? "")
-        .split("|")
+        .split("/")
         .map((o) => o.trim())
         .filter(Boolean);
 
@@ -768,7 +779,7 @@ const pollCommand = {
         return ctx.send({ content: "La pregunta debe tener entre 1 y 300 caracteres", flags: MessageFlags.Ephemeral });
       }
       if (opciones.length < 2 || opciones.length > 10) {
-        return ctx.send({ content: "Debes dar entre 2 y 10 opciones separadas por `|`", flags: MessageFlags.Ephemeral });
+        return ctx.send({ content: "Debes dar entre 2 y 10 opciones separadas por `/`", flags: MessageFlags.Ephemeral });
       }
       if (opciones.some((o) => o.length > 55)) {
         return ctx.send({ content: "Cada opción puede tener como máximo 55 caracteres", flags: MessageFlags.Ephemeral });
@@ -898,23 +909,26 @@ const ocrCommand = {
         return reply({ content: "No se detectó texto legible en la imagen", flags: MessageFlags.Ephemeral });
       }
 
-      if (texto.length > 3900) {
-        return reply({
-          content: "El texto es muy largo, se envió como archivo:",
-          files: [{ attachment: Buffer.from(texto, "utf-8"), name: "texto.txt" }],
-        });
+      if (texto.length > 3850) {
+        const fileContainer = createContainer(RED);
+        addHeaderSection(
+          fileContainer,
+          ["## Texto extraído", "El texto es muy largo, se adjunta como archivo:"],
+          attachment.url
+        );
+        const fileAtt = addAttachmentFile(fileContainer, Buffer.from(texto, "utf-8"), "texto.txt");
+        return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
       }
 
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Texto extraído")
-            .setDescription(texto)
-            .setThumbnail(attachment.url)
-            .setColor(RED)
-            .setTimestamp(),
-        ],
+      const ocrContainer = buildSimpleContainer({
+        title: "Texto extraído",
+        subtitle: attachment.name ?? "Imagen",
+        body: texto,
+        thumbnailUrl: attachment.url,
+        color: RED,
       });
+
+      await reply(buildV2Payload(ocrContainer));
     } catch (err) {
       log.error("[util ocr]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);

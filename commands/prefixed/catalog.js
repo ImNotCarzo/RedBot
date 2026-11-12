@@ -216,7 +216,7 @@ const DEFINITIONS = [
 ];
 
 const EXTRA_DEFINITIONS = [
-  { name: "poll", description: "Crea una encuesta nativa", aliases: ["encuesta"], authorName: "Comando Poll", descriptionText: "**Usos:**\nCrea una encuesta nativa de Discord (2 a 10 opciones)\n\n**Aliases:**\n`encuesta`\n\n```js\n.poll <pregunta> | <opcion1> | <opcion2> ... [--horas N] [--multi]\nEjemplo: .poll Que cenamos | pizza | tacos | sushi --horas 12```" },
+  { name: "poll", description: "Crea una encuesta nativa", aliases: ["encuesta"], authorName: "Comando Poll", descriptionText: "**Usos:**\nCrea una encuesta nativa de Discord (2 a 10 opciones)\n\n**Aliases:**\n`encuesta`\n\n```js\n.poll <pregunta> / <opcion1> / <opcion2> ... [--horas N] [--multi]\nEjemplo: .poll Que cenamos / pizza / tacos / sushi --horas 12```" },
   { name: "remind", description: "Crea un recordatorio personal", aliases: ["recordar", "recordatorio", "reminder"], authorName: "Comando Remind", descriptionText: "**Usos:**\nTe recuerda algo por mensaje privado pasado un tiempo\n\n**Aliases:**\n`recordar`, `recordatorio`, `reminder`\n\n```js\n.remind <tiempo> <texto>\nEjemplo: .remind 2h sacar la basura```" },
   { name: "ocr", description: "Extrae el texto de una imagen", aliases: ["leer", "extraer"], authorName: "Comando OCR", descriptionText: "**Usos:**\nExtrae el texto visible de una imagen\n\n**Aliases:**\n`leer`, `extraer`\n\n```js\n.ocr <adjunto | url>\nEjemplo: .ocr <Subeunaimagenwe.png>```" },
   { name: "recap", description: "Resume los últimos mensajes del canal", aliases: ["resumen", "tldr"], authorName: "Comando Recap", descriptionText: "**Usos:**\nResume la conversación reciente del canal (10 a 100 mensajes)\n\n**Aliases:**\n`resumen`, `tldr`\n\n```js\n.recap [cantidad]\nEjemplo: .recap 50```" },

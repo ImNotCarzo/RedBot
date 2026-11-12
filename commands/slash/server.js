@@ -1,54 +1,74 @@
 const { GroupBuilder, CommandBuilder } = require("gralonium");
 const {
   ActionRowBuilder,
-  EmbedBuilder,
+  SeparatorSpacingSize,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { Logger, clampPage, paginateArray, noGuildReply, buildPagRow, uniqueId, handleCommandError } = require("../../src/runtime");
+const { Logger, clampPage, paginateArray, noGuildReply, uniqueId, handleCommandError } = require("../../src/runtime");
 const { RED } = require("../../src/config");
+const {
+  createContainer,
+  addHeaderSection,
+  addSeparator,
+  addTextBlock,
+  clipV2Text,
+  buildImageViewContainer,
+  buildPaginatedListContainer,
+  buildV2Payload,
+} = require("../../src/v2");
 
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
 const log = new Logger("CMD_SERVER", process.env.LOG_LEVEL);
 
-function getServerView(guild, selected) {
+function getServerViewPayload(guild, selected, extraRows = [], { ephemeral = false } = {}) {
   if (selected === "logo") {
     if (!guild.iconURL()) return { error: "Este servidor no tiene logo" };
     const url = guild.iconURL({ size: 4096, extension: "png" });
     return {
-      embed: new EmbedBuilder()
-        .setTitle(`Logo de ${guild.name}`)
-        .setURL(url)
-        .setImage(url)
-        .setColor(RED)
-        .setTimestamp(),
+      payload: buildV2Payload(
+        buildImageViewContainer({
+          title: `Logo de ${guild.name}`,
+          imageUrl: url,
+          color: RED,
+          extraRows,
+        }),
+        { ephemeral }
+      ),
     };
   }
   if (selected === "banner") {
     const bannerURL = guild.bannerURL({ size: 4096, extension: "png" });
     if (!bannerURL) return { error: "Este servidor no tiene banner" };
     return {
-      embed: new EmbedBuilder()
-        .setTitle(`Banner de ${guild.name}`)
-        .setURL(bannerURL)
-        .setImage(bannerURL)
-        .setColor(RED)
-        .setTimestamp(),
+      payload: buildV2Payload(
+        buildImageViewContainer({
+          title: `Banner de ${guild.name}`,
+          imageUrl: bannerURL,
+          color: RED,
+          extraRows,
+        }),
+        { ephemeral }
+      ),
     };
   }
   if (selected === "emojis") {
     const emojis = guild.emojis.cache.map((e) => e.toString());
     if (!emojis.length) return { error: "Este servidor no tiene emojis" };
-    const desc = emojis.reduce((acc, cur) => (acc.length + cur.length + 1 > 4000 ? acc : acc + (acc ? " " : "") + cur), "");
-    return {
-      embed: new EmbedBuilder()
-        .setTitle(`Emojis de ${guild.name} (${emojis.length})`)
-        .setDescription(desc)
-        .setColor(RED)
-        .setTimestamp(),
-    };
+    const desc = emojis.reduce((acc, cur) => (acc.length + cur.length + 1 > 3750 ? acc : acc + (acc ? " " : "") + cur), "");
+    const container = createContainer(RED);
+    addTextBlock(container, `## Emojis de ${clipV2Text(guild.name, 100)} (${emojis.length})`);
+    addSeparator(container);
+    addTextBlock(container, desc);
+    if (extraRows.length) {
+      addSeparator(container, SeparatorSpacingSize.Small, false);
+      for (const row of extraRows) {
+        if (row) container.addActionRowComponents(row);
+      }
+    }
+    return { payload: buildV2Payload(container, { ephemeral }) };
   }
   return null;
 }
@@ -60,13 +80,59 @@ function getSortedServerRoles(guild) {
     .map((r) => `<@&${r.id}>`);
 }
 
-function buildServerRolesEmbed(guild, roles, pages, page) {
-  return new EmbedBuilder()
-    .setTitle(`Roles de ${guild.name} (${page + 1}/${pages.length})`)
-    .setDescription(pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`).join("\n"))
-    .setColor(RED)
-    .setFooter({ text: `${roles.length} roles en total` })
-    .setTimestamp();
+function buildServerRolesPayload(guild, roles, pages, page, { prevId = null, nextId = null, extraRows = [], interactive = true, ephemeral = false } = {}) {
+  const container = buildPaginatedListContainer({
+    title: `Roles de ${guild.name} (${page + 1}/${pages.length})`,
+    lines: pages[page].map((r, i) => `${page * 15 + i + 1}. ${r}`),
+    footer: `${roles.length} roles en total`,
+    thumbnailUrl: guild.iconURL({ size: 256, extension: "png" }),
+    color: RED,
+    page,
+    totalPages: pages.length,
+    prevId,
+    nextId,
+    extraRows,
+    interactive,
+  });
+  return buildV2Payload(container, { ephemeral });
+}
+
+function buildServerInfoPayload(guild, owner, { extraRows = [], ephemeral = false } = {}) {
+  const createdTs = Math.floor(guild.createdTimestamp / 1000);
+  const roleCount = guild.roles.cache.filter((r) => r.id !== guild.id).size;
+
+  const generalLines =
+    `> **ID:** \`${guild.id}\`\n` +
+    `> **Dueño:** ${owner ? owner.user.username : "No disponible"}\n` +
+    `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)` +
+    (guild.vanityURLCode ? `\n> **Tag:** \`${guild.vanityURLCode}\`` : "");
+
+  const statsLines =
+    `> **Miembros:** \`${guild.memberCount}\`\n` +
+    `> **Canales:** \`${guild.channels.cache.size}\`\n` +
+    `> **Roles:** \`${roleCount}\`\n` +
+    `> **Emojis:** \`${guild.emojis.cache.size}\`\n` +
+    `> **Boost:** \`${guild.premiumSubscriptionCount} (Nivel ${guild.premiumTier})\``;
+
+  const securityLines = `> **Verificación:** \`${VERIFICATION_LEVELS[guild.verificationLevel] ?? guild.verificationLevel}\``;
+
+  const container = createContainer(RED);
+  addHeaderSection(
+    container,
+    [`## ${clipV2Text(guild.name, 100)}`, `### General\n${generalLines}`],
+    guild.iconURL({ size: 1024, extension: "png" })
+  );
+  addSeparator(container);
+  addTextBlock(container, `### Estadísticas\n${statsLines}\n\n### Seguridad\n${securityLines}`);
+
+  if (extraRows.length) {
+    addSeparator(container, SeparatorSpacingSize.Small, false);
+    for (const row of extraRows) {
+      if (row) container.addActionRowComponents(row);
+    }
+  }
+
+  return buildV2Payload(container, { ephemeral });
 }
 
 function createServerViewCommand(name, description) {
@@ -78,10 +144,10 @@ function createServerViewCommand(name, description) {
         const guild = ctx.guild;
         if (!guild) return noGuildReply(ctx);
 
-        const view = getServerView(guild, name);
+        const view = getServerViewPayload(guild, name);
         if (view.error) return ctx.send(view.error);
 
-        await ctx.send({ embeds: [view.embed] });
+        await ctx.send(view.payload);
       } catch (err) {
         log.error(`Error en server ${name}`, { err: err?.message ?? String(err) });
         return handleCommandError(ctx, err);
@@ -110,37 +176,6 @@ const data = {
           if (!guild) return noGuildReply(ctx);
 
           const owner = await guild.fetchOwner().catch(() => null);
-          const createdTs = Math.floor(guild.createdTimestamp / 1000);
-          const roleCount = guild.roles.cache.filter((r) => r.id !== guild.id).size;
-
-          const infoEmbed = new EmbedBuilder()
-            .setTitle(guild.name)
-            .setThumbnail(guild.iconURL({ size: 1024, extension: "png" }))
-            .setColor(RED)
-            .addFields(
-              {
-                name: "General",
-                value:
-                  `> **ID:** \`${guild.id}\`\n` +
-                  `> **Dueño:** ${owner ? owner.user.username : "No disponible"}\n` +
-                  `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)\n` +
-                  (guild.vanityURLCode ? `> **Tag:** \`${guild.vanityURLCode}\`\n` : ""),
-              },
-              {
-                name: "Estadísticas",
-                value:
-                  `> **Miembros:** \`${guild.memberCount}\`\n` +
-                  `> **Canales:** \`${guild.channels.cache.size}\`\n` +
-                  `> **Roles:** \`${roleCount}\`\n` +
-                  `> **Emojis:** \`${guild.emojis.cache.size}\`\n` +
-                  `> **Boost:** \`${guild.premiumSubscriptionCount} (Nivel ${guild.premiumTier})\``,
-              },
-              {
-                name: "Seguridad",
-                value: `> **Verificación:** \`${VERIFICATION_LEVELS[guild.verificationLevel] ?? guild.verificationLevel}\``,
-              }
-            )
-            .setTimestamp();
 
           const baseOptions = [
             { label: "Logo", value: "logo", description: "Logo del servidor" },
@@ -166,7 +201,10 @@ const data = {
                 )
             );
 
-          const reply = await ctx.send({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
+          let renderCurrent = (interactive = true) =>
+            buildServerInfoPayload(guild, owner, { extraRows: interactive ? [buildSelectRow(false)] : [] });
+
+          const reply = await ctx.send(renderCurrent(true));
           const authorId = ctx.user?.id ?? ctx.author?.id;
           let rolesPageCollector = null;
 
@@ -186,21 +224,30 @@ const data = {
             const selected = interaction.values?.[0];
             if (!selected) return;
 
-            if (rolesPageCollector) {
+            if (isAuthor && rolesPageCollector) {
               rolesPageCollector.stop();
               rolesPageCollector = null;
             }
 
             if (selected === "info") {
-              if (!isAuthor) return interaction.reply({ embeds: [infoEmbed], flags: MessageFlags.Ephemeral });
-              return interaction.update({ embeds: [infoEmbed], components: [buildSelectRow(false)] });
+              if (!isAuthor) return interaction.reply(buildServerInfoPayload(guild, owner, { ephemeral: true }));
+              renderCurrent = (interactive = true) =>
+                buildServerInfoPayload(guild, owner, { extraRows: interactive ? [buildSelectRow(false)] : [] });
+              return interaction.update(renderCurrent(true));
             }
 
-            const view = getServerView(guild, selected);
-            if (view) {
-              if (view.error) return interaction.reply({ content: view.error, flags: MessageFlags.Ephemeral });
-              if (!isAuthor) return interaction.reply({ embeds: [view.embed], flags: MessageFlags.Ephemeral });
-              return interaction.update({ embeds: [view.embed], components: [buildSelectRow(true)] });
+            const ephemView = !isAuthor ? getServerViewPayload(guild, selected, [], { ephemeral: true }) : null;
+            if (!isAuthor && ephemView) {
+              if (ephemView.error) return interaction.reply({ content: ephemView.error, flags: MessageFlags.Ephemeral });
+              return interaction.reply(ephemView.payload);
+            }
+
+            const checkView = getServerViewPayload(guild, selected, [buildSelectRow(true)]);
+            if (checkView) {
+              if (checkView.error) return interaction.reply({ content: checkView.error, flags: MessageFlags.Ephemeral });
+              renderCurrent = (interactive = true) =>
+                getServerViewPayload(guild, selected, interactive ? [buildSelectRow(true)] : []).payload;
+              return interaction.update(renderCurrent(true));
             }
 
             if (selected === "roles") {
@@ -211,16 +258,20 @@ const data = {
               let page = 0;
 
               if (!isAuthor) {
-                return interaction.reply({
-                  embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
-                  flags: MessageFlags.Ephemeral,
-                });
+                return interaction.reply(
+                  buildServerRolesPayload(guild, roles, pages, page, { interactive: false, ephemeral: true })
+                );
               }
 
-              await interaction.update({
-                embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
-                components: pages.length > 1 ? [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)] : [buildSelectRow(true)],
-              });
+              renderCurrent = (interactive = true, includePag = true) =>
+                buildServerRolesPayload(guild, roles, pages, page, {
+                  prevId,
+                  nextId,
+                  extraRows: interactive ? [buildSelectRow(true)] : [],
+                  interactive: interactive && includePag,
+                });
+
+              await interaction.update(renderCurrent(true, true));
 
               if (pages.length <= 1) return;
 
@@ -234,21 +285,25 @@ const data = {
                 if (i.customId === prevId) page--;
                 if (i.customId === nextId) page++;
                 page = clampPage(page, pages.length);
-                await i.update({
-                  embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
-                  components: [buildSelectRow(true), buildPagRow(prevId, nextId, page, pages.length)],
-                });
+                await i.update(renderCurrent(true, true));
               });
 
-              rolesPageCollector.on("end", async () => {
-                await reply.edit({ components: [buildSelectRow(true)] }).catch(() => {});
+              rolesPageCollector.on("end", async (_c, reason) => {
+                if (reason === "time") {
+                  renderCurrent = (interactive = true) =>
+                    buildServerRolesPayload(guild, roles, pages, page, {
+                      extraRows: interactive ? [buildSelectRow(true)] : [],
+                      interactive: false,
+                    });
+                  await reply.edit(renderCurrent(true)).catch(() => {});
+                }
               });
             }
           });
 
-          collector.on("end", async () => {
+          collector.on("end", async (_c, reason) => {
             if (rolesPageCollector) rolesPageCollector.stop();
-            await reply.edit({ components: [] }).catch(() => {});
+            if (reason === "time") await reply.edit(renderCurrent(false)).catch(() => {});
           });
         } catch (err) {
           log.error("Error en server info", { err: err?.message ?? String(err) });
@@ -280,10 +335,9 @@ const data = {
           const prevId = uniqueId("srv_roles_prev");
           const nextId = uniqueId("srv_roles_next");
 
-          const reply = await ctx.send({
-            embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
-            components: pages.length > 1 ? [buildPagRow(prevId, nextId, page, pages.length)] : [],
-          });
+          const reply = await ctx.send(
+            buildServerRolesPayload(guild, roles, pages, page, { prevId, nextId, interactive: true })
+          );
 
           if (pages.length <= 1) return;
 
@@ -300,14 +354,17 @@ const data = {
             if (interaction.customId === prevId) page--;
             if (interaction.customId === nextId) page++;
             page = clampPage(page, pages.length);
-            await interaction.update({
-              embeds: [buildServerRolesEmbed(guild, roles, pages, page)],
-              components: [buildPagRow(prevId, nextId, page, pages.length)],
-            });
+            await interaction.update(
+              buildServerRolesPayload(guild, roles, pages, page, { prevId, nextId, interactive: true })
+            );
           });
 
-          collector.on("end", async () => {
-            await reply.edit({ components: [] }).catch(() => {});
+          collector.on("end", async (_c, reason) => {
+            if (reason === "time") {
+              await reply.edit(
+                buildServerRolesPayload(guild, roles, pages, page, { interactive: false })
+              ).catch(() => {});
+            }
           });
         } catch (err) {
           log.error("Error en server roles", { err: err?.message ?? String(err) });

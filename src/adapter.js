@@ -204,9 +204,9 @@ function parsePollArgs(rawArgs) {
     text = text.replace(multi[0], " ");
   }
 
-  const parts = text.split("|").map((s) => s.trim()).filter(Boolean);
+  const parts = text.split("/").map((s) => s.trim()).filter(Boolean);
   const pregunta = parts.shift() ?? null;
-  const opciones = parts.length ? parts.join("|") : null;
+  const opciones = parts.length ? parts.join("/") : null;
 
   return {
     values: { pregunta, opciones, duracion, multiple },

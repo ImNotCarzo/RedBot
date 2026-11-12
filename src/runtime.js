@@ -328,7 +328,7 @@ async function prepareReply(ctx, { thinking = false } = {}) {
       const isV2 = body?.flags != null && (Number(body.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
       if (isV2) {
         try {
-          return await ctx.interaction.editReply({ content: null, embeds: [], ...body });
+          return await ctx.interaction.editReply(body);
         } catch {
           await ctx.interaction.deleteReply().catch(() => {});
           return ctx.interaction.followUp(body);

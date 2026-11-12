@@ -5,6 +5,15 @@ const { sendLog } = require("../../src/guild");
 const { Logger, noGuildReply, uniqueId, handleCommandError, failWith, prepareReply } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
+const {
+  createContainer,
+  addHeaderSection,
+  addSeparator,
+  addTextBlock,
+  clipV2Text,
+  buildSimpleContainer,
+  buildV2Payload,
+} = require("../../src/v2");
 
 const log = new Logger("CMD_CHANNEL", process.env.LOG_LEVEL);
 
@@ -157,31 +166,26 @@ const data = {
 
           const createdTs = Math.floor(channel.createdTimestamp / 1000);
           const type = CHANNEL_TYPES[channel.type] ?? "Desconocido";
+          const generalLines =
+            `> **ID:** \`${channel.id}\`\n` +
+            (channel.topic ? `> **Tema:** ${clipV2Text(channel.topic, 1024)}\n` : "") +
+            `> **Posición:** \`${channel.position ?? "No disponible"}\`\n` +
+            `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)`;
+          const configLines =
+            `> **Tipo:** \`${type}\`\n` +
+            `> **Slowmode:** \`${formatSlowmode(channel.rateLimitPerUser ?? 0)}\`\n` +
+            `> **NSFW:** \`${channel.nsfw ? "Sí" : "No"}\``;
 
-          const infoEmbed = new EmbedBuilder()
-            .setTitle(`#${channel.name}`)
-            .setThumbnail(guild?.iconURL({ size: 1024, extension: "png" }))
-            .setColor(RED)
-            .addFields(
-              {
-                name: "General",
-                value:
-                  `> **ID:** \`${channel.id}\`\n` +
-                  (channel.topic ? `> **Tema:** ${channel.topic}\n` : "") +
-                  `> **Posición:** \`${channel.position ?? "No disponible"}\`\n` +
-                  `> **Creación:** <t:${createdTs}:F> (<t:${createdTs}:R>)`,
-              },
-              {
-                name: "Configuración",
-                value:
-                  `> **Tipo:** \`${type}\`\n` +
-                  `> **Slowmode:** \`${formatSlowmode(channel.rateLimitPerUser ?? 0)}\`\n` +
-                  `> **NSFW:** \`${channel.nsfw ? "Sí" : "No"}\``,
-              }
-            )
-            .setTimestamp();
+          const infoContainer = createContainer(RED);
+          addHeaderSection(
+            infoContainer,
+            [`## #${clipV2Text(channel.name, 100)}`, `### General\n${generalLines}`],
+            guild?.iconURL({ size: 1024, extension: "png" })
+          );
+          addSeparator(infoContainer);
+          addTextBlock(infoContainer, `### Configuración\n${configLines}`);
 
-          await ctx.send({ embeds: [infoEmbed] });
+          await ctx.send(buildV2Payload(infoContainer));
         } catch (err) {
           log.error("Error en channel info", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -552,16 +556,14 @@ const recapCommand = {
 
       const resumen = await generateText(prompt);
 
-      await reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`Resumen de #${ctx.channel.name}`)
-            .setDescription(resumen?.slice(0, 4000) ?? "No pude generar un resumen")
-            .setColor(RED)
-            .setFooter({ text: `${lines.length} mensajes analizados` })
-            .setTimestamp(),
-        ],
+      const container = buildSimpleContainer({
+        title: `Resumen de #${ctx.channel.name}`,
+        body: resumen ?? "No pude generar un resumen",
+        footer: `${lines.length} mensajes analizados`,
+        color: RED,
       });
+
+      await reply(buildV2Payload(container));
     } catch (err) {
       log.error("Error en channel recap", { err: err?.message ?? String(err) });
       if (err?.code === 50013 || err?.code === 50001) {

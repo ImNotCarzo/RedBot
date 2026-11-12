@@ -139,7 +139,7 @@ const getBaseCommands = () => ({
 
 const getCommands = () => {
   const commands = getBaseCommands();
-  commands.utilidad.poll   = { short: "poll",   slash: "util poll",   id: IDS.util(),    usage: ".poll <pregunta> | <op1> | <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
+  commands.utilidad.poll   = { short: "poll",   slash: "util poll",   id: IDS.util(),    usage: ".poll <pregunta> / <op1> / <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
   commands.utilidad.remind = { short: "remind", slash: "util remind", id: IDS.util(),    usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." };
   commands.utilidad.ocr    = { short: "ocr",    slash: "util ocr",    id: IDS.util(),    usage: ".ocr <url | adjunto>",             aliases: ["leer", "extraer"],                      description: "Extrae el texto de una imagen." };
   commands.canal.recap     = { short: "recap",  slash: "channel recap", id: IDS.channel(), usage: ".recap [cantidad]",              aliases: ["resumen", "tldr"],                      description: "Resume los últimos mensajes del canal." };
