@@ -1,10 +1,12 @@
 const {
+  EmbedBuilder,
   PermissionFlagsBits,
   ModalBuilder,
   LabelBuilder,
   TextInputBuilder,
   TextInputStyle,
   FileUploadBuilder,
+  Routes,
 } = require("discord.js");
 const {
   GroupBuilder,
@@ -22,7 +24,6 @@ const {
   handleCommandError,
   createListPaginator,
   formatSortedRoles,
-  buildActionCard,
   failWith,
 } = require("../../src/runtime");
 const { RED, GREEN } = require("../../src/config");
@@ -77,7 +78,8 @@ async function fetchBotImageBuffer(attachment, label) {
     return { error: `La imagen de **${label}** no puede superar los 8MB` };
   }
 
-  return { buffer: body.buffer };
+  const mimeType = resType || attachment.contentType?.split(";")[0].trim().toLowerCase() || "image/png";
+  return { buffer: body.buffer, mimeType };
 }
 
 function mapCustomBotApiError(err) {
@@ -95,35 +97,74 @@ async function fetchMeSafely(guild) {
   return guild.members.fetchMe({ force: true }).catch(() => guild.members.me ?? null);
 }
 
-function buildCustomBotResultCard({ updatedMe, title, changes, bioText = undefined, moderatorTag }) {
-  const fields = [
-    ["Cambios", changes.map((c) => V2Text.code(c)).join(", ")],
-    ["Apodo", V2Text.code(updatedMe?.nickname ?? "Por defecto")],
-  ];
-  if (bioText !== undefined) {
-    fields.push(["Biografía", bioText === null ? V2Text.code("Por defecto") : V2Text.clip(bioText, 190)]);
+async function patchGuildBotProfile(guild, payload, reason) {
+  if (typeof guild.client?.rest?.patch === "function") {
+    const restBody = { ...payload };
+    if (Buffer.isBuffer(restBody.avatar?.buffer)) {
+      restBody.avatar = `data:${restBody.avatar.mimeType};base64,${restBody.avatar.buffer.toString("base64")}`;
+    }
+    if (Buffer.isBuffer(restBody.banner?.buffer)) {
+      restBody.banner = `data:${restBody.banner.mimeType};base64,${restBody.banner.buffer.toString("base64")}`;
+    }
+    const rawMember = await guild.client.rest.patch(Routes.guildMember(guild.id, "@me"), {
+      body: restBody,
+      reason,
+    });
+    const updatedMe = await fetchMeSafely(guild);
+    return { updatedMe, bio: rawMember?.bio ?? undefined };
   }
 
-  const card = buildActionCard({
-    title,
-    thumbnail: updatedMe?.displayAvatarURL?.({ size: 256, extension: "png" }) ?? null,
-    fields,
-    moderator: moderatorTag,
-    color: GREEN,
-  });
+  const editPayload = { ...payload };
+  if (Buffer.isBuffer(editPayload.avatar?.buffer)) editPayload.avatar = editPayload.avatar.buffer;
+  if (Buffer.isBuffer(editPayload.banner?.buffer)) editPayload.banner = editPayload.banner.buffer;
+  await guild.members.editMe({ ...editPayload, reason });
+  const updatedMe = await fetchMeSafely(guild);
+  return { updatedMe, bio: undefined };
+}
 
-  const bannerUrl = updatedMe?.displayBannerURL?.({ size: 1024, extension: "png" }) ?? null;
-  if (bannerUrl && changes.some((c) => c === "Banner" || c.startsWith("Todo"))) {
-    card.addGallery(bannerUrl);
+function buildCustomBotEmbed({ updatedMe, bioValue = null, moderator }) {
+  const serverAvatarUrl = updatedMe?.avatarURL?.({ size: 512, extension: "png" }) ?? null;
+  const serverBannerUrl = updatedMe?.bannerURL?.({ size: 1024, extension: "png" }) ?? null;
+  const displayAvatar = updatedMe?.displayAvatarURL?.({ size: 512, extension: "png" }) ?? null;
+  const displayBanner = updatedMe?.displayBannerURL?.({ size: 1024, extension: "png" }) ?? null;
+
+  const avatarLabel = updatedMe?.avatar
+    ? (serverAvatarUrl ? `[Nuevo](${serverAvatarUrl})` : "Nuevo")
+    : "Por Defecto";
+  const nickLabel = updatedMe?.nickname ? updatedMe.nickname : "Por Defecto";
+  const bannerLabel = updatedMe?.banner
+    ? (serverBannerUrl ? `[Nuevo](${serverBannerUrl})` : "Nuevo")
+    : "Por Defecto";
+  const bioLabel = bioValue ? V2Text.clip(bioValue, 190) : "Por Defecto";
+
+  const embed = new EmbedBuilder()
+    .setTitle("Cambios aplicados")
+    .setColor(GREEN)
+    .setDescription(
+      [
+        `Avatar: ${avatarLabel}`,
+        `Apodo: ${nickLabel}`,
+        `Banner: ${bannerLabel}`,
+        `Biografia: ${bioLabel}`,
+      ].join("\n")
+    );
+
+  if (displayAvatar) embed.setThumbnail(displayAvatar);
+  if (displayBanner) embed.setImage(displayBanner);
+  if (moderator) {
+    embed.setFooter({
+      text: moderator.globalName || moderator.username || moderator.tag,
+      iconURL: moderator.displayAvatarURL({ size: 128 }),
+    });
   }
 
-  return card;
+  return embed;
 }
 
 function buildCustomBotStatusCard(me, guild, { isEnded = false, controls = null } = {}) {
   const builder = new ComponentsV2Builder({ color: RED }).addSection(
     [
-      V2Text.heading("Personalización del bot", 3),
+      V2Text.heading("Perfil en el servidor", 3),
       V2Text.subtext(guild.name, 120),
     ],
     {
@@ -157,7 +198,7 @@ function buildCustomBotStatusCard(me, guild, { isEnded = false, controls = null 
 function buildCustomBotModal(modalId) {
   return new ModalBuilder()
     .setCustomId(modalId)
-    .setTitle("Personalizar bot en el servidor")
+    .setTitle("Perfil en el servidor")
     .addLabelComponents(
       new LabelBuilder()
         .setLabel("Apodo")
@@ -214,11 +255,11 @@ async function applyCustomBotChanges({ guild, moderator, avatarAttachment, banne
   const payload = {};
   const changes = [];
   if (avatarRes.buffer) {
-    payload.avatar = avatarRes.buffer;
+    payload.avatar = { buffer: avatarRes.buffer, mimeType: avatarRes.mimeType };
     changes.push("Avatar");
   }
   if (bannerRes.buffer) {
-    payload.banner = bannerRes.buffer;
+    payload.banner = { buffer: bannerRes.buffer, mimeType: bannerRes.mimeType };
     changes.push("Banner");
   }
   if (apodo !== undefined) {
@@ -234,18 +275,15 @@ async function applyCustomBotChanges({ guild, moderator, avatarAttachment, banne
     return { error: "Debes proporcionar al menos una opción para actualizar" };
   }
 
-  await guild.members.editMe({
-    ...payload,
-    reason: `Perfil personalizado por ${moderator.tag}`,
-  });
-
-  const updatedMe = await fetchMeSafely(guild);
-  const card = buildCustomBotResultCard({
+  const { updatedMe, bio } = await patchGuildBotProfile(
+    guild,
+    payload,
+    `Perfil personalizado por ${moderator.tag}`
+  );
+  const embed = buildCustomBotEmbed({
     updatedMe,
-    title: "Perfil del bot actualizado",
-    changes,
-    bioText: biografia,
-    moderatorTag: moderator.tag,
+    bioValue: biografia !== undefined ? biografia : bio,
+    moderator,
   });
 
   await logAction(guild, {
@@ -259,7 +297,7 @@ async function applyCustomBotChanges({ guild, moderator, avatarAttachment, banne
     ],
   });
 
-  return { card };
+  return { embed };
 }
 
 async function applyCustomBotReset({ guild, moderator, rawScope = null }) {
@@ -294,19 +332,16 @@ async function applyCustomBotReset({ guild, moderator, rawScope = null }) {
     payload.nick = null;
   }
 
-  await guild.members.editMe({
-    ...payload,
-    reason: `Perfil restablecido (${normalized}) por ${moderator.tag}`,
-  });
-
-  const updatedMe = await fetchMeSafely(guild);
+  const { updatedMe, bio } = await patchGuildBotProfile(
+    guild,
+    payload,
+    `Perfil restablecido (${normalized}) por ${moderator.tag}`
+  );
   const label = RESET_SCOPE_LABELS[normalized];
-  const card = buildCustomBotResultCard({
+  const embed = buildCustomBotEmbed({
     updatedMe,
-    title: "Perfil del bot restablecido",
-    changes: [label],
-    bioText: normalized === "todo" || normalized === "biografia" ? null : undefined,
-    moderatorTag: moderator.tag,
+    bioValue: normalized === "todo" || normalized === "biografia" ? null : bio,
+    moderator,
   });
 
   await logAction(guild, {
@@ -318,7 +353,7 @@ async function applyCustomBotReset({ guild, moderator, rawScope = null }) {
     ],
   });
 
-  return { card };
+  return { embed };
 }
 
 async function sendCustomBotPanel(ctx) {
@@ -332,9 +367,8 @@ async function sendCustomBotPanel(ctx) {
     thirdPartyMode: "reject",
     thirdPartyMessage: "No puedes usar este menú",
     onEnd: "static",
-    state: { me, resultCard: null },
+    state: { me },
     render: ({ state, view: activeView, isEnded }) => {
-      if (state.resultCard) return state.resultCard;
       const controls = isEnded
         ? null
         : [
@@ -343,9 +377,9 @@ async function sendCustomBotPanel(ctx) {
           ];
       return buildCustomBotStatusCard(state.me, guild, { isEnded, controls });
     },
-    renderStatic: ({ state }) => state.resultCard ?? buildCustomBotStatusCard(state.me, guild, { isEnded: true }),
+    renderStatic: ({ state }) => buildCustomBotStatusCard(state.me, guild, { isEnded: true }),
     actions: {
-      editar: async ({ interaction, setState, view: activeView }) => {
+      editar: async ({ interaction, view: activeView }) => {
         const modalId = activeView.id("modal", Date.now().toString(36));
         await interaction.showModal(buildCustomBotModal(modalId));
 
@@ -367,7 +401,7 @@ async function sendCustomBotPanel(ctx) {
           return false;
         }
 
-        await submitted.deferReply({ flags: MessageFlags.Ephemeral });
+        await submitted.deferReply();
 
         try {
           const res = await applyCustomBotChanges({
@@ -379,25 +413,23 @@ async function sendCustomBotPanel(ctx) {
             biografia: rawBio || undefined,
           });
           if (res.error) {
-            await submitted.editReply({ content: res.error }).catch(() => {});
+            await submitted.deleteReply().catch(() => {});
+            await submitted.followUp({ content: res.error, flags: MessageFlags.Ephemeral }).catch(() => {});
             return false;
           }
 
-          setState({ resultCard: res.card });
-          if (activeView.isEnded) {
-            await activeView.message?.edit?.(res.card.toPayload()).catch(() => {});
-          } else {
-            activeView.stop("updated");
-          }
-          await submitted.editReply({ content: "Perfil del bot actualizado en este servidor." }).catch(() => {});
+          await activeView.message?.delete?.().catch(() => {});
+          activeView.stop("deleted");
+          await submitted.editReply({ embeds: [res.embed] }).catch(() => {});
         } catch (err) {
           log.error("Error en modal custombot", { err: err?.message ?? String(err) });
           const friendly = mapCustomBotApiError(err) ?? "No se pudo actualizar el perfil del bot";
-          await submitted.editReply({ content: friendly }).catch(() => {});
+          await submitted.deleteReply().catch(() => {});
+          await submitted.followUp({ content: friendly, flags: MessageFlags.Ephemeral }).catch(() => {});
         }
         return false;
       },
-      reset: async ({ interaction, setState, view: activeView }) => {
+      reset: async ({ interaction, view: activeView }) => {
         await interaction.deferUpdate();
         try {
           const res = await applyCustomBotReset({ guild, moderator: author, rawScope: "todo" });
@@ -405,8 +437,10 @@ async function sendCustomBotPanel(ctx) {
             await interaction.followUp({ content: res.error, flags: MessageFlags.Ephemeral }).catch(() => {});
             return false;
           }
-          setState({ resultCard: res.card });
-          activeView.stop("reset");
+          await activeView.message?.delete?.().catch(() => {});
+          activeView.stop("deleted");
+          const ch = interaction.channel ?? ctx.channel;
+          if (ch?.send) await ch.send({ embeds: [res.embed] }).catch(() => {});
         } catch (err) {
           log.error("Error en boton customreset", { err: err?.message ?? String(err) });
           const friendly = mapCustomBotApiError(err) ?? "No se pudo restablecer el perfil del bot";
@@ -704,7 +738,7 @@ const data = {
           });
           if (res.error) return ctx.ephemeral(res.error);
 
-          await ctx.send(res.card);
+          await ctx.send({ embeds: [res.embed] });
         } catch (err) {
           const friendly = mapCustomBotApiError(err);
           if (friendly) return ctx.ephemeral(friendly);
@@ -745,7 +779,7 @@ const data = {
           });
           if (res.error) return ctx.ephemeral(res.error);
 
-          await ctx.send(res.card);
+          await ctx.send({ embeds: [res.embed] });
         } catch (err) {
           const friendly = mapCustomBotApiError(err);
           if (friendly) return ctx.ephemeral(friendly);
