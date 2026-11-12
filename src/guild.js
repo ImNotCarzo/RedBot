@@ -11,33 +11,45 @@ const LOG_CACHE_TTL_MS = 15 * 60 * 1000;
 const AFK_CACHE_MAX = 5000;
 const AFK_CACHE_TTL_MS = 15 * 60 * 1000;
 
-const prefixCache = new Map();
-const logChannelCache = new Map();
-const afkCache = new Map();
-
-function getCachedPrefix(guildId) {
-  const entry = prefixCache.get(guildId);
-  if (!entry) return undefined;
-  if (entry.expiresAt <= Date.now()) {
-    prefixCache.delete(guildId);
-    return undefined;
+class TtlCache {
+  constructor(defaultTtlMs, maxEntries = Infinity) {
+    this.defaultTtlMs = defaultTtlMs;
+    this.maxEntries = maxEntries;
+    this.store = new Map();
   }
-  prefixCache.delete(guildId);
-  prefixCache.set(guildId, entry);
-  return entry.value;
+
+  get(key) {
+    const entry = this.store.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= Date.now()) {
+      this.store.delete(key);
+      return undefined;
+    }
+    this.store.delete(key);
+    this.store.set(key, entry);
+    return entry.value;
+  }
+
+  set(key, value, ttlMs = this.defaultTtlMs) {
+    if (this.store.size >= this.maxEntries && !this.store.has(key)) {
+      const oldest = this.store.keys().next().value;
+      if (oldest !== undefined) this.store.delete(oldest);
+    }
+    this.store.delete(key);
+    this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+
+  delete(key) {
+    this.store.delete(key);
+  }
 }
 
-function setCachedPrefix(guildId, value, ttl = PREFIX_CACHE_TTL_MS) {
-  if (prefixCache.size >= PREFIX_CACHE_MAX) {
-    const oldest = prefixCache.keys().next().value;
-    if (oldest) prefixCache.delete(oldest);
-  }
-  prefixCache.delete(guildId);
-  prefixCache.set(guildId, { value, expiresAt: Date.now() + ttl });
-}
+const prefixCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS);
+const afkCache = new TtlCache(AFK_CACHE_TTL_MS, AFK_CACHE_MAX);
 
 async function getPrefix(guildId) {
-  const cached = getCachedPrefix(guildId);
+  const cached = prefixCache.get(guildId);
   if (cached !== undefined) return cached;
   try {
     const doc = await withTimeout(
@@ -46,11 +58,11 @@ async function getPrefix(guildId) {
       "Lectura de prefijo de servidor"
     );
     const prefix = doc?.prefix ?? DEFAULT_PREFIX;
-    setCachedPrefix(guildId, prefix);
+    prefixCache.set(guildId, prefix);
     return prefix;
   } catch {
     // Fallo transitorio de DB: cache corta para no fijar el prefijo por defecto durante media hora
-    setCachedPrefix(guildId, DEFAULT_PREFIX, 15_000);
+    prefixCache.set(guildId, DEFAULT_PREFIX, 15_000);
     return DEFAULT_PREFIX;
   }
 }
@@ -66,33 +78,19 @@ async function setPrefix(guildId, prefix) {
     PREFIX_QUERY_TIMEOUT_MS,
     "Actualización de prefijo de servidor"
   );
-  setCachedPrefix(guildId, normalized);
+  prefixCache.set(guildId, normalized);
   return normalized;
-}
-
-function setCachedAfk(key, value) {
-  if (afkCache.size >= AFK_CACHE_MAX && !afkCache.has(key)) {
-    const oldest = afkCache.keys().next().value;
-    if (oldest) afkCache.delete(oldest);
-  }
-  afkCache.delete(key);
-  afkCache.set(key, { value, expiresAt: Date.now() + AFK_CACHE_TTL_MS });
 }
 
 async function getAfk(guildId, userId) {
   if (!guildId || !userId) return null;
   const key = `${guildId}:${userId}`;
   const cached = afkCache.get(key);
-  if (cached && cached.expiresAt > Date.now()) {
-    afkCache.delete(key);
-    afkCache.set(key, cached);
-    return cached.value;
-  }
-  if (cached) afkCache.delete(key);
+  if (cached !== undefined) return cached;
   try {
     const doc = await Afk.findOne({ guildId, userId }).lean();
     const val = doc ? { reason: doc.reason, createdAt: doc.createdAt } : null;
-    setCachedAfk(key, val);
+    afkCache.set(key, val);
     return val;
   } catch {
     return null;
@@ -104,7 +102,7 @@ async function setAfk(guildId, userId, reason = "AFK") {
   const now = new Date();
   const key = `${guildId}:${userId}`;
   const val = { reason: cleanReason, createdAt: now };
-  setCachedAfk(key, val);
+  afkCache.set(key, val);
   await Afk.findOneAndUpdate(
     { guildId, userId },
     { reason: cleanReason, createdAt: now },
@@ -116,22 +114,17 @@ async function setAfk(guildId, userId, reason = "AFK") {
 async function removeAfk(guildId, userId) {
   if (!guildId || !userId) return null;
   const key = `${guildId}:${userId}`;
-  setCachedAfk(key, null);
+  afkCache.set(key, null);
   const removed = await Afk.findOneAndDelete({ guildId, userId }).lean().catch(() => null);
   return removed;
 }
 
 async function getLogChannelId(guildId) {
   const cached = logChannelCache.get(guildId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.channelId;
-  }
+  if (cached !== undefined) return cached;
   const doc = await Log.findOne({ guildId }).lean();
   const channelId = doc?.channelId ?? null;
-  logChannelCache.set(guildId, {
-    channelId,
-    expiresAt: Date.now() + LOG_CACHE_TTL_MS,
-  });
+  logChannelCache.set(guildId, channelId);
   return channelId;
 }
 
@@ -141,19 +134,13 @@ async function setLogChannel(guildId, channelId) {
     { channelId },
     { upsert: true, setDefaultsOnInsert: true }
   );
-  logChannelCache.set(guildId, {
-    channelId,
-    expiresAt: Date.now() + LOG_CACHE_TTL_MS,
-  });
+  logChannelCache.set(guildId, channelId);
   return channelId;
 }
 
 async function clearLogChannel(guildId) {
   const removed = await Log.findOneAndDelete({ guildId });
-  logChannelCache.set(guildId, {
-    channelId: null,
-    expiresAt: Date.now() + LOG_CACHE_TTL_MS,
-  });
+  logChannelCache.set(guildId, null);
   return Boolean(removed);
 }
 

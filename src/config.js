@@ -75,6 +75,28 @@ Jamás uses frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!" ni nada po
 Respondes en el mismo idioma que el usuario.
 Mantén el contexto de la conversación.`;
 
+const BADGE_NAMES = {
+  Staff: "Personal de Discord",
+  Partner: "Servidor Socio",
+  Hypesquad: "Eventos HypeSquad",
+  BugHunterLevel1: "Cazador de Errores",
+  BugHunterLevel2: "Cazador de Errores (Oro)",
+  HypeSquadOnlineHouse1: "HypeSquad Bravery",
+  HypeSquadOnlineHouse2: "HypeSquad Brilliance",
+  HypeSquadOnlineHouse3: "HypeSquad Balance",
+  PremiumEarlySupporter: "Partidario Inicial de Nitro",
+  TeamPseudoUser: "Equipo de Discord",
+  VerifiedBot: "Bot Verificado",
+  VerifiedDeveloper: "Desarrollador de Bots Verificado",
+  CertifiedModerator: "Moderador Certificado",
+  BotHTTPInteractions: "Interacciones HTTP",
+  ActiveDeveloper: "Desarrollador Activo",
+  Quarantined: "En Cuarentena",
+  Spammer: "Spammer",
+  Collaborator: "Colaborador",
+  RestrictedCollaborator: "Colaborador Restringido",
+};
+
 const commandIds = new Map();
 
 function setId(name, id) {
@@ -94,6 +116,7 @@ module.exports = {
   MAX_EMBED_DESCRIPTION,
   COMMANDS_TO_UPDATE,
   SYSTEM_PROMPT,
+  BADGE_NAMES,
   setId,
   getId,
 };

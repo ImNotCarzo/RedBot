@@ -5,9 +5,14 @@ const {
   MessageFlags,
   V2Text,
   V2View,
-  V2Paginator,
 } = require("gralonium");
-const { Logger, noGuildReply, handleCommandError } = require("../../src/runtime");
+const {
+  Logger,
+  noGuildReply,
+  handleCommandError,
+  createListPaginator,
+  formatSortedRoles,
+} = require("../../src/runtime");
 const { RED } = require("../../src/config");
 
 const PAGE_SIZE = 15;
@@ -48,10 +53,7 @@ function getServerViewBuilder(guild, selected) {
 }
 
 function getSortedServerRoles(guild) {
-  return guild.roles.cache
-    .filter((r) => r.id !== guild.id)
-    .sort((a, b) => b.position - a.position)
-    .map((r) => `<@&${r.id}>`);
+  return formatSortedRoles(guild.roles.cache, guild.id);
 }
 
 function buildServerRolesCard(guild, totalRoles, pageItems, pageIndex, totalPages, { controls = null } = {}) {
@@ -247,21 +249,12 @@ const data = {
           if (!roles.length) return ctx.send("No hay roles");
 
           const authorId = ctx.user?.id;
-          const paginator = new V2Paginator({
+          const paginator = createListPaginator({
             items: roles,
             perPage: PAGE_SIZE,
             ownerId: authorId,
-            thirdPartyMode: "reject",
-            thirdPartyMessage: "No es tu comando",
-            wrap: false,
-            prevButton: { label: "◀" },
-            nextButton: { label: "▶" },
-            showPageIndicator: false,
-            timeout: 2 * 60 * 1000,
-            renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
-              buildServerRolesCard(guild, roles.length, pageItems, pageIndex, totalPages, {
-                controls: !isEnded && totalPages > 1 ? controls : null,
-              }),
+            render: ({ items: pageItems, pageIndex, totalPages, controls }) =>
+              buildServerRolesCard(guild, roles.length, pageItems, pageIndex, totalPages, { controls }),
           });
 
           await paginator.send(ctx);

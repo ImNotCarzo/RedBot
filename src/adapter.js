@@ -69,7 +69,7 @@ async function resolveMember(ctx, input) {
 }
 
 async function resolveMemberFlexible(ctx, input, { strictMentionOrId = false } = {}) {
-  if (!input) return ctx.member ?? ctx.user ?? ctx.author ?? null;
+  if (!input) return ctx.member ?? ctx.user ?? null;
   if (typeof input === "object" && input?.id) return input;
 
   const token = String(input).trim();
@@ -99,30 +99,25 @@ async function resolveMemberFlexible(ctx, input, { strictMentionOrId = false } =
   }) ?? null;
 }
 
-async function resolveRoleFlexible(ctx, input) {
-  if (!ctx?.guild || !input) return null;
+async function resolveGuildEntity(manager, mentionPattern, input) {
+  if (!manager || !input) return null;
 
-  const roleId = input.match(/^<@&(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
-  if (roleId) {
-    const byId = await ctx.guild.roles.fetch(roleId).catch(() => null);
+  const entityId = input.match(mentionPattern)?.[1] ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
+  if (entityId) {
+    const byId = await manager.fetch(entityId).catch(() => null);
     if (byId) return byId;
   }
 
   const lower = input.toLowerCase();
-  return ctx.guild.roles.cache.find((r) => r.name.toLowerCase().includes(lower)) ?? null;
+  return manager.cache.find((entity) => entity.name?.toLowerCase?.().includes(lower)) ?? null;
+}
+
+async function resolveRoleFlexible(ctx, input) {
+  return resolveGuildEntity(ctx?.guild?.roles, /^<@&(\d{17,20})>$/, input);
 }
 
 async function resolveChannelFlexible(ctx, input) {
-  if (!ctx?.guild || !input) return null;
-
-  const channelId = input.match(/^<#(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
-  if (channelId) {
-    const byId = await ctx.guild.channels.fetch(channelId).catch(() => null);
-    if (byId) return byId;
-  }
-
-  const lower = input.toLowerCase();
-  return ctx.guild.channels.cache.find((c) => c.name?.toLowerCase?.().includes(lower)) ?? null;
+  return resolveGuildEntity(ctx?.guild?.channels, /^<#(\d{17,20})>$/, input);
 }
 
 function buildAttachmentFromUrl(input, paramName = "") {

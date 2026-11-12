@@ -1,7 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder, ComponentsV2Builder, V2Text } = require("gralonium");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError } = require("../../src/runtime");
 const { generateText, generateVision, fetchImageAsInlineData } = require("../../src/ai");
-const { RED } = require("../../src/config");
+const { RED, BADGE_NAMES } = require("../../src/config");
 
 const log = new Logger("CMD_FUN", process.env.LOG_LEVEL);
 
@@ -10,28 +10,6 @@ Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
 Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuesto!", "¡Entendido!".
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
-
-const BADGE_NAMES = {
-  Staff: "Personal de Discord",
-  Partner: "Servidor Socio",
-  Hypesquad: "Eventos HypeSquad",
-  BugHunterLevel1: "Cazador de Errores",
-  BugHunterLevel2: "Cazador de Errores (Oro)",
-  HypeSquadOnlineHouse1: "HypeSquad Bravery",
-  HypeSquadOnlineHouse2: "HypeSquad Brilliance",
-  HypeSquadOnlineHouse3: "HypeSquad Balance",
-  PremiumEarlySupporter: "Partidario Inicial de Nitro",
-  TeamPseudoUser: "Equipo de Discord",
-  VerifiedBot: "Bot Verificado",
-  VerifiedDeveloper: "Desarrollador de Bots Verificado",
-  CertifiedModerator: "Moderador Certificado",
-  BotHTTPInteractions: "Interacciones HTTP",
-  ActiveDeveloper: "Desarrollador Activo",
-  Quarantined: "En Cuarentena",
-  Spammer: "Spammer",
-  Collaborator: "Colaborador",
-  RestrictedCollaborator: "Colaborador Restringido",
-};
 
 function msATexto(ms) {
   const min = Math.floor(ms / 60000);

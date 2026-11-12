@@ -6,42 +6,21 @@ const {
   MessageFlags,
   V2Text,
   V2View,
-  V2Paginator,
 } = require("gralonium");
 const {
   Logger,
   noGuildReply,
   formatPermissionName: formatPermName,
   handleCommandError,
+  createListPaginator,
+  formatSortedRoles,
 } = require("../../src/runtime");
 const { resolveMemberFlexible: resolveMember } = require("../../src/adapter");
-const { RED, DARK } = require("../../src/config");
+const { RED, DARK, BADGE_NAMES } = require("../../src/config");
 
 const PAGE_SIZE = 15;
 
 const log = new Logger("CMD_USER", process.env.LOG_LEVEL);
-
-const BADGE_NAMES = {
-  Staff: "Personal de Discord",
-  Partner: "Servidor Socio",
-  Hypesquad: "Eventos HypeSquad",
-  BugHunterLevel1: "Cazador de Errores",
-  BugHunterLevel2: "Cazador de Errores (Oro)",
-  HypeSquadOnlineHouse1: "HypeSquad Bravery",
-  HypeSquadOnlineHouse2: "HypeSquad Brilliance",
-  HypeSquadOnlineHouse3: "HypeSquad Balance",
-  PremiumEarlySupporter: "Partidario Inicial de Nitro",
-  TeamPseudoUser: "Equipo de Discord",
-  VerifiedBot: "Bot Verificado",
-  VerifiedDeveloper: "Desarrollador de Bots Verificado",
-  CertifiedModerator: "Moderador Certificado",
-  BotHTTPInteractions: "Interacciones HTTP",
-  ActiveDeveloper: "Desarrollador Activo",
-  Quarantined: "En Cuarentena",
-  Spammer: "Spammer",
-  Collaborator: "Colaborador",
-  RestrictedCollaborator: "Colaborador Restringido",
-};
 
 function formatUserBadges(user) {
   const flags = user?.flags?.toArray() ?? [];
@@ -125,6 +104,91 @@ function buildUserImageCard(user, { title, imageUrl, color } = {}) {
     .addGallery(imageUrl)
     .addSpacer("small")
     .addButton({ label: "Abrir imagen", style: "link", url: imageUrl });
+}
+
+async function sendImageSwitcher(
+  ctx,
+  {
+    invoker,
+    user,
+    color,
+    hasDistinct,
+    initialType = "server",
+    serverUrl,
+    globalUrl,
+    singleTitle,
+    serverTitle,
+    globalTitle,
+    placeholder,
+    options,
+  }
+) {
+  if (!hasDistinct) {
+    return ctx.send(buildUserImageCard(user, { title: singleTitle, imageUrl: serverUrl || globalUrl, color }));
+  }
+
+  const renderImage = ({ state, view, isEnded }) => {
+    const isServer = state.type === "server";
+    const builder = buildUserImageCard(user, {
+      title: isServer ? serverTitle : globalTitle,
+      imageUrl: isServer ? serverUrl : globalUrl,
+      color,
+    });
+    if (!isEnded) {
+      builder.addSpacer("small").addSelectMenu({
+        customId: view.id("select"),
+        placeholder,
+        options,
+      });
+    }
+    return builder;
+  };
+
+  const view = new V2View({
+    authorId: invoker.id,
+    timeout: 60_000,
+    thirdPartyMode: "ephemeral-view",
+    onEnd: "static",
+    state: { type: initialType },
+    render: renderImage,
+    renderStatic: (args) => renderImage({ ...args, isEnded: true }),
+    actions: {
+      select: ({ values, setState }) => {
+        if (!values[0]) return false;
+        setState({ type: values[0] });
+      },
+    },
+  });
+
+  await view.send(ctx);
+}
+
+async function sendMemberListCommand(ctx, { logName, getItems, emptyMessage, render }) {
+  await ctx.defer();
+  try {
+    if (!ctx.guild) return noGuildReply(ctx);
+    const input = ctx.get("usuario") ?? null;
+    const invoker = ctx.user ?? ctx.member?.user;
+    const member = await resolveMember(ctx, input);
+    if (!member) return ctx.send("No pude encontrar al usuario");
+
+    const items = getItems(member);
+    if (!items.length) return ctx.send(emptyMessage);
+
+    const paginator = createListPaginator({
+      items,
+      perPage: PAGE_SIZE,
+      ownerId: invoker.id,
+      timeout: 2 * 60_000,
+      render: ({ items: pageItems, pageIndex, totalPages, controls }) =>
+        render({ member, pageItems, pageIndex, totalPages, controls }),
+    });
+
+    await paginator.send(ctx);
+  } catch (err) {
+    log.error(`Error en ${logName}`, { err: err?.message ?? String(err) });
+    return handleCommandError(ctx, err);
+  }
 }
 
 function buildUserInfoCard({ user, member = null, color = RED } = {}) {
@@ -399,49 +463,23 @@ const data = {
           const avatarOpts = { extension: "png", size: 4096 };
           const serverAvatar = member ? member.displayAvatarURL(avatarOpts) : user.displayAvatarURL(avatarOpts);
           const globalAvatar = user.displayAvatarURL(avatarOpts);
-          const hasDistinct = Boolean(member?.avatar && member.avatar !== user.avatar);
-          const color = getMemberColor(member, member ? DARK : RED);
 
-          if (!hasDistinct) {
-            return ctx.send(buildUserImageCard(user, { title: "Avatar", imageUrl: serverAvatar, color }));
-          }
-
-          const renderAvatar = ({ state, view, isEnded }) => {
-            const builder = buildUserImageCard(user, {
-              title: state.type === "server" ? "Avatar del servidor" : "Avatar global",
-              imageUrl: state.type === "server" ? serverAvatar : globalAvatar,
-              color,
-            });
-            if (!isEnded) {
-              builder.addSpacer("small").addSelectMenu({
-                customId: view.id("select"),
-                placeholder: "Tipo de avatar...",
-                options: [
-                  { label: "Avatar del Servidor", description: "Avatar de servidor", value: "server" },
-                  { label: "Avatar Global", description: "Avatar global", value: "global" },
-                ],
-              });
-            }
-            return builder;
-          };
-
-          const avatarView = new V2View({
-            authorId: invoker.id,
-            timeout: 60_000,
-            thirdPartyMode: "ephemeral-view",
-            onEnd: "static",
-            state: { type: "server" },
-            render: renderAvatar,
-            renderStatic: (args) => renderAvatar({ ...args, isEnded: true }),
-            actions: {
-              select: ({ values, setState }) => {
-                if (!values[0]) return false;
-                setState({ type: values[0] });
-              },
-            },
+          await sendImageSwitcher(ctx, {
+            invoker,
+            user,
+            color: getMemberColor(member, member ? DARK : RED),
+            hasDistinct: Boolean(member?.avatar && member.avatar !== user.avatar),
+            serverUrl: serverAvatar,
+            globalUrl: globalAvatar,
+            singleTitle: "Avatar",
+            serverTitle: "Avatar del servidor",
+            globalTitle: "Avatar global",
+            placeholder: "Tipo de avatar...",
+            options: [
+              { label: "Avatar del Servidor", description: "Avatar de servidor", value: "server" },
+              { label: "Avatar Global", description: "Avatar global", value: "global" },
+            ],
           });
-
-          await avatarView.send(ctx);
         } catch (err) {
           log.error("Error en user avatar", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -475,51 +513,23 @@ const data = {
           const globalBannerURL = user.bannerURL({ size: 4096 });
           if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
 
-          const hasDistinct = Boolean(serverBannerURL && globalBannerURL && serverBannerURL !== globalBannerURL);
-          const color = getMemberColor(member, member ? DARK : RED);
-          const initialType = serverBannerURL ? "server" : "global";
-
-          if (!hasDistinct) {
-            return ctx.send(buildUserImageCard(user, { title: "Banner", imageUrl: serverBannerURL || globalBannerURL, color }));
-          }
-
-          const renderBanner = ({ state, view, isEnded }) => {
-            const isServer = state.type === "server";
-            const builder = buildUserImageCard(user, {
-              title: isServer ? "Banner del servidor" : "Banner global",
-              imageUrl: isServer ? serverBannerURL : globalBannerURL,
-              color,
-            });
-            if (!isEnded) {
-              builder.addSpacer("small").addSelectMenu({
-                customId: view.id("select"),
-                placeholder: "Tipo de banner...",
-                options: [
-                  { label: "Banner del Servidor", description: "Banner de servidor", value: "server" },
-                  { label: "Banner Global", description: "Banner global", value: "global" },
-                ],
-              });
-            }
-            return builder;
-          };
-
-          const bannerView = new V2View({
-            authorId: invoker.id,
-            timeout: 60_000,
-            thirdPartyMode: "ephemeral-view",
-            onEnd: "static",
-            state: { type: initialType },
-            render: renderBanner,
-            renderStatic: (args) => renderBanner({ ...args, isEnded: true }),
-            actions: {
-              select: ({ values, setState }) => {
-                if (!values[0]) return false;
-                setState({ type: values[0] });
-              },
-            },
+          await sendImageSwitcher(ctx, {
+            invoker,
+            user,
+            color: getMemberColor(member, member ? DARK : RED),
+            hasDistinct: Boolean(serverBannerURL && globalBannerURL && serverBannerURL !== globalBannerURL),
+            initialType: serverBannerURL ? "server" : "global",
+            serverUrl: serverBannerURL,
+            globalUrl: globalBannerURL,
+            singleTitle: "Banner",
+            serverTitle: "Banner del servidor",
+            globalTitle: "Banner global",
+            placeholder: "Tipo de banner...",
+            options: [
+              { label: "Banner del Servidor", description: "Banner de servidor", value: "server" },
+              { label: "Banner Global", description: "Banner global", value: "global" },
+            ],
           });
-
-          await bannerView.send(ctx);
         } catch (err) {
           log.error("Error en user banner", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
@@ -530,88 +540,28 @@ const data = {
       data: new CommandBuilder({ name: "roles", description: "Muestra los roles de un usuario" }),
       params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
-      async code(ctx) {
-        await ctx.defer();
-        try {
-          if (!ctx.guild) return noGuildReply(ctx);
-          const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.member?.user;
-          const member = await resolveMember(ctx, input);
-          if (!member) return ctx.send("No pude encontrar al usuario");
-
-          const user = member.user;
-          const allRoles = member.roles.cache
-            .filter((r) => r.id !== ctx.guild.id)
-            .sort((a, b) => b.position - a.position)
-            .map((r) => `<@&${r.id}>`);
-
-          if (!allRoles.length) return ctx.send("Este usuario no tiene roles");
-
-          const paginator = new V2Paginator({
-            items: allRoles,
-            perPage: PAGE_SIZE,
-            ownerId: invoker.id,
-            thirdPartyMode: "reject",
-            thirdPartyMessage: "No es tu comando",
-            wrap: false,
-            prevButton: { label: "◀" },
-            nextButton: { label: "▶" },
-            showPageIndicator: false,
-            timeout: 2 * 60_000,
-            renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
-              buildRolesCard(member, user, pageItems, pageIndex, totalPages, {
-                controls: !isEnded && totalPages > 1 ? controls : null,
-              }),
-          });
-
-          await paginator.send(ctx);
-        } catch (err) {
-          log.error("Error en user roles", { err: err?.message ?? String(err) });
-          return handleCommandError(ctx, err);
-        }
+      code(ctx) {
+        return sendMemberListCommand(ctx, {
+          logName: "user roles",
+          getItems: (member) => formatSortedRoles(member.roles.cache, ctx.guild.id),
+          emptyMessage: "Este usuario no tiene roles",
+          render: ({ member, pageItems, pageIndex, totalPages, controls }) =>
+            buildRolesCard(member, member.user, pageItems, pageIndex, totalPages, { controls }),
+        });
       },
     })
     .addCommand({
       data: new CommandBuilder({ name: "permissions", description: "Muestra los permisos de un usuario" }),
       params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
 
-      async code(ctx) {
-        await ctx.defer();
-        try {
-          if (!ctx.guild) return noGuildReply(ctx);
-          const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.member?.user;
-          const member = await resolveMember(ctx, input);
-          if (!member) return ctx.send("No pude encontrar al usuario");
-
-          const user = member.user;
-          const color = getMemberColor(member, DARK);
-          const perms = member.permissions.toArray().sort().map(formatPermName);
-
-          if (!perms.length) return ctx.send("Este usuario no tiene permisos");
-
-          const paginator = new V2Paginator({
-            items: perms,
-            perPage: PAGE_SIZE,
-            ownerId: invoker.id,
-            thirdPartyMode: "reject",
-            thirdPartyMessage: "No es tu comando",
-            wrap: false,
-            prevButton: { label: "◀" },
-            nextButton: { label: "▶" },
-            showPageIndicator: false,
-            timeout: 2 * 60_000,
-            renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
-              buildPermsCard(user, pageItems, pageIndex, totalPages, color, {
-                controls: !isEnded && totalPages > 1 ? controls : null,
-              }),
-          });
-
-          await paginator.send(ctx);
-        } catch (err) {
-          log.error("Error en user permissions", { err: err?.message ?? String(err) });
-          return handleCommandError(ctx, err);
-        }
+      code(ctx) {
+        return sendMemberListCommand(ctx, {
+          logName: "user permissions",
+          getItems: (member) => member.permissions.toArray().sort().map(formatPermName),
+          emptyMessage: "Este usuario no tiene permisos",
+          render: ({ member, pageItems, pageIndex, totalPages, controls }) =>
+            buildPermsCard(member.user, pageItems, pageIndex, totalPages, getMemberColor(member, DARK), { controls }),
+        });
       },
     })
     .addCommand({

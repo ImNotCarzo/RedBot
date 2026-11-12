@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const { EmbedBuilder } = require("discord.js");
-const { Gralonium, ComponentsV2Builder, V2Text } = require("gralonium");
+const { Gralonium, ComponentsV2Builder, V2Text, V2Paginator } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
 
@@ -98,7 +98,7 @@ function extractEventContext(args) {
     if (!item || typeof item !== "object") continue;
 
     const guild = item.guild ?? item.ctx?.guild ?? null;
-    const user = item.user ?? item.author ?? item.member?.user ?? item.ctx?.user ?? item.ctx?.author ?? null;
+    const user = item.user ?? item.author ?? item.member?.user ?? item.ctx?.user ?? null;
     const channel = item.channel ?? item.ctx?.channel ?? null;
 
     if (!meta.guildId && guild?.id) meta.guildId = guild.id;
@@ -316,6 +316,35 @@ function failWith(ctx, err, message) {
   return ctx.ephemeral(ComponentsV2Builder.card({ description: message, color: RED }));
 }
 
+function createListPaginator({ items, ownerId, perPage = 15, timeout = 2 * 60 * 1000, render }) {
+  return new V2Paginator({
+    items,
+    perPage,
+    ownerId,
+    thirdPartyMode: "reject",
+    thirdPartyMessage: "No es tu comando",
+    wrap: false,
+    prevButton: { label: "◀" },
+    nextButton: { label: "▶" },
+    showPageIndicator: false,
+    timeout,
+    renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
+      render({
+        items: pageItems,
+        pageIndex,
+        totalPages,
+        controls: !isEnded && totalPages > 1 ? controls : null,
+      }),
+  });
+}
+
+function formatSortedRoles(roleCache, excludeRoleId) {
+  return roleCache
+    .filter((r) => r.id !== excludeRoleId)
+    .sort((a, b) => b.position - a.position)
+    .map((r) => `<@&${r.id}>`);
+}
+
 const activeBroadcasts = new Set();
 const clip = (s, max = 1024) => {
   const str = String(s ?? "");
@@ -419,6 +448,8 @@ module.exports = {
   noGuildReply,
   handleCommandError,
   buildActionCard,
+  createListPaginator,
+  formatSortedRoles,
   avatarUrl,
   roleIconUrl,
   failWith,

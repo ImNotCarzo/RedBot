@@ -1,6 +1,6 @@
 const { GoogleGenAI } = require("@google/genai");
 const { MAX_HISTORIAL, SYSTEM_PROMPT } = require("./config");
-const { Logger, wait } = require("./runtime");
+const { Logger, wait, fetchWithTimeout } = require("./runtime");
 const { fetchPublic, readBodyLimited } = require("./security");
 
 const log = new Logger("AI_SERVICE");
@@ -229,8 +229,8 @@ async function performWebSearch(query) {
     const wpUrl = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&utf8=&format=json&srlimit=3`;
 
     const [rssRes, wpRes] = await Promise.allSettled([
-      withAITimeout(fetch(rssUrl, { headers: { "User-Agent": "Mozilla/5.0" } }), 3500),
-      withAITimeout(fetch(wpUrl, { headers: { "User-Agent": "RedBot/1.0" } }), 3500),
+      fetchWithTimeout(rssUrl, { headers: { "User-Agent": "Mozilla/5.0" } }, 3500),
+      fetchWithTimeout(wpUrl, { headers: { "User-Agent": "RedBot/1.0" } }, 3500),
     ]);
 
     if (rssRes.status === "fulfilled" && rssRes.value.ok) {
@@ -312,11 +312,7 @@ function setConversacion(rawUserId, historial, lastBotMessageId = null, scope = 
     sessions.delete(oldestKey);
   }
 
-  const timeout = setTimeout(() => {
-    const session = sessions.get(userId);
-    if (session?.timeout) clearTimeout(session.timeout);
-    sessions.delete(userId);
-  }, SESSION_TTL_MS);
+  const timeout = setTimeout(() => deleteSessionKey(userId), SESSION_TTL_MS);
   timeout.unref();
 
   sessions.set(userId, {

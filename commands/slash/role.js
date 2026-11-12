@@ -7,7 +7,6 @@ const {
   MessageFlags,
   V2Text,
   V2View,
-  V2Paginator,
 } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const {
@@ -16,6 +15,7 @@ const {
   formatPermissionName: formatPerm,
   handleCommandError,
   buildActionCard,
+  createListPaginator,
   avatarUrl,
   roleIconUrl,
   failWith,
@@ -568,18 +568,11 @@ const data = {
         if (!members.length) return ctx.ephemeral("Nadie tiene este rol");
 
         const authorId = ctx.user?.id;
-        const paginator = new V2Paginator({
+        const paginator = createListPaginator({
           items: members,
           perPage: PAGE_SIZE,
           ownerId: authorId,
-          thirdPartyMode: "reject",
-          thirdPartyMessage: "No es tu comando",
-          wrap: false,
-          prevButton: { label: "◀" },
-          nextButton: { label: "▶" },
-          showPageIndicator: false,
-          timeout: 2 * 60 * 1000,
-          renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
+          render: ({ items: pageItems, pageIndex, totalPages, controls }) =>
             buildRoleListCard({
               role,
               title: `Usuarios con ${role.name} (${pageIndex + 1}/${totalPages})`,
@@ -587,7 +580,7 @@ const data = {
               pageIndex,
               totalPages,
               footer: `${members.length} usuarios en total`,
-              controls: !isEnded && totalPages > 1 ? controls : null,
+              controls,
             }),
         });
 
@@ -883,25 +876,18 @@ const data = {
           const perms = role.permissions.toArray().sort().map(formatPerm);
           if (!perms.length) return ctx.send("Este rol no tiene permisos");
 
-          const paginator = new V2Paginator({
+          const paginator = createListPaginator({
             items: perms,
             perPage: PAGE_SIZE,
             ownerId: invoker.id,
-            thirdPartyMode: "reject",
-            thirdPartyMessage: "No es tu comando",
-            wrap: false,
-            prevButton: { label: "◀" },
-            nextButton: { label: "▶" },
-            showPageIndicator: false,
-            timeout: 2 * 60 * 1000,
-            renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
+            render: ({ items: pageItems, pageIndex, totalPages, controls }) =>
               buildRoleListCard({
                 role,
                 title: `Permisos de ${role.name}`,
                 lines: pageItems,
                 pageIndex,
                 totalPages,
-                controls: !isEnded && totalPages > 1 ? controls : null,
+                controls,
               }),
           });
 

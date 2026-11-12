@@ -58,7 +58,7 @@ const event = {
     if (err && typeof err === "object" && !err.ctx && ctx) err.ctx = ctx;
 
     const guildId = ctx?.guild?.id ?? ctx?.data?.guildId;
-    const userId = ctx?.user?.id ?? ctx?.author?.id;
+    const userId = ctx?.user?.id;
     const commandName = ctx?.command?.data?.name;
 
     const safeSend = async (payload) => {

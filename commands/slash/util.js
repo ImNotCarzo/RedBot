@@ -36,6 +36,20 @@ try {
 
 const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
 
+const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+
+function validateImageAttachment(ctx, attachment) {
+  if (!attachment) return ctx.ephemeral("Debes adjuntar una imagen");
+  if (!VALID_IMAGE_TYPES.some((t) => attachment.contentType?.startsWith(t))) {
+    return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
+  }
+  if (attachment.size > MAX_IMAGE_SIZE_BYTES) {
+    return ctx.ephemeral("La imagen no puede superar los 8MB");
+  }
+  return null;
+}
+
 const TRANSLATE_LANG_NAMES = {
   auto: "Automático",
   es: "Español",
@@ -614,18 +628,8 @@ const data = {
     async code(ctx) {
       await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
       const attachment = ctx.get("imagen");
-      if (!attachment) {
-        return ctx.ephemeral("Debes adjuntar una imagen");
-      }
-
-      const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-      if (!validTypes.some((t) => attachment.contentType?.startsWith(t))) {
-        return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
-      }
-
-      if (attachment.size > 8 * 1024 * 1024) {
-        return ctx.ephemeral("La imagen no puede superar los 8MB");
-      }
+      const invalid = validateImageAttachment(ctx, attachment);
+      if (invalid) return invalid;
 
       try {
         const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
@@ -1057,18 +1061,8 @@ const ocrCommand = {
   async code(ctx) {
     await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
     const attachment = ctx.get("imagen");
-    if (!attachment) {
-      return ctx.ephemeral("Debes adjuntar una imagen");
-    }
-
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (!validTypes.some((t) => attachment.contentType?.startsWith(t))) {
-      return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
-    }
-
-    if (attachment.size > 8 * 1024 * 1024) {
-      return ctx.ephemeral("La imagen no puede superar los 8MB");
-    }
+    const invalid = validateImageAttachment(ctx, attachment);
+    if (invalid) return invalid;
 
     try {
       const prompt =

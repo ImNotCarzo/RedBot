@@ -229,17 +229,19 @@ async function pickNoTubeServers(count = 2, exclude = new Set()) {
   return ready.length ? ready.slice(0, count) : ["https://s60.notube.im"];
 }
 
+const NOTUBE_POST_HEADERS = {
+  "Content-Type": "application/x-www-form-urlencoded",
+  "User-Agent": BROWSER_UA,
+  Origin: "https://notube.im",
+  Referer: "https://notube.im/",
+};
+
 async function runNoTubeHost(host, watchUrl, originalUrl) {
   const r1 = await fetchWithTimeout(
     `${host}/recover_weight.php`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": BROWSER_UA,
-        Origin: "https://notube.im",
-        Referer: "https://notube.im/",
-      },
+      headers: NOTUBE_POST_HEADERS,
       body: new URLSearchParams({
         url: watchUrl,
         format: "mp4",
@@ -259,12 +261,7 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     `${host}/recover_file.php`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": BROWSER_UA,
-        Origin: "https://notube.im",
-        Referer: "https://notube.im/",
-      },
+      headers: NOTUBE_POST_HEADERS,
       body: new URLSearchParams({
         url: watchUrl,
         format: "mp4",
@@ -290,12 +287,7 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     `${host}/conversion.php`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": BROWSER_UA,
-        Origin: "https://notube.im",
-        Referer: "https://notube.im/",
-      },
+      headers: NOTUBE_POST_HEADERS,
       body: new URLSearchParams({ token: finalToken }).toString(),
     },
     12_000
