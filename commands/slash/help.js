@@ -87,8 +87,10 @@ const getBaseCommands = () => ({
     info:   { short: "server",  slash: "server info",   id: IDS.server(), usage: ".server",  aliases: ["sv", "serverinfo", "si"], description: "Muestra información general del servidor." },
     logo:   { short: "logo",    slash: "server logo",   id: IDS.server(), usage: ".logo",    aliases: ["icon", "servericon"],     description: "Muestra el logo del servidor." },
     banner: { short: "sbanner", slash: "server banner", id: IDS.server(), usage: ".sbanner", aliases: ["serverbanner"],           description: "Muestra el banner del servidor." },
-    emojis: { short: "emojis",  slash: "server emojis", id: IDS.server(), usage: ".emojis",  aliases: ["serveremojis", "emoji"],  description: "Muestra todos los emojis del servidor." },
-    roles:  { short: "sroles",  slash: "server roles",  id: IDS.server(), usage: ".sroles",  aliases: ["serverroles", "listroles"],description: "Lista los roles del servidor." },
+    emojis:      { short: "emojis",      slash: "server emojis",      id: IDS.server(), usage: ".emojis",              aliases: ["serveremojis", "emoji"],   description: "Muestra todos los emojis del servidor." },
+    roles:       { short: "sroles",      slash: "server roles",       id: IDS.server(), usage: ".sroles",              aliases: ["serverroles", "listroles"], description: "Lista los roles del servidor." },
+    custombot:   { short: "custombot",   slash: "server custombot",   id: IDS.server(), usage: ".custombot",           aliases: ["botprofile", "cbot"],       description: "Personaliza avatar, banner, apodo y biografía del bot en el servidor." },
+    customreset: { short: "customreset", slash: "server customreset", id: IDS.server(), usage: ".customreset [campo]", aliases: ["botreset", "creset"],       description: "Restablece el perfil personalizado del bot en el servidor." },
   },
   roles: {
     info:        { short: "role",    slash: "role info",        id: IDS.role(), usage: ".role <@rol>",             aliases: ["roleinfo", "ri"],              description: "Muestra información de un rol." },

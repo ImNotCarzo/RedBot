@@ -12,6 +12,8 @@ const PREFIXED_TO_SLASH_MAP = {
   choose: "fun/choose",
   clone: "channel/clone",
   color: "role/color",
+  custombot: "server/custombot",
+  customreset: "server/customreset",
   dmall: "util/dm",
   download: "util/download",
   emojis: "server/emojis",
@@ -202,6 +204,14 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
   const replyMsg = ctx?.message?.reference?.messageId
     ? await ctx.message.fetchReference().catch(() => null)
     : null;
+  const attachments = [
+    ...(ctx.message?.attachments?.values?.() ?? []),
+    ...(replyMsg?.attachments?.values?.() ?? []),
+  ];
+  if (!attachments.length) {
+    const fallbackAtt = getFirstAttachment(ctx.message) ?? getFirstAttachment(replyMsg);
+    if (fallbackAtt) attachments.push(fallbackAtt);
+  }
   const values = {};
   let missingRequired = false;
   let notFound = false;
@@ -239,7 +249,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
         value = ctx.channel;
       }
     } else if (def.type === 11) {
-      value = getFirstAttachment(ctx.message) ?? buildAttachmentFromUrl(token, def.name) ?? getFirstAttachment(replyMsg);
+      value = attachments.shift() ?? buildAttachmentFromUrl(token, def.name);
       if (value && token && value.url === token) args.shift();
     } else if (def.type === 5 || (def.type === 3 && (def.name === "incluir_bots" || def.name === "ignorar_bots"))) {
       if (args.length) {
