@@ -1,12 +1,8 @@
 const {
-  ButtonBuilder,
-  ButtonStyle,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   MessageFlags,
-  SectionBuilder,
   SeparatorSpacingSize,
-  TextDisplayBuilder,
   version: djsVersion,
 } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
@@ -28,7 +24,6 @@ const {
   buildDmAllLogEmbed,
 } = require("../../src/runtime");
 const {
-  V2_MAX_MESSAGE_TEXT,
   createContainer,
   addHeaderSection,
   addSeparator,
@@ -81,8 +76,8 @@ const fields = (rows) =>
     .map(([label, value]) => `> **${label}:** ${value}`)
     .join("\n");
 
-/** Bloque con subtítulo ### y campos alineados al estilo de RedBot */
-const sectionBlock = (heading, rows) => `### ${heading}\n${fields(rows)}`;
+/** Bloque con subtítulo en negrita y campos alineados al estilo de RedBot */
+const sectionBlock = (heading, rows) => `**${heading}**\n${fields(rows)}`;
 
 /** Convierte texto multilínea en cita sin cortar líneas vacías intermedias */
 const quote = (text, maxLen = null) => {
@@ -130,38 +125,22 @@ const formatLanguage = (langCode) => {
   return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
 };
 
-function addButtonSection(container, texts, linkLabel, linkUrl) {
-  const list = (Array.isArray(texts) ? texts : [texts])
-    .map((t) => String(t ?? "").trim())
-    .filter(Boolean)
-    .slice(0, 3);
-
-  const section = new SectionBuilder().setButtonAccessory(
-    new ButtonBuilder()
-      .setLabel(String(linkLabel).slice(0, 80))
-      .setStyle(ButtonStyle.Link)
-      .setURL(linkUrl.trim())
-  );
-
-  for (const entry of list) {
-    section.addTextDisplayComponents(new TextDisplayBuilder().setContent(clipV2Text(entry, V2_MAX_MESSAGE_TEXT)));
-  }
-
-  container.addSectionComponents(section);
-  return container;
-}
-
-function buildCompactCard({ title, subtitle = null, body = null, color = RED, thumbnailUrl = null, divider = false, links = [] }) {
+function buildCompactCard({ title, subtitle = null, body = null, footer = null, color = RED, thumbnailUrl = null, divider = false, links = [] }) {
   const container = createContainer(color);
-  const header = subtitle ? `## ${clipV2Text(title, 180)}\n-# ${clipV2Text(subtitle, 180)}` : `## ${clipV2Text(title, 200)}`;
+  const header = subtitle ? `### ${clipV2Text(title, 180)}\n-# ${clipV2Text(subtitle, 180)}` : `### ${clipV2Text(title, 200)}`;
+  const footerLine = footer ? `-# ${clipV2Text(footer, 180)}` : null;
 
   if (thumbnailUrl && body) {
-    addHeaderSection(container, [header, body], thumbnailUrl);
+    addHeaderSection(container, [header, body, footerLine].filter(Boolean), thumbnailUrl);
   } else {
     addHeaderSection(container, [header], thumbnailUrl);
     if (body) {
       addSeparator(container, SeparatorSpacingSize.Small, divider);
       addTextBlock(container, body);
+    }
+    if (footerLine) {
+      addSeparator(container, SeparatorSpacingSize.Small, false);
+      addTextBlock(container, footerLine, 190);
     }
   }
 
@@ -175,13 +154,26 @@ function buildCompactCard({ title, subtitle = null, body = null, color = RED, th
 
 function buildDmStatusContainer({ title, guildName, iconUrl = null, rows = [], filters = [], color = RED }) {
   const container = createContainer(color);
-  const header = `## ${clipV2Text(title, 120)}\n-# ${clipV2Text(guildName, 80)}`;
-  const bodyParts = [fields(rows)];
-  if (filters.length) bodyParts.push(sectionBlock("Filtros", filters));
+  const header = `### ${clipV2Text(title, 120)}\n-# ${clipV2Text(guildName, 80)}`;
 
   addHeaderSection(container, [header], iconUrl);
   addSeparator(container);
-  addTextBlock(container, bodyParts.join("\n\n"));
+  addTextBlock(container, fields(rows));
+  if (filters.length) {
+    addSeparator(container);
+    addTextBlock(container, sectionBlock("Filtros", filters));
+  }
+  return container;
+}
+
+function buildJumboContainer({ title, subtitle, imageUrl }) {
+  const container = createContainer(RED);
+  addTextBlock(container, `### ${title}\n-# ${subtitle}`);
+  container.addMediaGalleryComponents(
+    new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl))
+  );
+  addSeparator(container, SeparatorSpacingSize.Small, false);
+  addLinkButtons(container, [{ label: "Abrir imagen", url: imageUrl }]);
   return container;
 }
 
@@ -256,7 +248,7 @@ const data = {
         addHeaderSection(
           container,
           [
-            `## ${clipV2Text(bot.user.username, 100)}`,
+            `### ${clipV2Text(bot.user.username, 100)}`,
             sectionBlock("General", [
               ["ID", code(bot.user.id)],
               ["Versión", code(cleanVersion(botVersion))],
@@ -269,16 +261,22 @@ const data = {
 
         addTextBlock(
           container,
-          `${sectionBlock("Estadísticas", [
+          sectionBlock("Estadísticas", [
             ["Servidores", code(num(servers))],
             ["Usuarios", code(num(users))],
             ["Tiempo activo", code(formatUptime(bot.uptime ?? 0))],
-          ])}\n\n${sectionBlock("Extra", [
+          ])
+        );
+        addSeparator(container);
+
+        addTextBlock(
+          container,
+          sectionBlock("Extra", [
             ["Creador", code("carzo.")],
             ["Node.js", code(process.version)],
             ["discord.js", code(cleanVersion(djsVersion))],
             ["Gralonium", code(cleanVersion(graloniumVersion))],
-          ])}`
+          ])
         );
         addSeparator(container, SeparatorSpacingSize.Small, false);
 
@@ -449,11 +447,11 @@ const data = {
           buildV2Payload(
             buildCompactCard({
               title: invoker.username,
-              subtitle: "Estado AFK activado",
               body: fields([
                 ["Motivo", clipV2Text(reason, 256)],
                 ["Desde", `<t:${sinceTs}:R>`],
               ]),
+              footer: "Ahora estás AFK",
               thumbnailUrl: invoker.displayAvatarURL({ size: 256 }),
               color: RED,
             })
@@ -496,19 +494,15 @@ const data = {
           const ext = animated ? "gif" : "png";
           const url = `https://cdn.discordapp.com/emojis/${id}.${ext}?size=4096&quality=lossless`;
 
-          const container = createContainer(RED);
-          addButtonSection(
-            container,
-            `## :${clipV2Text(name, 80)}:\n-# ID ${code(id)} · ${animated ? "Animado (GIF)" : "Estático (PNG)"}`,
-            "Abrir imagen",
-            url
+          return ctx.send(
+            buildV2Payload(
+              buildJumboContainer({
+                title: `:${clipV2Text(name, 80)}:`,
+                subtitle: `ID ${id} · ${ext.toUpperCase()}`,
+                imageUrl: url,
+              })
+            )
           );
-          addSeparator(container, SeparatorSpacingSize.Small, false);
-          container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(url))
-          );
-
-          return ctx.send(buildV2Payload(container));
         }
 
         const chars = [...raw];
@@ -531,19 +525,15 @@ const data = {
         const highResUrl = `https://emojicdn.elk.sh/${encodeURIComponent(raw)}?style=twitter`;
         const codepoints = filteredCps.map((cp) => `U+${cp.toUpperCase()}`).join(" ");
 
-        const container = createContainer(RED);
-        addButtonSection(
-          container,
-          `## ${raw}\n-# Código ${code(codepoints)}`,
-          "Abrir imagen",
-          highResUrl
+        return ctx.send(
+          buildV2Payload(
+            buildJumboContainer({
+              title: raw,
+              subtitle: `Código ${codepoints} · PNG`,
+              imageUrl: highResUrl,
+            })
+          )
         );
-        addSeparator(container, SeparatorSpacingSize.Small, false);
-        container.addMediaGalleryComponents(
-          new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(highResUrl))
-        );
-
-        return ctx.send(buildV2Payload(container));
       } catch (err) {
         log.error("[util jumbo]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -588,11 +578,11 @@ const data = {
         }
 
         const container = createContainer(RED);
-        addTextBlock(container, `## Traducción\n-# ${formatLanguage(origen)} → ${formatLanguage(idioma)}`);
+        addTextBlock(container, `### Traducción\n-# ${formatLanguage(origen)} → ${formatLanguage(idioma)}`);
         addSeparator(container);
-        addTextBlock(container, `### Original\n${quote(texto, 1300)}`);
+        addTextBlock(container, `**Original**\n${quote(texto, 1300)}`);
         addSeparator(container, SeparatorSpacingSize.Small, false);
-        addTextBlock(container, `### Resultado\n${quote(traduccion, 2100)}`);
+        addTextBlock(container, `**Resultado**\n${quote(traduccion, 2100)}`);
 
         await reply(buildV2Payload(container));
       } catch (err) {
@@ -697,7 +687,7 @@ const data = {
         const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
         const texto = await generateVision(prompt, attachment.url);
 
-        const header = `## Descripción de imagen\n-# ${formatAttachmentMeta(attachment, "imagen")}`;
+        const header = `### Descripción de imagen\n-# ${formatAttachmentMeta(attachment, "imagen")}`;
         const container = createContainer(RED);
         addHeaderSection(container, [header], attachment.url);
         addSeparator(container);
@@ -784,7 +774,7 @@ const data = {
 
         if (texto.length > 3600) {
           const fileContainer = createContainer(RED);
-          addTextBlock(fileContainer, `## Transcripción\n-# ${meta} · ${num(texto.length)} caracteres`);
+          addTextBlock(fileContainer, `### Transcripción\n-# ${meta} · ${num(texto.length)} caracteres`);
           addSeparator(fileContainer);
           addTextBlock(fileContainer, "El texto supera el límite del mensaje, se adjunta como archivo.");
           addSeparator(fileContainer, SeparatorSpacingSize.Small, false);
@@ -792,7 +782,7 @@ const data = {
           return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
         }
 
-        const header = `## Transcripción\n-# ${meta}`;
+        const header = `### Transcripción\n-# ${meta}`;
         const container = createContainer(RED);
         addTextBlock(container, header);
         addSeparator(container);
@@ -966,8 +956,8 @@ const data = {
         );
 
         const header = resumen
-          ? `## Resumen\n-# ${num(texto.length)} → ${num(resumen.length)} caracteres`
-          : "## Resumen";
+          ? `### Resumen\n-# ${num(texto.length)} → ${num(resumen.length)} caracteres`
+          : "### Resumen";
         const container = createContainer(RED);
         addTextBlock(container, header);
         addSeparator(container);
@@ -1107,7 +1097,7 @@ const remindCommand = {
 
       const ts = Math.floor(remindAt.getTime() / 1000);
       const container = createContainer(GREEN);
-      addTextBlock(container, `## Recordatorio creado\n-# <t:${ts}:f> · <t:${ts}:R>`);
+      addTextBlock(container, `### Recordatorio creado\n-# <t:${ts}:f> · <t:${ts}:R>`);
       addSeparator(container);
       addTextBlock(container, quote(texto, 1200));
 
@@ -1163,7 +1153,7 @@ const ocrCommand = {
         addHeaderSection(
           fileContainer,
           [
-            `## Texto extraído\n-# ${meta} · ${num(texto.length)} caracteres`,
+            `### Texto extraído\n-# ${meta} · ${num(texto.length)} caracteres`,
             "El texto supera el límite del mensaje, se adjunta como archivo.",
           ],
           attachment.url
@@ -1173,7 +1163,7 @@ const ocrCommand = {
         return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
       }
 
-      const header = `## Texto extraído\n-# ${meta}`;
+      const header = `### Texto extraído\n-# ${meta}`;
       const container = createContainer(RED);
       addHeaderSection(container, [header], attachment.url);
       addSeparator(container);
