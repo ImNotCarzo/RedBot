@@ -137,7 +137,7 @@ function buildUserInfoPayload({ user, member = null, color = RED, extraRows = []
   const createdTs = Math.floor(user.createdTimestamp / 1000);
   const insignias = formatUserBadges(user);
   const generalBlock =
-    `### General\n` +
+    `**General**\n` +
     `> **ID:** \`${user.id}\`\n` +
     (member ? `> **Color del rol:** \`${color}\`\n` : "") +
     `> **Insignias:** ${insignias}\n` +
@@ -147,25 +147,25 @@ function buildUserInfoPayload({ user, member = null, color = RED, extraRows = []
   if (member) {
     const joinedTs = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
     extraSections.push(
-      `### Servidor\n` +
+      `**Servidor**\n` +
       `> **Apodo:** ${member.nickname ?? "Sin apodo"}\n` +
       `> **Ingreso:** ${joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"}`
     );
   }
   for (const field of buildExtendedFields(member, user)) {
-    extraSections.push(`### ${field.name}\n${field.value}`);
+    extraSections.push(`**${field.name}**\n${field.value}`);
   }
 
   const container = createContainer(color);
   addHeaderSection(
     container,
-    [`## ${clipV2Text(user.username, 100)}`, generalBlock],
+    [`### ${clipV2Text(user.username, 100)}`, generalBlock],
     user.displayAvatarURL({ size: 1024 })
   );
 
-  if (extraSections.length) {
+  for (const section of extraSections) {
     addSeparator(container);
-    addTextBlock(container, extraSections.join("\n\n"));
+    addTextBlock(container, section);
   }
 
   if (extraRows.length) {
@@ -890,16 +890,18 @@ const data = {
           const color = getMemberColor(chosen, RED);
           const joinedTs = chosen.joinedTimestamp ? Math.floor(chosen.joinedTimestamp / 1000) : null;
 
-          const randomContainer = buildSimpleContainer({
-            title: "Usuario al azar",
-            body:
-              `> **Seleccionado:** ${chosen} (\`${user.username}\`)\n` +
-              `> **ID:** \`${user.id}\`` +
-              (role ? `\n> **Rol filtrado:** ${role}` : "") +
-              (joinedTs ? `\n> **Ingreso:** <t:${joinedTs}:R>` : ""),
-            thumbnailUrl: chosen.displayAvatarURL({ size: 1024 }),
-            color,
-          });
+          const randomBody =
+            `> **Seleccionado:** ${chosen} (\`${user.username}\`)\n` +
+            `> **ID:** \`${user.id}\`` +
+            (role ? `\n> **Rol filtrado:** ${role}` : "") +
+            (joinedTs ? `\n> **Ingreso:** <t:${joinedTs}:R>` : "");
+
+          const randomContainer = createContainer(color);
+          addHeaderSection(
+            randomContainer,
+            ["### Usuario al azar", randomBody],
+            chosen.displayAvatarURL({ size: 1024 })
+          );
 
           await ctx.send(buildV2Payload(randomContainer));
         } catch (err) {

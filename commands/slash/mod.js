@@ -716,7 +716,7 @@ const data = {
             addHeaderSection(
               container,
               [
-                `## Advertencias de ${clipV2Text(member.user.tag, 100)}`,
+                `### Advertencias de ${clipV2Text(member.user.tag, 100)}`,
                 `-# Página ${page + 1}/${pages.length} · ${warns.length} en total`,
               ],
               member.user.displayAvatarURL({ size: 256 })

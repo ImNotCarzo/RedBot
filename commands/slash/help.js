@@ -191,7 +191,7 @@ const data = {
 
       const buildContainer = (category) => {
         const builder = new ComponentsV2Builder()
-          .addText("## <:redbot:1474109778044260478> RedBot");
+          .addText("### <:redbot:1474109778044260478> RedBot");
 
         for (const cat of CATEGORIES) {
           builder.addButton(
@@ -227,7 +227,7 @@ const data = {
 
       const buildStaticContainer = (category) =>
         new ComponentsV2Builder()
-          .addText("## <:redbot:1474109778044260478> RedBot")
+          .addText("### <:redbot:1474109778044260478> RedBot")
           .addSeparator("small")
           .addText(buildCommandList(category))
           .build()[0];

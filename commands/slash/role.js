@@ -175,7 +175,7 @@ function buildRoleInfoPayload(role, { extraRows = [], ephemeral = false } = {}) 
   const container = createContainer(color);
   addHeaderSection(
     container,
-    [`## ${clipV2Text(role.name, 100)}`, `### Información\n${infoLines}`],
+    [`### ${clipV2Text(role.name, 100)}`, `**Información**\n${infoLines}`],
     role.icon ? role.iconURL({ size: 1024 }) : null
   );
 
@@ -209,7 +209,7 @@ function buildRoleColorPayload(role, { extraRows = [], ephemeral = false } = {})
   addHeaderSection(
     container,
     [
-      `## ${clipV2Text(role.name, 100)}`,
+      `### ${clipV2Text(role.name, 100)}`,
       `> **Hex:** \`${hex}\`\n> **Decimal:** \`${role.color}\``,
     ],
     role.icon ? role.iconURL({ size: 1024 }) : null

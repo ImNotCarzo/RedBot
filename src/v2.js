@@ -153,7 +153,7 @@ function buildSimpleContainer({
   dividerBeforeBody = true,
 } = {}) {
   const container = createContainer(color);
-  const safeTitle = title ? `## ${clipV2Text(title, 200)}` : null;
+  const safeTitle = title ? `### ${clipV2Text(title, 200)}` : null;
   const safeSub = subtitle ? `-# ${clipV2Text(subtitle, 200)}` : null;
   const safeFooter = footer ? `-# ${clipV2Text(footer, 200)}` : null;
 
@@ -199,7 +199,7 @@ function buildImageViewContainer({
   const container = createContainer(color);
   const lines = [];
   if (authorName) lines.push(`-# ${clipV2Text(authorName, 120)}`);
-  if (title) lines.push(`## ${clipV2Text(title, 200)}`);
+  if (title) lines.push(`### ${clipV2Text(title, 200)}`);
 
   addTextBlock(container, lines.join("\n"));
   addMediaImage(container, imageUrl);
@@ -208,6 +208,7 @@ function buildImageViewContainer({
     addTextBlock(container, `-# ${clipV2Text(footer, 200)}`, 210);
   }
 
+  addSeparator(container, SeparatorSpacingSize.Small, false);
   addLinkButtons(container, [{ label: linkLabel, url: imageUrl }]);
   for (const row of extraRows) {
     if (row) container.addActionRowComponents(row);
@@ -234,7 +235,7 @@ function buildPaginatedListContainer({
   interactive = true,
 } = {}) {
   const container = createContainer(color);
-  const headerLines = [`## ${clipV2Text(title, 200)}`];
+  const headerLines = [`### ${clipV2Text(title, 200)}`];
   if (subtitle) headerLines.push(`-# ${clipV2Text(subtitle, 200)}`);
 
   addHeaderSection(container, headerLines, thumbnailUrl);

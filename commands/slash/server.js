@@ -59,7 +59,7 @@ function getServerViewPayload(guild, selected, extraRows = [], { ephemeral = fal
     if (!emojis.length) return { error: "Este servidor no tiene emojis" };
     const desc = emojis.reduce((acc, cur) => (acc.length + cur.length + 1 > 3750 ? acc : acc + (acc ? " " : "") + cur), "");
     const container = createContainer(RED);
-    addTextBlock(container, `## Emojis de ${clipV2Text(guild.name, 100)} (${emojis.length})`);
+    addTextBlock(container, `### Emojis de ${clipV2Text(guild.name, 100)} (${emojis.length})`);
     addSeparator(container);
     addTextBlock(container, desc);
     if (extraRows.length) {
@@ -119,11 +119,13 @@ function buildServerInfoPayload(guild, owner, { extraRows = [], ephemeral = fals
   const container = createContainer(RED);
   addHeaderSection(
     container,
-    [`## ${clipV2Text(guild.name, 100)}`, `### General\n${generalLines}`],
+    [`### ${clipV2Text(guild.name, 100)}`, `**General**\n${generalLines}`],
     guild.iconURL({ size: 1024, extension: "png" })
   );
   addSeparator(container);
-  addTextBlock(container, `### Estadísticas\n${statsLines}\n\n### Seguridad\n${securityLines}`);
+  addTextBlock(container, `**Estadísticas**\n${statsLines}`);
+  addSeparator(container);
+  addTextBlock(container, `**Seguridad**\n${securityLines}`);
 
   if (extraRows.length) {
     addSeparator(container, SeparatorSpacingSize.Small, false);

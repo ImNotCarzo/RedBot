@@ -179,11 +179,11 @@ const data = {
           const infoContainer = createContainer(RED);
           addHeaderSection(
             infoContainer,
-            [`## #${clipV2Text(channel.name, 100)}`, `### General\n${generalLines}`],
+            [`### #${clipV2Text(channel.name, 100)}`, `**General**\n${generalLines}`],
             guild?.iconURL({ size: 1024, extension: "png" })
           );
           addSeparator(infoContainer);
-          addTextBlock(infoContainer, `### Configuración\n${configLines}`);
+          addTextBlock(infoContainer, `**Configuración**\n${configLines}`);
 
           await ctx.send(buildV2Payload(infoContainer));
         } catch (err) {

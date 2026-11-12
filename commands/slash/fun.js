@@ -285,6 +285,7 @@ ${datosUsuario}`;
               `> **Opciones:** ${items.map((i) => `\`${i}\``).join(", ")}\n` +
               `> **Elección:** **${eleccion}**`,
             color: RED,
+            dividerBeforeBody: false,
           });
 
           await ctx.send(buildV2Payload(container));
