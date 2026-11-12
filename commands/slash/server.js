@@ -85,10 +85,10 @@ async function fetchBotImageBuffer(attachment, label) {
 function mapCustomBotApiError(err) {
   const msg = err?.message ?? String(err);
   if (err?.status === 429 || err?.code === 50035 || /rate limit|too fast|avatar/i.test(msg)) {
-    return "Discord rechazó el cambio temporalmente por límite de frecuencia en avatar/banner. Intenta de nuevo en unos minutos.";
+    return "Intenta de nuevo en unos minutos.";
   }
   if (err?.code === 50013) {
-    return "No tengo permisos suficientes para aplicar ese cambio en este servidor.";
+    return "No tengo permisos suficientes en este servidor.";
   }
   return null;
 }
@@ -176,17 +176,13 @@ function buildCustomBotStatusCard(me, guild, { isEnded = false, controls = null 
   builder
     .addSeparator("small")
     .addFields([
-      ["Apodo", V2Text.code(me?.nickname ?? "Sin apodo personalizado")],
+      ["Apodo", V2Text.code(me?.nickname ?? "Sin apodo")],
       ["Avatar del servidor", V2Text.code(me?.avatar ? "Personalizado" : "Global")],
       ["Banner del servidor", V2Text.code(me?.banner ? "Personalizado" : "Global")],
     ]);
 
   const bannerUrl = me?.displayBannerURL?.({ size: 1024, extension: "png" }) ?? null;
   if (bannerUrl) builder.addGallery(bannerUrl);
-
-  builder.addText(
-    V2Text.subtext(isEnded ? "Sesión finalizada" : "Usa los botones para editar o restablecer en este servidor")
-  );
 
   if (!isEnded && controls?.length) {
     builder.addSpacer("small").addButtonsRow(controls);
@@ -397,7 +393,7 @@ async function sendCustomBotPanel(ctx) {
         const bannerAttachment = submitted.fields.getUploadedFiles("banner")?.first?.() ?? null;
 
         if (!rawNick && !rawBio && !avatarAttachment && !bannerAttachment) {
-          await submitted.reply({ content: "No ingresaste ningún cambio.", flags: MessageFlags.Ephemeral }).catch(() => {});
+          await submitted.reply({ content: "No cambió nada", flags: MessageFlags.Ephemeral }).catch(() => {});
           return false;
         }
 
