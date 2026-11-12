@@ -1,3 +1,4 @@
+const path = require("path");
 const {
   version: djsVersion,
   GroupBuilder,
@@ -29,7 +30,9 @@ const { createReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
 
 let graloniumVersion = "0.4.0";
-try { graloniumVersion = require("../../Gralonium/package.json").version; } catch {}
+try {
+  graloniumVersion = require(path.resolve(path.dirname(require.resolve("gralonium")), "..", "package.json")).version;
+} catch {}
 
 const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
 
