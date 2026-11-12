@@ -1,24 +1,10 @@
 const path = require("path");
 const fs = require("fs");
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require("discord.js");
-const { Gralonium } = require("gralonium");
+const { EmbedBuilder, MessageFlags } = require("discord.js");
+const { Gralonium, ComponentsV2Builder } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
 
-// Tras deferReply() público, Discord ignora el flag Ephemeral en editReply.
-// Para respetarlo en errores, se borra el "pensando..." y se envía un followUp efímero.
-const { Context: GraloniumContext } = require("gralonium");
-const baseContextSend = GraloniumContext.prototype.send;
-GraloniumContext.prototype.send = async function send(payload) {
-  const interaction = this.data;
-  const flags = payload && typeof payload === "object" ? payload.flags : null;
-  const wantsEphemeral = flags != null && (Number(flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
-  if (wantsEphemeral && interaction?.deferred && !interaction.ephemeral && typeof interaction.followUp === "function") {
-    if (!interaction.replied) await interaction.deleteReply().catch(() => {});
-    return interaction.followUp(payload);
-  }
-  return baseContextSend.call(this, payload);
-};
 const LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
 
 class Logger {
@@ -263,48 +249,6 @@ function registerShutdownHandlers(bot, log) {
 
 // ─── Shared Command Helpers ───────────────────────────────────────────────────
 
-function clampPage(page, totalPages) {
-  if (!Number.isFinite(page) || !Number.isFinite(totalPages) || totalPages <= 0) return 0;
-  return Math.max(0, Math.min(totalPages - 1, page));
-}
-
-function paginateArray(arr, size = 15) {
-  if (!Array.isArray(arr) || size <= 0) return [];
-  const pages = [];
-  for (let i = 0; i < arr.length; i += size) {
-    pages.push(arr.slice(i, i + size));
-  }
-  return pages;
-}
-
-function buildPaginationRow(prevId, nextId, page, totalPages) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(prevId)
-      .setLabel("◀")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page <= 0),
-    new ButtonBuilder()
-      .setCustomId(nextId)
-      .setLabel("▶")
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(page >= totalPages - 1)
-  );
-}
-
-function uniqueId(prefix = "collector") {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function sendThinkingReply(ctx) {
-  const msg = await ctx.send({
-    content: THINKING_TEXT,
-    allowedMentions: { repliedUser: false },
-  });
-  if (ctx && msg) ctx._thinkingMessage = msg;
-  return msg;
-}
-
 function formatPermissionName(p) {
   if (!p) return "";
   return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}\``;
@@ -315,65 +259,13 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
   return fetch(url, { ...options, signal });
 }
 
-async function prepareReply(ctx, { thinking = false } = {}) {
-  if (ctx.interaction) {
-    await ctx.interaction.deferReply();
-    return async (payload) => {
-      const body = typeof payload === "string" ? { content: payload } : payload;
-      const wantsEphemeral = body?.flags != null && (Number(body.flags) & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
-      if (wantsEphemeral && !ctx.interaction.ephemeral && typeof ctx.interaction.followUp === "function") {
-        await ctx.interaction.deleteReply().catch(() => {});
-        return ctx.interaction.followUp(body);
-      }
-      const isV2 = body?.flags != null && (Number(body.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
-      if (isV2) {
-        try {
-          return await ctx.interaction.editReply(body);
-        } catch {
-          await ctx.interaction.deleteReply().catch(() => {});
-          return ctx.interaction.followUp(body);
-        }
-      }
-      return ctx.interaction.editReply(payload);
-    };
-  }
-  if (!thinking) return (payload) => ctx.send(payload);
-
-  let pending = await sendThinkingReply(ctx).catch(() => null);
-  return async (payload) => {
-    const current = pending;
-    if (!current?.edit) return ctx.send(payload);
-    const rawBody = typeof payload === "string" ? { content: payload } : payload;
-    const isV2 = rawBody?.flags != null && (Number(rawBody.flags) & MessageFlags.IsComponentsV2) === MessageFlags.IsComponentsV2;
-    if (isV2) {
-      const sent = await ctx.send(rawBody);
-      pending = null;
-      ctx._thinkingMessage = null;
-      await current.delete().catch(() => {});
-      return sent;
-    }
-    pending = null;
-    ctx._thinkingMessage = null;
-    const body = { ...rawBody };
-    if (body.flags != null) {
-      const cleaned = Number(body.flags) & ~MessageFlags.Ephemeral;
-      if (cleaned) body.flags = cleaned;
-      else delete body.flags;
-    }
-    return current.edit({ content: "", embeds: [], components: [], ...body }).catch(() => ctx.send(body));
-  };
-}
-
 function noGuildReply(ctx, message = "Este comando solo funciona en servidores") {
-  return ctx.send({
-    embeds: [new EmbedBuilder().setDescription(message).setColor(RED)],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel("Invítame").setStyle(ButtonStyle.Link).setURL(INVITE_URL)
-      ),
-    ],
-    flags: MessageFlags.Ephemeral,
+  const card = ComponentsV2Builder.card({
+    description: message,
+    color: RED,
+    links: [{ label: "Invítame", url: INVITE_URL }],
   });
+  return ctx.ephemeral(card);
 }
 
 function handleCommandError(ctx, err) {
@@ -498,14 +390,8 @@ module.exports = {
   initializeBot,
   registerProcessErrorHandlers,
   registerShutdownHandlers,
-  clampPage,
-  paginateArray,
-  buildPaginationRow,  buildPagRow: buildPaginationRow,
-  uniqueId,
-  sendThinkingReply,
   formatPermissionName,
   fetchWithTimeout,
-  prepareReply,
   noGuildReply,
   handleCommandError,
   failWith,

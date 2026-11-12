@@ -37,6 +37,7 @@ const botOptions = {
   ],
   partials: [Partials.Channel, Partials.Message],
   guildOnly: false,
+  replyOnPrefix: true,
   bindProcessHandlers: false,
 };
 

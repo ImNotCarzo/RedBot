@@ -1,5 +1,4 @@
-const { Errors } = require("gralonium");
-const { EmbedBuilder } = require("discord.js");
+const { Errors, ComponentsV2Builder } = require("gralonium");
 const { RED } = require("../src/config");
 const { Logger, sanitizeError } = require("../src/runtime");
 
@@ -63,32 +62,23 @@ const event = {
     const commandName = ctx?.command?.data?.name;
 
     const safeSend = async (payload) => {
-      const data = typeof payload === "string" ? { content: payload } : payload;
-      const cleanData = typeof payload === "string" ? { content: payload, embeds: [] } : payload;
-
       try {
-        if (ctx?._thinkingMessage?.edit) {
-          return await ctx._thinkingMessage.edit(cleanData);
-        }
-
-        if (ctx?.interaction) {
-          if (ctx.interaction.deferred || ctx.interaction.replied) {
-            return await ctx.interaction.editReply(cleanData);
-          }
-          return await ctx.interaction.reply(data);
-        }
-
         if (typeof ctx?.send === "function") {
-          return await ctx.send(data);
+          return await ctx.send(payload);
         }
 
+        const data = typeof payload === "string" ? { content: payload } : payload;
         if (ctx?.channel?.send) {
           return await ctx.channel.send(data);
         }
-      } catch (sendErr) {
+      } catch {
         try {
+          if (ctx?.interaction?.replied && typeof ctx?.ephemeral === "function") {
+            return await ctx.ephemeral(payload, { followUp: true });
+          }
           if (ctx?.channel?.send) {
-            await ctx.channel.send(typeof data === "object" ? data.content || "" : String(payload));
+            const text = typeof payload === "string" ? payload : payload?.content || "";
+            if (text) return await ctx.channel.send(text);
           }
         } catch {}
       }
@@ -140,16 +130,18 @@ const event = {
           );
         }
 
-        const paramerror = new EmbedBuilder()
-          .setAuthor({ name: "Comando Ask", iconURL: bot?.displayAvatarURL?.() })
-          .setDescription(
-            `**Usos:**\nHazle una pregunta a la IA` +
-            `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-            `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
-          )
-          .setColor(RED);
+        const paramErrorCard = ComponentsV2Builder.card({
+          title: "Comando Ask",
+          thumbnail: bot?.displayAvatarURL?.() ?? null,
+          description:
+            "**Usos:**\nHazle una pregunta a la IA" +
+            "\n\n**Aliases:**\n`ia`, `ai`" +
+            "\n\n```js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\n```",
+          color: RED,
+          headerSeparator: false,
+        });
 
-        return safeSend({ embeds: [paramerror] });
+        return safeSend(paramErrorCard);
       }
 
       const paramName = err.param?.name ?? "requerido";

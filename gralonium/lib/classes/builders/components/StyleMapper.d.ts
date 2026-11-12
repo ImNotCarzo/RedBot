@@ -1,6 +1,6 @@
 import { ButtonStyle } from "discord.js";
 
-export type ButtonStyleName = "primary" | "secondary" | "success" | "danger" | "link";
+export type ButtonStyleName = "primary" | "secondary" | "success" | "danger" | "link" | "premium";
 export type ButtonStyleInput = ButtonStyleName | ButtonStyle;
 
 /**

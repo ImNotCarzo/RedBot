@@ -1,16 +1,4 @@
-const {
-  AttachmentBuilder,
-  ContainerBuilder,
-  TextDisplayBuilder,
-  MediaGalleryBuilder,
-  MediaGalleryItemBuilder,
-  SeparatorBuilder,
-  SeparatorSpacingSize,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  MessageFlags,
-} = require("discord.js");
+const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { Logger } = require("./runtime");
 // Todas las peticiones del downloader pasan por validacion de host publico (anti-SSRF) y redirecciones controladas
 const { fetchPublic: fetchWithTimeout, readBodyLimited } = require("./security");
@@ -690,61 +678,30 @@ async function downloadMeta(meta, maxBytes) {
   return downloadVideoBuffer(meta.videoUrl, maxBytes, meta.userAgent, meta.headers);
 }
 
-const ACCENT_COLOR =
-  typeof RED === "number"
-    ? RED
-    : Number.parseInt(String(RED).replace("#", ""), 16) || 0xff383d;
-
 function buildDownloadV2Payload(meta, downloadResult) {
-  const container = new ContainerBuilder().setAccentColor(ACCENT_COLOR);
+  const builder = new ComponentsV2Builder({ color: RED })
+    .addText(V2Text.subtext(meta.platform))
+    .addSpacer("small");
 
-  container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`-# ${meta.platform}`)
-  );
-
-  container.addSeparatorComponents(
-    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(false)
-  );
-
-  const files = [];
   if (!downloadResult.tooLarge && downloadResult.buffer) {
     const fileName = "redbot_video.mp4";
-    files.push(new AttachmentBuilder(downloadResult.buffer, { name: fileName }));
-    container.addMediaGalleryComponents(
-      new MediaGalleryBuilder().addItems(
-        new MediaGalleryItemBuilder().setURL(`attachment://${fileName}`)
-      )
-    );
+    builder
+      .addAttachment(downloadResult.buffer, { name: fileName })
+      .addGallery(`attachment://${fileName}`);
   } else {
     const sizeMb = downloadResult.size
       ? `${(downloadResult.size / (1024 * 1024)).toFixed(1)} MB`
       : "más del límite permitido";
-    container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `⚠️ El video pesa **${sizeMb}** y supera el límite de subida directa de este servidor.`
-      )
+    builder.addText(
+      `El video pesa **${sizeMb}** y supera el límite de subida directa de este servidor.`
     );
   }
 
-  container.addSeparatorComponents(
-    new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small).setDivider(false)
-  );
+  builder
+    .addSpacer("small")
+    .addButton({ label: "Original", style: "link", url: meta.sourceUrl });
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel("Original")
-      .setStyle(ButtonStyle.Link)
-      .setURL(meta.sourceUrl)
-  );
-
-  container.addActionRowComponents(row);
-
-  return {
-    flags: MessageFlags.IsComponentsV2,
-    components: [container],
-    files,
-    allowedMentions: { repliedUser: false },
-  };
+  return builder.toPayload({ allowedMentions: { repliedUser: false } });
 }
 
 module.exports = {

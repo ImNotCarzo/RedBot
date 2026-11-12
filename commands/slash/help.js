@@ -1,12 +1,9 @@
 const {
   CommandBuilder,
   ComponentsV2Builder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   MessageFlags,
-  ComponentType,
-  EmbedBuilder,
+  V2Text,
+  V2View,
 } = require("gralonium");
 const { getId, RED } = require("../../src/config");
 const { getPrefix } = require("../../src/guild");
@@ -166,11 +163,10 @@ const data = {
 
   async code(ctx) {
     try {
+      await ctx.defer();
       const isSlash  = Boolean(ctx.interaction);
       const authorId = ctx.user?.id ?? ctx.author?.id;
-
-      const prefix = ctx.guild?.id ? await getPrefix(ctx.guild.id) : ".";
-
+      const prefix   = ctx.guild?.id ? await getPrefix(ctx.guild.id) : ".";
       const COMMANDS = getCommands();
 
       const formatCommand = (cmd) => {
@@ -181,130 +177,105 @@ const data = {
       const buildCommandList = (category) =>
         Object.values(COMMANDS[category]).map(formatCommand).join("\n");
 
-      const buildDeleteRow = () =>
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("help_delete")
-            .setLabel("✖")
-            .setStyle(ButtonStyle.Secondary)
-        );
-
-      const buildContainer = (category) => {
-        const builder = new ComponentsV2Builder()
-          .addText("### <:redbot:1474109778044260478> RedBot");
-
-        for (const cat of CATEGORIES) {
-          builder.addButton(
-            cat === category ? `${CATEGORY_LABELS[cat]}` : CATEGORY_LABELS[cat],
-            `help_cat_${cat}`,
-            cat === category ? "danger" : "secondary"
-          );
-        }
-
-        builder
-          .addSeparator("small")
-          .addText(buildCommandList(category))
-          .addSeparator("small");
-
-        const select = builder.addSelectMenu(`help_select_${category}`, "Selecciona un comando");
-        for (const [key, cmd] of Object.entries(COMMANDS[category])) {
-          select.addOption(
-            formatSelectLabel(cmd),
-            `${category}${SEP}${key}`,
-            undefined,
-            cmd.description.slice(0, 100)
-          );
-        }
-        select.end();
-
-        builder
-          .addSeparator("small")
-          .addButton("Invitar", undefined, "link", INVITE_URL)
-          .addButton("Soporte", undefined, "link", SUPPORT_URL);
-
-        return builder.build()[0];
+      const ensureAuthor = async (interaction) => {
+        if (!authorId || interaction.user.id === authorId) return true;
+        await interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral }).catch(() => {});
+        return false;
       };
 
-      const buildStaticContainer = (category) =>
-        new ComponentsV2Builder()
-          .addText("### <:redbot:1474109778044260478> RedBot")
-          .addSeparator("small")
-          .addText(buildCommandList(category))
-          .build()[0];
+      const helpView = new V2View({
+        authorId,
+        timeout: COLLECTOR_TIMEOUT,
+        thirdPartyMode: "allow",
+        onEnd: "static",
+        state: { category: "utilidad" },
+        render: ({ state, view }) => {
+          const category = state.category;
+          return new ComponentsV2Builder()
+            .addText("### <:redbot:1474109778044260478> RedBot")
+            .addButtonsRow(
+              CATEGORIES.map((cat) => ({
+                label: CATEGORY_LABELS[cat],
+                customId: view.id("cat", cat),
+                style: cat === category ? "danger" : "secondary",
+              })),
+              { autoWrap: true }
+            )
+            .addSeparator("small")
+            .addText(buildCommandList(category))
+            .addSeparator("small")
+            .addSelectMenu({
+              customId: view.id("select", category),
+              placeholder: "Selecciona un comando",
+              options: Object.entries(COMMANDS[category]).map(([key, cmd]) => ({
+                label: formatSelectLabel(cmd),
+                value: `${category}${SEP}${key}`,
+                description: cmd.description.slice(0, 100),
+              })),
+            })
+            .addSeparator("small")
+            .addButtonsRow([
+              { label: "Invitar", style: "link", url: INVITE_URL },
+              { label: "Soporte", style: "link", url: SUPPORT_URL },
+            ])
+            .outside()
+            .addButton({ label: "✖", customId: view.id("del"), style: "secondary" })
+            .inside();
+        },
+        renderStatic: ({ state }) =>
+          new ComponentsV2Builder()
+            .addText("### <:redbot:1474109778044260478> RedBot")
+            .addSeparator("small")
+            .addText(buildCommandList(state.category)),
+        actions: {
+          cat: async ({ parts, interaction, setState }) => {
+            if (!(await ensureAuthor(interaction))) return false;
+            const category = parts[0];
+            if (!COMMANDS[category]) return false;
+            setState({ category });
+          },
+          del: async ({ interaction, view }) => {
+            if (!(await ensureAuthor(interaction))) return false;
+            view.stop("deleted");
+            await interaction.message?.delete?.().catch(() => {});
+            return false;
+          },
+          select: async ({ values, interaction }) => {
+            const selected = values[0] ?? "";
+            const sepIdx   = selected.indexOf(SEP);
+            const category = sepIdx >= 0 ? selected.slice(0, sepIdx) : "";
+            const key      = sepIdx >= 0 ? selected.slice(sepIdx + SEP.length) : "";
+            const cmd      = COMMANDS[category]?.[key];
 
-      let currentCategory = "utilidad";
+            if (!cmd) {
+              await interaction.reply({ content: "No encontré ese comando", flags: MessageFlags.Ephemeral }).catch(() => {});
+              return false;
+            }
 
-      const message = await ctx.send({
-        flags: ComponentsV2Builder.flags,
-        components: [buildContainer(currentCategory), buildDeleteRow()],
-        allowedMentions: { repliedUser: false },
+            const usoValue = isSlash
+              ? `</${cmd.slash}:${cmd.id}>`
+              : cmd.short ? V2Text.code(cmd.usage) : `</${cmd.slash}:${cmd.id}>`;
+
+            const detailCard = ComponentsV2Builder.card({
+              title: formatSelectLabel(cmd),
+              fields: [
+                ["Uso", usoValue],
+                ["Descripción", cmd.description],
+                cmd.aliases.length
+                  ? ["Alias", cmd.aliases.map((a) => V2Text.code(`${prefix}${a}`)).join(", ")]
+                  : null,
+              ],
+              fieldsSeparator: false,
+              color: RED,
+            });
+
+            await interaction.reply(detailCard.toPayload({ ephemeral: true })).catch(() => {});
+            return false;
+          },
+        },
       });
 
-      const buttonCollector = message.createMessageComponentCollector({
-        componentType: ComponentType.Button,
-        time: COLLECTOR_TIMEOUT,
-      });
-
-      const selectCollector = message.createMessageComponentCollector({
-        componentType: ComponentType.StringSelect,
-        time: COLLECTOR_TIMEOUT,
-      });
-
-      buttonCollector.on("collect", async (i) => {
-        if (i.user.id !== authorId) {
-          return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-        }
-
-        if (i.customId === "help_delete") {
-          buttonCollector.stop();
-          selectCollector.stop();
-          return i.message.delete().catch(() => {});
-        }
-
-        const category = i.customId.replace("help_cat_", "");
-        currentCategory = category;
-
-        await i.update({
-          flags: ComponentsV2Builder.flags,
-          components: [buildContainer(category), buildDeleteRow()],
-        }).catch(() => {});
-      });
-
-      selectCollector.on("collect", async (i) => {
-        const sepIdx   = i.values[0].indexOf(SEP);
-        const category = i.values[0].slice(0, sepIdx);
-        const key      = i.values[0].slice(sepIdx + SEP.length);
-        const cmd      = COMMANDS[category]?.[key];
-
-        if (!cmd) return i.reply({ content: "No encontré ese comando", flags: MessageFlags.Ephemeral }).catch(() => {});
-
-        const usoValue = isSlash
-          ? `</${cmd.slash}:${cmd.id}>`
-          : cmd.short ? `\`${cmd.usage}\`` : `</${cmd.slash}:${cmd.id}>`;
-
-        const embed = new EmbedBuilder()
-          .setColor(RED)
-          .setTitle(formatSelectLabel(cmd))
-          .addFields(
-            { name: "Uso",         value: usoValue },
-            { name: "Descripción", value: cmd.description },
-            ...(cmd.aliases.length
-              ? [{ name: "Alias", value: cmd.aliases.map(a => `\`${prefix}${a}\``).join(", ") }]
-              : []),
-          );
-
-        await i.reply({ embeds: [embed], flags: MessageFlags.Ephemeral }).catch(() => {});
-      });
-
-      buttonCollector.on("end", (_collected, reason) => {
-        if (reason !== "time") return;
-        selectCollector.stop();
-        message.edit({
-          flags: ComponentsV2Builder.flags,
-          components: [buildStaticContainer(currentCategory)],
-        }).catch(() => {});
-      });
-
+      await helpView.send(ctx, { allowedMentions: { repliedUser: false } });
     } catch (err) {
       log.error("[help]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);

@@ -1,9 +1,7 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder } = require("gralonium");
-const { MessageFlags } = require("discord.js");
-const { Logger, prepareReply, noGuildReply, handleCommandError } = require("../../src/runtime");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, ComponentsV2Builder, V2Text } = require("gralonium");
+const { Logger, THINKING_TEXT, noGuildReply, handleCommandError } = require("../../src/runtime");
 const { generateText, generateVision, fetchImageAsInlineData } = require("../../src/ai");
 const { RED } = require("../../src/config");
-const { buildSimpleContainer, buildV2Payload } = require("../../src/v2");
 
 const log = new Logger("CMD_FUN", process.env.LOG_LEVEL);
 
@@ -49,16 +47,16 @@ function msATexto(ms) {
 }
 
 async function runTextFunCommand(ctx, { logTag, prompt, fallbackText, title, footerText }) {
-  const reply = await prepareReply(ctx, { thinking: true });
+  await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
   try {
     const raw = await generateText(prompt);
-    const container = buildSimpleContainer({
+    const card = ComponentsV2Builder.card({
       title,
-      body: raw || fallbackText,
+      description: raw || fallbackText,
       footer: footerText,
       color: RED,
     });
-    await reply(buildV2Payload(container));
+    await ctx.send(card);
   } catch (err) {
     log.error(logTag, { err: err?.message ?? String(err) });
     handleCommandError(ctx, err);
@@ -172,11 +170,11 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
 
-        const reply = await prepareReply(ctx, { thinking: true });
+        await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
 
         try {
           const baseTarget = ctx.get("usuario") ?? ctx.member;
-          if (!baseTarget) return reply({ content: "No pude obtener la información del usuario", flags: MessageFlags.Ephemeral });
+          if (!baseTarget) return ctx.ephemeral("No pude obtener la información del usuario");
 
           // Precarga miembro (roles, presencia, ingreso) y foto antes de generar, para evitar fallos iniciales
           const target = await ctx.guild.members.fetch({ user: baseTarget.id, force: true }).catch(() => baseTarget);
@@ -228,15 +226,15 @@ Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos
 ${datosUsuario}`;
 
           const generated = imagePart ? await generateVision(prompt, imagePart) : await generateText(prompt);
-          const container = buildSimpleContainer({
+          const card = ComponentsV2Builder.card({
             title: `Roast de ${username}`,
-            subtitle: `@${usertag}`,
-            body: generated || "Ocurrió un error con la IA, intenta de nuevo",
-            thumbnailUrl: avatarUrl,
+            subtitle: V2Text.subtext(`@${usertag}`),
+            description: generated || "Ocurrió un error con la IA, intenta de nuevo",
+            thumbnail: avatarUrl,
             color: RED,
           });
 
-          await reply(buildV2Payload(container));
+          await ctx.send(card);
         } catch (err) {
           log.error("[fun roast]", { err: err?.message ?? String(err) });
           handleCommandError(ctx, err);
@@ -255,7 +253,7 @@ ${datosUsuario}`;
         required: true,
       }),
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         try {
           const raw = (ctx.get("opciones") ?? "").trim();
           let items = [];
@@ -271,24 +269,22 @@ ${datosUsuario}`;
 
           items = items.map((s) => s.trim()).filter(Boolean);
           if (items.length < 2) {
-            return ctx.send({
-              content: "Debes darme al menos 2 opciones para elegir (sepáralas con `,` o `|`)",
-              flags: MessageFlags.Ephemeral,
-            });
+            return ctx.ephemeral("Debes darme al menos 2 opciones para elegir (sepáralas con `,` o `|`)");
           }
 
           const eleccion = items[Math.floor(Math.random() * items.length)];
 
-          const container = buildSimpleContainer({
+          const card = ComponentsV2Builder.card({
             title: "Decisión tomada",
-            body:
-              `> **Opciones:** ${items.map((i) => `\`${i}\``).join(", ")}\n` +
-              `> **Elección:** **${eleccion}**`,
+            fields: [
+              ["Opciones", items.map((i) => V2Text.code(i)).join(", ")],
+              ["Elección", `**${eleccion}**`],
+            ],
+            fieldsSeparator: false,
             color: RED,
-            dividerBeforeBody: false,
           });
 
-          await ctx.send(buildV2Payload(container));
+          await ctx.send(card);
         } catch (err) {
           log.error("[fun choose]", { err: err?.message ?? String(err) });
           handleCommandError(ctx, err);

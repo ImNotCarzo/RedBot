@@ -1,7 +1,7 @@
 {
   "name": "gralonium",
   "description": "i know.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "author": "carzo",
   "type": "commonjs",
@@ -27,6 +27,8 @@
   "sideEffects": false,
   "scripts": {
     "build": "node -e \"const fs=require('fs');const cp=require('child_process');if(!fs.existsSync('tsconfig.json')||!fs.existsSync('src')){console.log('Skipping build: tsconfig.json/src not found');process.exit(0)}cp.execSync('tsc -p tsconfig.json && tsc-alias -p tsconfig.json',{stdio:'inherit',shell:true})\"",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "watch": "tsc -w -p tsconfig.json",
     "dev": "npm run watch",
     "clean": "rimraf lib",

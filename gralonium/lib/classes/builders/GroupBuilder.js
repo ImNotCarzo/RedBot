@@ -20,6 +20,8 @@ class GroupBuilder {
   userPermissions;
   botPermissions;
   guards;
+  integrationTypes;
+  contexts;
 
   constructor(options) {
     this.commands = [];
@@ -33,6 +35,8 @@ class GroupBuilder {
     this.userPermissions = permissionArrayPredicate.parse(options?.userPermissions ?? []);
     this.botPermissions = permissionArrayPredicate.parse(options?.botPermissions ?? []);
     this.guards = options?.guards ?? [];
+    this.integrationTypes = options?.integrationTypes;
+    this.contexts = options?.contexts;
   }
 
   setName(name) {
@@ -75,6 +79,16 @@ class GroupBuilder {
     return this;
   }
 
+  setIntegrationTypes(...types) {
+    this.integrationTypes = types.flat();
+    return this;
+  }
+
+  setContexts(...contexts) {
+    this.contexts = contexts.flat();
+    return this;
+  }
+
   toJSON() {
     return {
       name: this.name,
@@ -84,6 +98,8 @@ class GroupBuilder {
         ? (0, CommandBuilder_js_1.validateDefaultMemberPermissions)(this.defaultMemberPermissions)
         : undefined,
       dm_permission: typeof this.guildOnly === "boolean" ? !this.guildOnly : undefined,
+      ...(this.integrationTypes !== undefined ? { integration_types: this.integrationTypes } : {}),
+      ...(this.contexts !== undefined ? { contexts: this.contexts } : {}),
     };
   }
 }

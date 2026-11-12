@@ -50,20 +50,6 @@ const PREFIXED_TO_SLASH_MAP = {
 const wrappedOriginalCodes = new WeakSet();
 const slashCommandMap = new Map();
 
-function normalizeReplyPayload(payload) {
-  if (typeof payload === "string") return { content: payload };
-  if (Array.isArray(payload)) return { content: payload.join("\n") };
-  if (!payload || typeof payload !== "object") return { content: String(payload ?? "") };
-  if (payload.flags != null) {
-    const cleanedFlags = Number(payload.flags) & ~64;
-    const copy = { ...payload };
-    if (cleanedFlags) copy.flags = cleanedFlags;
-    else delete copy.flags;
-    return copy;
-  }
-  return payload;
-}
-
 async function resolveMember(ctx, input) {
   if (!ctx?.guild || !input) return null;
 
@@ -347,18 +333,6 @@ function wrapSingleCommand(command, file, log) {
   if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
 
   command.code = async function (ctx, ...args) {
-    const originalReply = ctx?.message?.reply?.bind(ctx.message);
-    if (originalReply) {
-      ctx.send = (payload) => {
-        const normalized = normalizeReplyPayload(payload);
-        return originalReply({
-          ...normalized,
-          allowedMentions: { ...normalized.allowedMentions, repliedUser: false },
-        });
-      };
-      if (!ctx.reply) ctx.reply = ctx.send;
-    }
-
     const prefixedName = command?.data?.name;
     const slashKey = resolveSlashKeyForPrefixedName(prefixedName);
     const slashName = slashKey?.split("/")[1];
@@ -384,16 +358,13 @@ function wrapSingleCommand(command, file, log) {
         }
 
         const prevGet = ctx.get;
-        const prevUser = ctx.user;
         ctx.get = (name) => parsedValues.values[name] ?? null;
-        if (!ctx.user && ctx.author) ctx.user = ctx.author;
         ctx.command = slashCommand;
 
         try {
           return await slashCommand.code(ctx, ...args);
         } finally {
           ctx.get = prevGet;
-          ctx.user = prevUser;
           ctx.command = prevCommand;
         }
       } catch (err) {

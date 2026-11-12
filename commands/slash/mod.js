@@ -1,20 +1,11 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2Paginator } = require("gralonium");
 const {
   ChannelType,
   EmbedBuilder,
-  ComponentType,
   MessageFlags,
 } = require("discord.js");
-const { clampPage, paginateArray, buildPagRow, uniqueId, failWith } = require("../../src/runtime");
+const { failWith } = require("../../src/runtime");
 const { RED, YELLOW, GREEN } = require("../../src/config");
-const {
-  createContainer,
-  addHeaderSection,
-  addSeparator,
-  addTextBlock,
-  clipV2Text,
-  buildV2Payload,
-} = require("../../src/v2");
 const {
   generateId,
   parseDuration,
@@ -696,71 +687,56 @@ const data = {
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const member = ctx.get("usuario");
         const authorId = ctx.user?.id ?? ctx.author?.id;
 
         try {
           const warns = await listWarnsForUser({ guildId: ctx.guild.id, userId: member.id });
           if (!warns.length) {
-            return ctx.send({ content: `${member.user.tag} no tiene advertencias`, flags: MessageFlags.Ephemeral });
+            return ctx.ephemeral(`${member.user.tag} no tiene advertencias`);
           }
 
-          const pages = paginateArray(warns, 5);
-          let page = 0;
-          const prevId = uniqueId("warns_prev");
-          const nextId = uniqueId("warns_next");
-
-          const buildWarningsPayload = (interactive = true) => {
-            const container = createContainer(YELLOW);
-            addHeaderSection(
-              container,
-              [
-                `### Advertencias de ${clipV2Text(member.user.tag, 100)}`,
-                `-# Página ${page + 1}/${pages.length} · ${warns.length} en total`,
-              ],
-              member.user.displayAvatarURL({ size: 256 })
-            );
-
-            for (const w of pages[page]) {
-              addSeparator(container);
-              const ts = Math.floor(w.createdAt.getTime() / 1000);
-              const reason = clipV2Text(w.reason, 500, "Sin razón");
-              addTextBlock(
-                container,
-                `**\`${w.warnId}\`** — <t:${ts}:d>\n> **Razón:** ${reason}\n> **Mod:** <@${w.moderator}>`
+          const paginator = new V2Paginator({
+            items: warns,
+            perPage: 5,
+            ownerId: authorId,
+            thirdPartyMode: "reject",
+            thirdPartyMessage: "No es tu comando",
+            wrap: false,
+            prevButton: { label: "◀" },
+            nextButton: { label: "▶" },
+            showPageIndicator: false,
+            timeout: 2 * 60 * 1000,
+            renderPage: ({ items: pageWarns, pageIndex, totalPages, isEnded, controls }) => {
+              const builder = new ComponentsV2Builder({ color: YELLOW }).addSection(
+                [
+                  V2Text.heading(`Advertencias de ${V2Text.clip(member.user.tag, 100)}`, 3),
+                  V2Text.subtext(`Página ${pageIndex + 1}/${totalPages} · ${warns.length} en total`),
+                ],
+                { thumbnail: member.user.displayAvatarURL({ size: 256 }) }
               );
-            }
 
-            if (interactive && pages.length > 1) {
-              addSeparator(container);
-              container.addActionRowComponents(buildPagRow(prevId, nextId, page, pages.length));
-            }
+              for (const w of pageWarns) {
+                const ts = Math.floor(w.createdAt.getTime() / 1000);
+                const reason = V2Text.clip(w.reason, 500, "Sin razón");
+                builder.addSeparator("small").addText(
+                  `**\`${w.warnId}\`** — <t:${ts}:d>\n${V2Text.fields([
+                    ["Razón", reason],
+                    ["Mod", `<@${w.moderator}>`],
+                  ])}`
+                );
+              }
 
-            return buildV2Payload(container);
-          };
+              if (!isEnded && totalPages > 1) {
+                builder.addSeparator("small").addButtonsRow(controls);
+              }
 
-          const msg = await ctx.send(buildWarningsPayload(true));
-
-          if (pages.length <= 1) return;
-
-          const collector = msg.createMessageComponentCollector({
-            componentType: ComponentType.Button,
-            time: 2 * 60 * 1000,
-            filter: (i) => [prevId, nextId].includes(i.customId),
+              return builder;
+            },
           });
 
-          collector.on("collect", async (i) => {
-            if (i.user.id !== authorId) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-            if (i.customId === prevId) page--;
-            if (i.customId === nextId) page++;
-            page = clampPage(page, pages.length);
-            await i.update(buildWarningsPayload(true));
-          });
-
-          collector.on("end", async (_c, reason) => {
-            if (reason === "time") await msg.edit(buildWarningsPayload(false)).catch(() => {});
-          });
+          await paginator.send(ctx);
         } catch (err) {
           return failWith(ctx, err, "No se pudieron obtener las advertencias");
         }

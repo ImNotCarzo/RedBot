@@ -1,3 +1,5 @@
+import type { ApplicationIntegrationType, InteractionContextType } from "discord.js";
+
 export declare function validateDefaultMemberPermissions(permissions: unknown): string | null | undefined;
 
 export interface CommandDataBuilder {
@@ -14,6 +16,8 @@ export interface CommandDataBuilder {
   botPermissions?: string[];
   guards?: Array<(ctx: any) => boolean | Promise<boolean>>;
   cooldown?: { seconds: number; bucket?: string };
+  integrationTypes?: Array<ApplicationIntegrationType | number>;
+  contexts?: Array<InteractionContextType | number>;
 }
 
 export declare class CommandBuilder {
@@ -30,6 +34,8 @@ export declare class CommandBuilder {
   botPermissions: string[];
   guards: Array<(ctx: any) => boolean | Promise<boolean>>;
   cooldown?: { seconds: number; bucket?: string };
+  integrationTypes?: Array<ApplicationIntegrationType | number>;
+  contexts?: Array<InteractionContextType | number>;
   constructor(options?: CommandDataBuilder);
   setName(name: string): CommandBuilder;
   setDescription(description: string): CommandBuilder;
@@ -41,10 +47,14 @@ export declare class CommandBuilder {
   setUserPermissions(...permissions: string[]): CommandBuilder;
   setBotPermissions(...permissions: string[]): CommandBuilder;
   setCooldown(seconds: number, bucket?: string): CommandBuilder;
+  setIntegrationTypes(...types: Array<ApplicationIntegrationType | number | Array<ApplicationIntegrationType | number>>): CommandBuilder;
+  setContexts(...contexts: Array<InteractionContextType | number | Array<InteractionContextType | number>>): CommandBuilder;
   toJSON(): {
     name: string;
     description: string;
     default_member_permissions: string | null | undefined;
     dm_permission: boolean | undefined;
+    integration_types?: Array<ApplicationIntegrationType | number>;
+    contexts?: Array<InteractionContextType | number>;
   };
 }

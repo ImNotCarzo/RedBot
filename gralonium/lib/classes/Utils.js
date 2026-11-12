@@ -591,18 +591,37 @@ class Utils {
     return { command, group: null };
   }
 
-  static #resolveInteractionModule(bot, interaction) {
-    if (interaction.isAutocomplete()) return bot.loader.interactions.autocomplete.get(interaction.commandName) || null;
-    if (interaction.isButton()) return bot.loader.interactions.button.get(interaction.customId) || null;
-    if (interaction.isModalSubmit()) return bot.loader.interactions.modalSubmit.get(interaction.customId) || null;
-    if (interaction.isMessageContextMenuCommand()) return bot.loader.interactions.messageContextMenu.get(interaction.commandName) || null;
-    if (interaction.isUserContextMenuCommand()) return bot.loader.interactions.userContextMenu.get(interaction.commandName) || null;
-    if (interaction.isChannelSelectMenu()) return bot.loader.interactions.channelSelectMenu.get(interaction.customId) || null;
-    if (interaction.isMentionableSelectMenu()) return bot.loader.interactions.mentionableSelectMenu.get(interaction.customId) || null;
-    if (interaction.isRoleSelectMenu()) return bot.loader.interactions.roleSelectMenu.get(interaction.customId) || null;
-    if (interaction.isStringSelectMenu()) return bot.loader.interactions.stringSelectMenu.get(interaction.customId) || null;
-    if (interaction.isUserSelectMenu()) return bot.loader.interactions.userSelectMenu.get(interaction.customId) || null;
+  static #extractInteractionLookup(interaction) {
+    const checks = [
+      ["isAutocomplete", "autocomplete", "commandName"],
+      ["isButton", "button", "customId"],
+      ["isModalSubmit", "modalSubmit", "customId"],
+      ["isMessageContextMenuCommand", "messageContextMenu", "commandName"],
+      ["isUserContextMenuCommand", "userContextMenu", "commandName"],
+      ["isChannelSelectMenu", "channelSelectMenu", "customId"],
+      ["isMentionableSelectMenu", "mentionableSelectMenu", "customId"],
+      ["isRoleSelectMenu", "roleSelectMenu", "customId"],
+      ["isStringSelectMenu", "stringSelectMenu", "customId"],
+      ["isUserSelectMenu", "userSelectMenu", "customId"],
+    ];
+
+    for (const [guard, typeKey, prop] of checks) {
+      if (typeof interaction[guard] === "function" && interaction[guard]()) {
+        return { typeKey, key: interaction[prop] };
+      }
+    }
     return null;
+  }
+
+  static #resolveInteractionModule(bot, interaction) {
+    const target = Utils.#extractInteractionLookup(interaction);
+    if (!target) return null;
+
+    const bucket = bot.loader.interactions?.[target.typeKey];
+    const exact = bucket?.get?.(target.key);
+    if (exact) return exact;
+
+    return bot.loader.resolvePatternInteraction?.(target.typeKey, target.key, interaction) || null;
   }
 
   static async #executeInteractionModule(bot, interaction, moduleData) {

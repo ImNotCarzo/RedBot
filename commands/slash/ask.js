@@ -4,8 +4,8 @@ const { generateChatReply, setConversacion, getConversacion } = require("../../s
 const { MAX_HISTORIAL, RED } = require("../../src/config");
 const {
   Logger,
+  THINKING_TEXT,
   handleCommandError,
-  sendThinkingReply,
 } = require("../../src/runtime");
 
 const log = new Logger("CMD_ASK", process.env.LOG_LEVEL);
@@ -47,14 +47,8 @@ const data = {
       const userId = ctx.user?.id ?? ctx.author?.id;
       const username = ctx.user?.username ?? ctx.author?.username;
       const invoker = ctx.user ?? ctx.author;
-      const isSlash = !!ctx.interaction;
 
-      let thinking;
-      if (isSlash) {
-        await ctx.interaction.deferReply();
-      } else {
-        thinking = await sendThinkingReply(ctx);
-      }
+      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
 
       const scope = ctx.guild?.id ?? "dm";
       const prev = getConversacion(userId, scope);
@@ -74,14 +68,8 @@ const data = {
         .setDescription(texto)
         .setColor(RED);
 
-      if (isSlash) {
-        await ctx.interaction.editReply({ embeds: [embed] });
-        const sent = await ctx.interaction.fetchReply();
-        setConversacion(userId, historial, sent.id, scope);
-      } else {
-        await thinking?.edit?.({ content: "", embeds: [embed] }).catch(() => null);
-        setConversacion(userId, historial, thinking?.id ?? null, scope);
-      }
+      const sent = await ctx.send({ embeds: [embed] });
+      setConversacion(userId, historial, sent?.id ?? null, scope);
 
     } catch (err) {
       log.error("Error en ask", { err: err?.message ?? String(err) });

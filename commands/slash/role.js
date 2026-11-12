@@ -1,36 +1,27 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
 const {
-  ActionRowBuilder,
-  EmbedBuilder,
-  SeparatorSpacingSize,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
-  ComponentType,
+  GroupBuilder,
+  CommandBuilder,
+  ParamsBuilder,
+  Plugins,
+  ComponentsV2Builder,
   MessageFlags,
-} = require("discord.js");
+  V2Text,
+  V2View,
+  V2Paginator,
+} = require("gralonium");
+const { EmbedBuilder } = require("discord.js");
 const {
   Logger,
-  clampPage,
-  paginateArray,
   noGuildReply,
   formatPermissionName: formatPerm,
-  uniqueId,
   handleCommandError,
   failWith,
 } = require("../../src/runtime");
-const {
-  createContainer,
-  addHeaderSection,
-  addSeparator,
-  clipV2Text,
-  buildSimpleContainer,
-  buildImageViewContainer,
-  buildPaginatedListContainer,
-  buildV2Payload,
-} = require("../../src/v2");
 const { JoinRole } = require("../../src/database");
 const { sendLog } = require("../../src/guild");
 const { RED, GREEN, DARK } = require("../../src/config");
+
+const PAGE_SIZE = 15;
 
 const log = new Logger("CMD_ROLE", process.env.LOG_LEVEL);
 
@@ -161,102 +152,60 @@ async function executeBulkRole({
   }
 }
 
-function buildRoleInfoPayload(role, { extraRows = [], ephemeral = false } = {}) {
+function buildRoleInfoCard(role) {
   const hex = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "Sin color";
   const color = role.color || DARK;
-  const infoLines =
-    `> **ID:** \`${role.id}\`\n` +
-    `> **Color:** \`${hex}\`\n` +
-    `> **Posición:** \`${role.position}\`\n` +
-    `> **Mencionable:** \`${role.mentionable}\`\n` +
-    `> **Gestionado:** \`${role.managed}\`\n` +
-    `> **Separado:** \`${role.hoist}\``;
+  const rows = [
+    ["ID", V2Text.code(role.id)],
+    ["Color", V2Text.code(hex)],
+    ["Posición", V2Text.code(role.position)],
+    ["Mencionable", V2Text.code(role.mentionable)],
+    ["Gestionado", V2Text.code(role.managed)],
+    ["Separado", V2Text.code(role.hoist)],
+  ];
 
-  const container = createContainer(color);
-  addHeaderSection(
-    container,
-    [`### ${clipV2Text(role.name, 100)}`, `**Información**\n${infoLines}`],
-    role.icon ? role.iconURL({ size: 1024 }) : null
+  return new ComponentsV2Builder({ color }).addSection(
+    [V2Text.heading(role.name, 3, 100), V2Text.sectionBlock("Información", rows)],
+    { thumbnail: role.icon ? role.iconURL({ size: 1024 }) : null, fallbackToText: true }
   );
-
-  if (extraRows.length) {
-    addSeparator(container, SeparatorSpacingSize.Small, false);
-    for (const row of extraRows) {
-      if (row) container.addActionRowComponents(row);
-    }
-  }
-
-  return buildV2Payload(container, { ephemeral });
 }
 
-function buildRoleIconPayload(role, { extraRows = [], ephemeral = false } = {}) {
+function buildRoleIconCard(role) {
   const url = role.iconURL({ size: 4096, extension: "png" });
-  return buildV2Payload(
-    buildImageViewContainer({
-      authorName: role.name,
-      title: "Icono del rol",
-      imageUrl: url,
-      color: role.color || DARK,
-      extraRows,
-    }),
-    { ephemeral }
-  );
+  return new ComponentsV2Builder({ color: role.color || DARK })
+    .addText(`${V2Text.subtext(role.name, 120)}\n${V2Text.heading("Icono del rol", 3)}`)
+    .addGallery(url)
+    .addSpacer("small")
+    .addButton({ label: "Abrir imagen", style: "link", url });
 }
 
-function buildRoleColorPayload(role, { extraRows = [], ephemeral = false } = {}) {
+function buildRoleColorCard(role) {
   const hex = `#${role.color.toString(16).padStart(6, "0")}`;
-  const container = createContainer(role.color);
-  addHeaderSection(
-    container,
+  return new ComponentsV2Builder({ color: role.color }).addSection(
     [
-      `### ${clipV2Text(role.name, 100)}`,
-      `> **Hex:** \`${hex}\`\n> **Decimal:** \`${role.color}\``,
+      V2Text.heading(role.name, 3, 100),
+      V2Text.fields([
+        ["Hex", V2Text.code(hex)],
+        ["Decimal", V2Text.code(role.color)],
+      ]),
     ],
-    role.icon ? role.iconURL({ size: 1024 }) : null
+    { thumbnail: role.icon ? role.iconURL({ size: 1024 }) : null, fallbackToText: true }
   );
-
-  if (extraRows.length) {
-    addSeparator(container, SeparatorSpacingSize.Small, false);
-    for (const row of extraRows) {
-      if (row) container.addActionRowComponents(row);
-    }
-  }
-
-  return buildV2Payload(container, { ephemeral });
 }
 
-function buildRolePermsPayload(role, pages, page, { prevId = null, nextId = null, extraRows = [], interactive = true, ephemeral = false } = {}) {
-  const container = buildPaginatedListContainer({
-    title: `Permisos de ${role.name}`,
-    lines: pages[page],
-    footer: pages.length > 1 ? `Página ${page + 1}/${pages.length}` : null,
-    thumbnailUrl: role.icon ? role.iconURL({ size: 256 }) : null,
-    color: role.color || DARK,
-    page,
-    totalPages: pages.length,
-    prevId,
-    nextId,
-    extraRows,
-    interactive,
-  });
-  return buildV2Payload(container, { ephemeral });
-}
+function buildRoleListCard({ role, title, lines, pageIndex, totalPages, footer = null, controls = null }) {
+  const builder = new ComponentsV2Builder({ color: role.color || DARK })
+    .addSection(
+      [V2Text.heading(title, 3, 200)],
+      { thumbnail: role.icon ? role.iconURL({ size: 256 }) : null, fallbackToText: true }
+    )
+    .addSeparator("small")
+    .addText(V2Text.clip(lines.join("\n"), 3600));
 
-function buildRoleUsersPayload(role, totalUsers, pages, page, { prevId = null, nextId = null, extraRows = [], interactive = true, ephemeral = false } = {}) {
-  const container = buildPaginatedListContainer({
-    title: `Usuarios con ${role.name} (${page + 1}/${pages.length})`,
-    lines: pages[page],
-    footer: `${totalUsers} usuarios en total`,
-    thumbnailUrl: role.icon ? role.iconURL({ size: 256 }) : null,
-    color: role.color || DARK,
-    page,
-    totalPages: pages.length,
-    prevId,
-    nextId,
-    extraRows,
-    interactive,
-  });
-  return buildV2Payload(container, { ephemeral });
+  const resolvedFooter = footer ?? (totalPages > 1 ? `Página ${pageIndex + 1}/${totalPages}` : null);
+  if (resolvedFooter) builder.addText(V2Text.subtext(resolvedFooter, 200));
+  if (controls?.length) builder.addSpacer("small").addButtonsRow(controls);
+  return builder;
 }
 
 function createMemberRoleCommand({ name, description, isAdd }) {
@@ -267,7 +216,7 @@ function createMemberRoleCommand({ name, description, isAdd }) {
       .addRole({ name: "rol", description: "Rol", required: true }),
     plugins: MANAGE_ROLES_PLUGINS,
     async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+      await ctx.defer();
       const member = ctx.get("usuario");
       const role = ctx.get("rol");
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -325,7 +274,7 @@ function createRoleToggleCommand({ name, description, prop, setter, label, logTi
     params: new ParamsBuilder().addRole({ name: "rol", description: "Rol", required: true }),
     plugins: MANAGE_ROLES_PLUGINS,
     async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+      await ctx.defer();
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role = ctx.get("rol");
@@ -385,7 +334,7 @@ function createTargetBulkRoleCommand({ name, description, isBots, targetNoun, ti
       }),
     plugins: ADMIN_ROLE_PLUGINS,
     async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+      await ctx.defer();
       const role = ctx.get("rol");
       const isAdd = ctx.get("accion") === "add";
       const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -420,14 +369,13 @@ const data = {
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
         const role = ctx.get("rol");
-        if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
+        if (!role) return ctx.ephemeral("No encontré ese rol");
 
         const authorId = ctx.user?.id ?? ctx.author?.id;
-
         const navOptions = [
           { label: "Color", value: "color", description: "Color del rol" },
           { label: "Permisos", value: "permissions", description: "Permisos del rol" },
@@ -436,185 +384,114 @@ const data = {
         ];
         const allNavOptions = [{ label: "Info", value: "info", description: "Información del rol" }, ...navOptions];
 
-        const navId = uniqueId("role_nav");
-        const prevId = uniqueId("role_prev");
-        const nextId = uniqueId("role_next");
-
-        const buildNavRow = (includeInfo) =>
-          new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-              .setCustomId(navId)
-              .setPlaceholder("Navegar...")
-              .addOptions((includeInfo ? allNavOptions : navOptions).map((o) =>
-                new StringSelectMenuOptionBuilder().setLabel(o.label).setValue(o.value).setDescription(o.description)
-              ))
-          );
-
-        let renderCurrent = (interactive = true) =>
-          buildRoleInfoPayload(role, { extraRows: interactive ? [buildNavRow(false)] : [] });
-
-        const msg = await ctx.send(renderCurrent(true));
-
-        let subCollector = null;
-
-        const attachPageCollector = (renderPage, pages) => {
-          let page = 0;
-          renderCurrent = (interactive = true, includePag = true) =>
-            renderPage(page, {
-              extraRows: interactive ? [buildNavRow(true)] : [],
-              interactive: interactive && includePag,
-            });
-
-          subCollector = msg.createMessageComponentCollector({
-            componentType: ComponentType.Button,
-            time: 2 * 60 * 1000,
-            filter: (i) => [prevId, nextId].includes(i.customId) && i.user.id === authorId,
-          });
-          subCollector.on("collect", async (i) => {
-            page = clampPage(i.customId === prevId ? page - 1 : page + 1, pages.length);
-            await i.update(renderCurrent(true, true));
-          });
-          subCollector.on("end", (_c, reason) => {
-            if (reason === "time") {
-              renderCurrent = (interactive = true) =>
-                renderPage(page, {
-                  extraRows: interactive ? [buildNavRow(true)] : [],
-                  interactive: false,
-                });
-              msg.edit(renderCurrent(true)).catch(() => {});
-            }
-          });
+        const perms = role.permissions.toArray().sort().map(formatPerm);
+        let cachedUsers = null;
+        const loadUsers = async () => {
+          if (cachedUsers) return cachedUsers;
+          if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
+            await ctx.guild.members.fetch().catch(() => {});
+          }
+          const sortedMembers = role.members.sort((a, b) => (b.joinedTimestamp ?? 0) - (a.joinedTimestamp ?? 0));
+          cachedUsers = Array.from(sortedMembers.values()).map((m, i) => `${i + 1}. ${m}`);
+          return cachedUsers;
         };
 
-        const collector = msg.createMessageComponentCollector({
-          time: 5 * 60 * 1000,
-          filter: (i) => i.customId === navId || [prevId, nextId].includes(i.customId),
-        });
+        const renderView = ({ state, view, isEnded }) => {
+          let builder;
+          if (state.tab === "color") {
+            builder = buildRoleColorCard(role);
+          } else if (state.tab === "icon") {
+            builder = buildRoleIconCard(role);
+          } else if (state.tab === "permissions" || state.tab === "users") {
+            const items = state.tab === "permissions" ? perms : (cachedUsers ?? []);
+            const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+            const safePage = Math.max(0, Math.min(totalPages - 1, state.pageIndex));
+            const pageItems = items.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+            const controls = !isEnded && totalPages > 1
+              ? [
+                  { label: "◀", customId: view.id("page", "prev"), style: "secondary", disabled: safePage <= 0 },
+                  { label: "▶", customId: view.id("page", "next"), style: "secondary", disabled: safePage >= totalPages - 1 },
+                ]
+              : null;
 
-        collector.on("collect", async (interaction) => {
-          const isAuthor = interaction.user.id === authorId;
-
-          if ([prevId, nextId].includes(interaction.customId)) {
-            if (!isAuthor) return interaction.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-            return;
+            builder = state.tab === "permissions"
+              ? buildRoleListCard({
+                  role,
+                  title: `Permisos de ${role.name}`,
+                  lines: pageItems,
+                  pageIndex: safePage,
+                  totalPages,
+                  controls,
+                })
+              : buildRoleListCard({
+                  role,
+                  title: `Usuarios con ${role.name} (${safePage + 1}/${totalPages})`,
+                  lines: pageItems,
+                  pageIndex: safePage,
+                  totalPages,
+                  footer: `${items.length} usuarios en total`,
+                  controls,
+                });
+          } else {
+            builder = buildRoleInfoCard(role);
           }
 
-          const selected = interaction.values?.[0];
-          if (!selected) return;
+          if (!isEnded) {
+            builder.addSpacer("small").addSelectMenu({
+              customId: view.id("select"),
+              placeholder: "Navegar...",
+              options: state.tab === "info" ? navOptions : allNavOptions,
+            });
+          }
+          return builder;
+        };
 
-          if (!isAuthor) {
-            if (selected === "info") {
-              return interaction.reply(buildRoleInfoPayload(role, { ephemeral: true }));
-            }
-            if (selected === "icon") {
-              if (!role.icon) return interaction.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral });
-              return interaction.reply(buildRoleIconPayload(role, { ephemeral: true }));
-            }
-            if (selected === "color") {
-              if (!role.color) return interaction.reply({ content: "Sin color asignado", flags: MessageFlags.Ephemeral });
-              return interaction.reply(buildRoleColorPayload(role, { ephemeral: true }));
-            }
-            if (selected === "permissions") {
-              const perms = role.permissions.toArray().sort().map(formatPerm);
-              if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
-              return interaction.reply(
-                buildV2Payload(
-                  buildSimpleContainer({
-                    title: `Permisos de ${role.name}`,
-                    body: perms.join("\n"),
-                    thumbnailUrl: role.icon ? role.iconURL({ size: 256 }) : null,
-                    color: role.color || DARK,
-                  }),
-                  { ephemeral: true }
-                )
-              );
-            }
-            if (selected === "users") {
-              if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
-                await ctx.guild.members.fetch().catch(() => {});
+        const roleView = new V2View({
+          authorId,
+          timeout: 5 * 60 * 1000,
+          thirdPartyMode: "ephemeral-view",
+          onEnd: "static",
+          state: { tab: "info", pageIndex: 0 },
+          render: renderView,
+          renderStatic: (args) => renderView({ ...args, isEnded: true }),
+          actions: {
+            select: async ({ values, interaction, setState }) => {
+              const selected = values[0];
+              if (!selected) return false;
+
+              if (selected === "icon" && !role.icon) {
+                await interaction.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral }).catch(() => {});
+                return false;
               }
-              const members = Array.from(role.members.values()).map((m, i) => `${i + 1}. ${m}`);
-              if (!members.length) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
-              return interaction.reply(
-                buildV2Payload(
-                  buildSimpleContainer({
-                    title: `Usuarios con ${role.name}`,
-                    body: members.slice(0, 15).join("\n"),
-                    thumbnailUrl: role.icon ? role.iconURL({ size: 256 }) : null,
-                    color: role.color || DARK,
-                  }),
-                  { ephemeral: true }
-                )
-              );
-            }
-            return interaction.reply({ content: "No puedes interactuar con esto", flags: MessageFlags.Ephemeral });
-          }
+              if (selected === "color" && !role.color) {
+                await interaction.reply({ content: "Sin color asignado", flags: MessageFlags.Ephemeral }).catch(() => {});
+                return false;
+              }
+              if (selected === "permissions" && !perms.length) {
+                await interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral }).catch(() => {});
+                return false;
+              }
+              if (selected === "users") {
+                const users = await loadUsers();
+                if (!users.length) {
+                  await interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral }).catch(() => {});
+                  return false;
+                }
+              }
 
-          if (subCollector) { subCollector.stop(); subCollector = null; }
-
-          if (selected === "info") {
-            renderCurrent = (interactive = true) =>
-              buildRoleInfoPayload(role, { extraRows: interactive ? [buildNavRow(false)] : [] });
-            return interaction.update(renderCurrent(true));
-          }
-
-          if (selected === "icon") {
-            if (!role.icon) return interaction.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral });
-            renderCurrent = (interactive = true) =>
-              buildRoleIconPayload(role, { extraRows: interactive ? [buildNavRow(true)] : [] });
-            return interaction.update(renderCurrent(true));
-          }
-
-          if (selected === "color") {
-            if (!role.color) return interaction.reply({ content: "Sin color asignado", flags: MessageFlags.Ephemeral });
-            renderCurrent = (interactive = true) =>
-              buildRoleColorPayload(role, { extraRows: interactive ? [buildNavRow(true)] : [] });
-            return interaction.update(renderCurrent(true));
-          }
-
-          if (selected === "permissions") {
-            const perms = role.permissions.toArray().sort().map(formatPerm);
-            if (!perms.length) return interaction.reply({ content: "Sin permisos", flags: MessageFlags.Ephemeral });
-
-            const pages = paginateArray(perms, 15);
-            const renderPerms = (pg, opts) => buildRolePermsPayload(role, pages, pg, { prevId, nextId, ...opts });
-            renderCurrent = (interactive = true) =>
-              renderPerms(0, { extraRows: interactive ? [buildNavRow(true)] : [], interactive: false });
-
-            await interaction.update(
-              renderPerms(0, { extraRows: [buildNavRow(true)], interactive: pages.length > 1 })
-            );
-
-            if (pages.length > 1) attachPageCollector(renderPerms, pages);
-            return;
-          }
-
-          if (selected === "users") {
-            if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
-              await ctx.guild.members.fetch().catch(() => {});
-            }
-            const sortedMembers = role.members.sort((a, b) => (b.joinedTimestamp ?? 0) - (a.joinedTimestamp ?? 0));
-            if (!sortedMembers.size) return interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
-
-            const numberedMembers = Array.from(sortedMembers.values()).map((m, i) => `${i + 1}. ${m}`);
-            const pages = paginateArray(numberedMembers, 15);
-            const renderUsers = (pg, opts) =>
-              buildRoleUsersPayload(role, sortedMembers.size, pages, pg, { prevId, nextId, ...opts });
-            renderCurrent = (interactive = true) =>
-              renderUsers(0, { extraRows: interactive ? [buildNavRow(true)] : [], interactive: false });
-
-            await interaction.update(
-              renderUsers(0, { extraRows: [buildNavRow(true)], interactive: pages.length > 1 })
-            );
-
-            if (pages.length > 1) attachPageCollector(renderUsers, pages);
-          }
+              setState({ tab: selected, pageIndex: 0 });
+            },
+            page: ({ parts, state, setState }) => {
+              const items = state.tab === "permissions" ? perms : (cachedUsers ?? []);
+              const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+              const delta = parts[0] === "prev" ? -1 : 1;
+              const next = Math.max(0, Math.min(totalPages - 1, state.pageIndex + delta));
+              setState({ pageIndex: next });
+            },
+          },
         });
 
-        collector.on("end", (_c, reason) => {
-          if (subCollector) subCollector.stop();
-          if (reason === "time") msg.edit(renderCurrent(false)).catch(() => {});
-        });
+        await roleView.send(ctx);
       },
     })
     .addCommand({
@@ -622,14 +499,14 @@ const data = {
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
         const role = ctx.get("rol");
-        if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
-        if (!role.icon) return ctx.send({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral });
+        if (!role) return ctx.ephemeral("No encontré ese rol");
+        if (!role.icon) return ctx.ephemeral("Este rol no tiene icono");
 
-        await ctx.send(buildRoleIconPayload(role));
+        await ctx.send(buildRoleIconCard(role));
       },
     })
     .addCommand({
@@ -637,14 +514,14 @@ const data = {
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
         const role = ctx.get("rol");
-        if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
-        if (!role.color) return ctx.send({ content: "Este rol no tiene color asignado", flags: MessageFlags.Ephemeral });
+        if (!role) return ctx.ephemeral("No encontré ese rol");
+        if (!role.color) return ctx.ephemeral("Este rol no tiene color asignado");
 
-        await ctx.send(buildRoleColorPayload(role));
+        await ctx.send(buildRoleColorCard(role));
       },
     })
     .addCommand({
@@ -652,7 +529,7 @@ const data = {
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol", required: true }),
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
         if (ctx.guild.memberCount !== ctx.guild.members.cache.size) {
@@ -660,43 +537,36 @@ const data = {
         }
 
         const role = ctx.get("rol");
-        if (!role) return ctx.send({ content: "No encontré ese rol", flags: MessageFlags.Ephemeral });
+        if (!role) return ctx.ephemeral("No encontré ese rol");
 
         const members = Array.from(role.members.values()).map((m, i) => `${i + 1}. ${m}`);
-        if (!members.length) return ctx.send({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral });
-
-        const pages = paginateArray(members, 15);
-        let page = 0;
+        if (!members.length) return ctx.ephemeral("Nadie tiene este rol");
 
         const authorId = ctx.user?.id ?? ctx.author?.id;
-        const prevId = uniqueId("role_users_prev");
-        const nextId = uniqueId("role_users_next");
-
-        const msg = await ctx.send(
-          buildRoleUsersPayload(role, members.length, pages, page, { prevId, nextId, interactive: true })
-        );
-
-        if (pages.length <= 1) return;
-
-        const collector = msg.createMessageComponentCollector({
-          componentType: ComponentType.Button,
-          time: 2 * 60 * 1000,
-          filter: (i) => [prevId, nextId].includes(i.customId),
+        const paginator = new V2Paginator({
+          items: members,
+          perPage: PAGE_SIZE,
+          ownerId: authorId,
+          thirdPartyMode: "reject",
+          thirdPartyMessage: "No es tu comando",
+          wrap: false,
+          prevButton: { label: "◀" },
+          nextButton: { label: "▶" },
+          showPageIndicator: false,
+          timeout: 2 * 60 * 1000,
+          renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
+            buildRoleListCard({
+              role,
+              title: `Usuarios con ${role.name} (${pageIndex + 1}/${totalPages})`,
+              lines: pageItems,
+              pageIndex,
+              totalPages,
+              footer: `${members.length} usuarios en total`,
+              controls: !isEnded && totalPages > 1 ? controls : null,
+            }),
         });
 
-        collector.on("collect", async (i) => {
-          if (i.user.id !== authorId) return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-          if (i.customId === prevId) page--;
-          if (i.customId === nextId) page++;
-          page = clampPage(page, pages.length);
-          await i.update(buildRoleUsersPayload(role, members.length, pages, page, { prevId, nextId, interactive: true }));
-        });
-
-        collector.on("end", (_c, reason) => {
-          if (reason === "time") {
-            msg.edit(buildRoleUsersPayload(role, members.length, pages, page, { interactive: false })).catch(() => {});
-          }
-        });
+        await paginator.send(ctx);
       },
     })
     .addCommand(createMemberRoleCommand({ name: "add", description: "Añade un rol a un usuario", isAdd: true }))
@@ -713,7 +583,7 @@ const data = {
       plugins: MANAGE_ROLES_PLUGINS,
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
         const role = ctx.get("rol");
@@ -800,7 +670,7 @@ const data = {
       plugins: ADMIN_ROLE_PLUGINS,
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const role = ctx.get("rol");
         const incluirBot = ctx.get("incluir_bots") === "true";
         const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -840,7 +710,7 @@ const data = {
       plugins: ADMIN_ROLE_PLUGINS,
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const role = ctx.get("rol");
         const incluirBot = ctx.get("incluir_bots") === "true";
         const modTag = ctx.user?.tag ?? ctx.author?.tag;
@@ -899,7 +769,7 @@ const data = {
       plugins: [Plugins.hasPerms("ManageGuild"), Plugins.hasBotPerms("ManageRoles")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
         const role = ctx.get("rol");
         const ignoreBots = ctx.get("ignorar_bots") === "true";
@@ -964,7 +834,7 @@ const data = {
       }),
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         try {
           if (!ctx.guild) return noGuildReply(ctx);
 
@@ -975,43 +845,29 @@ const data = {
           const perms = role.permissions.toArray().sort().map(formatPerm);
           if (!perms.length) return ctx.send("Este rol no tiene permisos");
 
-          const pages = paginateArray(perms, 15);
-          let page = 0;
-
-          const prevId = uniqueId("role_perms_prev");
-          const nextId = uniqueId("role_perms_next");
-
-          const reply = await ctx.send(
-            buildRolePermsPayload(role, pages, page, { prevId, nextId, interactive: true })
-          );
-
-          if (pages.length <= 1) return;
-
-          const collector = reply.createMessageComponentCollector({
-            componentType: ComponentType.Button,
-            time: 2 * 60 * 1000,
-            filter: (i) => [prevId, nextId].includes(i.customId),
+          const paginator = new V2Paginator({
+            items: perms,
+            perPage: PAGE_SIZE,
+            ownerId: invoker.id,
+            thirdPartyMode: "reject",
+            thirdPartyMessage: "No es tu comando",
+            wrap: false,
+            prevButton: { label: "◀" },
+            nextButton: { label: "▶" },
+            showPageIndicator: false,
+            timeout: 2 * 60 * 1000,
+            renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) =>
+              buildRoleListCard({
+                role,
+                title: `Permisos de ${role.name}`,
+                lines: pageItems,
+                pageIndex,
+                totalPages,
+                controls: !isEnded && totalPages > 1 ? controls : null,
+              }),
           });
 
-          collector.on("collect", async (i) => {
-            if (i.user.id !== invoker.id) {
-              return i.reply({ content: "No es tu comando", flags: MessageFlags.Ephemeral });
-            }
-
-            if (i.customId === prevId) page--;
-            if (i.customId === nextId) page++;
-            page = clampPage(page, pages.length);
-
-            await i.update(
-              buildRolePermsPayload(role, pages, page, { prevId, nextId, interactive: true })
-            );
-          });
-
-          collector.on("end", (_c, reason) => {
-            if (reason === "time") {
-              reply.edit(buildRolePermsPayload(role, pages, page, { interactive: false })).catch(() => {});
-            }
-          });
+          await paginator.send(ctx);
         } catch (err) {
           log.error("Error en role permissions", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);

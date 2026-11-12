@@ -56,6 +56,7 @@ class Loader {
     };
     this.globalPlugins = [];
     this.rest = new discord_js_1.REST();
+    this.interactionMatchers = new Map();
     this.#eventHandlers = new Map();
     this.#loadedSignature = new Set();
   }
@@ -98,6 +99,15 @@ class Loader {
   #moduleSignature(moduleData) {
     const data = moduleData?.data;
     const type = data?.constructor?.name || "Unknown";
+    if (data instanceof InteractionBuilder_js_1.InteractionBuilder) {
+      const kind = data.type || "unknown";
+      const patternTag =
+        data.name ||
+        (data.prefix ? `prefix:${data.prefix}` : undefined) ||
+        (data.match ? `match:${String(data.match)}` : undefined) ||
+        (0, crypto_1.randomUUID)();
+      return `${type}:${kind}:${patternTag}`;
+    }
     const name = data?.name || "unknown";
     return `${type}:${name}`;
   }
@@ -156,6 +166,7 @@ class Loader {
   #resetCollectionsForReload() {
     this.commands = { normal: new discord_js_1.Collection(), group: new discord_js_1.Collection() };
     this.#loadedSignature.clear();
+    this.interactionMatchers.clear();
 
     for (const key of Object.keys(this.interactions)) {
       this.interactions[key].clear();
@@ -165,46 +176,38 @@ class Loader {
   #storeInteraction(moduleData) {
     const interaction = moduleData.data;
 
-    switch (interaction.type) {
-      case InteractionBuilder_js_1.Interactions.Autocomplete:
-        this.interactions.autocomplete.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.Button:
-        this.interactions.button.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.ChannelSelectMenu:
-        this.interactions.channelSelectMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.ChatInput:
-        this.interactions.chatInput.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.MessageContextMenu:
-        this.interactions.messageContextMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.Modal:
-        this.interactions.modalSubmit.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.RoleSelectMenu:
-        this.interactions.roleSelectMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.StringSelectMenu:
-        this.interactions.stringSelectMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.UserContextMenu:
-        this.interactions.userContextMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.UserSelectMenu:
-        this.interactions.userSelectMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.MentionableSelectMenu:
-        this.interactions.mentionableSelectMenu.set(interaction.name, moduleData);
-        break;
-      case InteractionBuilder_js_1.Interactions.AnyInteraction:
-        this.interactions.anyInteraction.set((0, crypto_1.randomUUID)(), moduleData);
-        break;
-      default:
-        break;
+    if (interaction.type === InteractionBuilder_js_1.Interactions.AnyInteraction) {
+      this.interactions.anyInteraction.set((0, crypto_1.randomUUID)(), moduleData);
+      return;
     }
+
+    const bucket = this.interactions[interaction.type];
+    if (!bucket) return;
+
+    if (interaction.name) {
+      bucket.set(interaction.name, moduleData);
+    }
+
+    if (typeof interaction.hasPattern === "function" && interaction.hasPattern()) {
+      const list = this.interactionMatchers.get(interaction.type) || [];
+      list.push(moduleData);
+      this.interactionMatchers.set(interaction.type, list);
+    }
+  }
+
+  /**
+   * Resolves a dynamically matched interaction handler (`prefix` or `match`) for a given type and key.
+   */
+  resolvePatternInteraction(type, key, interaction) {
+    const matchers = this.interactionMatchers.get(type);
+    if (!matchers?.length) return null;
+
+    for (const moduleData of matchers) {
+      if (moduleData.data?.matches?.(key, interaction)) {
+        return moduleData;
+      }
+    }
+    return null;
   }
 
   async load(dir, reload = false) {

@@ -80,10 +80,12 @@ export declare class Loader {
   client: Gralonium;
   commands: GraloniumCollected;
   interactions: Record<InteractionTypes, Collection<string, ModuleData<InteractionBuilder>>>;
+  interactionMatchers: Map<InteractionTypes, ModuleData<InteractionBuilder>[]>;
   globalPlugins: Plugin[];
   rest: REST;
   constructor(options: LoaderOptions);
   load(dir: string, reload?: boolean): Promise<ModuleData<InteractionBuilder | CommandBuilder | EventBuilder | GroupBuilder, any[]>[]>;
+  resolvePatternInteraction(type: InteractionTypes, key: string, interaction?: any): ModuleData<InteractionBuilder> | null;
   walkCommands(callable?: (command: Command<Types>) => number): CommandHelpingObject[];
   sync(guildIDs?: string[]): Promise<void>;
 }

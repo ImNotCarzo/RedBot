@@ -1,7 +1,7 @@
 import { Client, ClientOptions, CommandInteraction, Message, Snowflake } from "discord.js";
 import { Context } from "./Context.js";
 import { Loader, Plugin } from "./Loader.js";
-import { HelpCommand } from "./HelpCommand.js";
+import { HelpCommand, HelpCommandOptions } from "./HelpCommand.js";
 import { Cooldowns } from "./Cooldowns.js";
 
 export interface GraloniumRestrictions {
@@ -18,7 +18,9 @@ export interface GraloniumOptions extends ClientOptions {
   owners?: Snowflake[];
   prefix: string | string[] | ((ctx: Context) => MaybePromise<string | string[]>);
   replyOnEdit?: boolean;
+  replyOnPrefix?: boolean;
   helpCommand?: typeof HelpCommand;
+  helpCommandOptions?: HelpCommandOptions;
   restrictions?: GraloniumRestrictions;
   debug?: boolean;
   bindProcessHandlers?: boolean;

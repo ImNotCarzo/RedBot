@@ -14,6 +14,9 @@ tslib_1.__exportStar(require("./classes/builders/InteractionBuilder.js"), export
 tslib_1.__exportStar(require("./classes/builders/GroupBuilder.js"), exports);
 tslib_1.__exportStar(require("./classes/builders/ParamsBuilder.js"), exports);
 tslib_1.__exportStar(require("./classes/builders/ComponentsV2Builder.js"), exports);
+tslib_1.__exportStar(require("./classes/builders/components/text.js"), exports);
+tslib_1.__exportStar(require("./classes/views/V2View.js"), exports);
+tslib_1.__exportStar(require("./classes/views/V2Paginator.js"), exports);
 tslib_1.__exportStar(require("./classes/HelpCommand.js"), exports);
 tslib_1.__exportStar(require("./classes/Cooldowns.js"), exports);
 

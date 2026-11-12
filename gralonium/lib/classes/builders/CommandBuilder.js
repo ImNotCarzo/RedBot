@@ -29,6 +29,8 @@ class CommandBuilder {
   botPermissions;
   guards;
   cooldown;
+  integrationTypes;
+  contexts;
 
   constructor(options) {
     this.name = options?.name ?? "";
@@ -43,6 +45,8 @@ class CommandBuilder {
     this.botPermissions = permissionArrayPredicate.parse(options?.botPermissions ?? []);
     this.guards = options?.guards ?? [];
     this.cooldown = options?.cooldown;
+    this.integrationTypes = options?.integrationTypes;
+    this.contexts = options?.contexts;
   }
 
   setName(name) {
@@ -95,12 +99,24 @@ class CommandBuilder {
     return this;
   }
 
+  setIntegrationTypes(...types) {
+    this.integrationTypes = types.flat();
+    return this;
+  }
+
+  setContexts(...contexts) {
+    this.contexts = contexts.flat();
+    return this;
+  }
+
   toJSON() {
     return {
       name: this.name,
       description: this.description,
       default_member_permissions: this.defaultMemberPermissions ? validateDefaultMemberPermissions(this.defaultMemberPermissions) : undefined,
       dm_permission: typeof this.guildOnly === "boolean" ? !this.guildOnly : undefined,
+      ...(this.integrationTypes !== undefined ? { integration_types: this.integrationTypes } : {}),
+      ...(this.contexts !== undefined ? { contexts: this.contexts } : {}),
     };
   }
 }

@@ -1,11 +1,12 @@
 const {
-  MediaGalleryBuilder,
-  MediaGalleryItemBuilder,
-  MessageFlags,
-  SeparatorSpacingSize,
   version: djsVersion,
-} = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins } = require("gralonium");
+  GroupBuilder,
+  CommandBuilder,
+  ParamsBuilder,
+  Plugins,
+  ComponentsV2Builder,
+  V2Text,
+} = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN, YELLOW } = require("../../src/config");
@@ -14,7 +15,6 @@ const {
   Logger,
   THINKING_TEXT,
   fetchWithTimeout,
-  prepareReply,
   noGuildReply,
   handleCommandError,
   INVITE_URL,
@@ -23,24 +23,13 @@ const {
   buildDmAllEmbed,
   buildDmAllLogEmbed,
 } = require("../../src/runtime");
-const {
-  createContainer,
-  addHeaderSection,
-  addSeparator,
-  addTextBlock,
-  addLinkButtons,
-  addAttachmentFile,
-  clipV2Text,
-  budgetBodyText,
-  buildV2Payload,
-} = require("../../src/v2");
 const { version: botVersion } = require("../../package.json");
 const { fetchPublic, readBodyLimited } = require("../../src/security");
 const { createReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
 
-let graloniumVersion = "0.3.0";
-try { graloniumVersion = require("gralonium/package.json").version; } catch {}
+let graloniumVersion = "0.4.0";
+try { graloniumVersion = require("../../Gralonium/package.json").version; } catch {}
 
 const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
 
@@ -65,29 +54,8 @@ const TRANSLATE_LANG_NAMES = {
 //  HELPERS DE FORMATO Y COMPONENTES V2
 // ─────────────────────────────────────────────
 
-const code = (v) => `\`${v}\``;
 const num = (n) => Number(n).toLocaleString("es-ES");
 const cleanVersion = (v) => `v${String(v ?? "").replace(/^v/i, "")}`;
-
-/** Lista de campos en cita: > **Etiqueta:** valor */
-const fields = (rows) =>
-  rows
-    .filter(Boolean)
-    .map(([label, value]) => `> **${label}:** ${value}`)
-    .join("\n");
-
-/** Bloque con subtítulo en negrita y campos alineados al estilo de RedBot */
-const sectionBlock = (heading, rows) => `**${heading}**\n${fields(rows)}`;
-
-/** Convierte texto multilínea en cita sin cortar líneas vacías intermedias */
-const quote = (text, maxLen = null) => {
-  const quoted = String(text ?? "")
-    .trimEnd()
-    .split("\n")
-    .map((line) => (line ? `> ${line}` : ">"))
-    .join("\n") || "> -";
-  return maxLen ? clipV2Text(quoted, maxLen) : quoted;
-};
 
 /** "2d 4h 3m", omitiendo unidades vacías */
 const formatUptime = (ms) => {
@@ -111,7 +79,7 @@ const formatBytes = (bytes) => {
 };
 
 const formatAttachmentMeta = (attachment, fallbackName) => {
-  const parts = [clipV2Text(attachment?.name ?? fallbackName, 80)];
+  const parts = [V2Text.clip(attachment?.name ?? fallbackName, 80)];
   if (attachment?.width && attachment?.height) parts.push(`${attachment.width}×${attachment.height}`);
   const size = formatBytes(attachment?.size);
   if (size) parts.push(size);
@@ -119,62 +87,68 @@ const formatAttachmentMeta = (attachment, fallbackName) => {
 };
 
 const formatLanguage = (langCode) => {
-  const key = clipV2Text(langCode, 40, "");
+  const key = V2Text.clip(langCode, 40, "");
   const label = TRANSLATE_LANG_NAMES[key.toLowerCase()];
   if (!label) return key || "desconocido";
   return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
 };
 
 function buildCompactCard({ title, subtitle = null, body = null, footer = null, color = RED, thumbnailUrl = null, divider = false, links = [] }) {
-  const container = createContainer(color);
-  const header = subtitle ? `### ${clipV2Text(title, 180)}\n-# ${clipV2Text(subtitle, 180)}` : `### ${clipV2Text(title, 200)}`;
-  const footerLine = footer ? `-# ${clipV2Text(footer, 180)}` : null;
+  const builder = new ComponentsV2Builder({ color });
+  const header = subtitle
+    ? `${V2Text.heading(title, 3, 180)}\n${V2Text.subtext(subtitle, 180)}`
+    : V2Text.heading(title, 3, 200);
+  const footerLine = footer ? V2Text.subtext(footer, 180) : null;
 
   if (thumbnailUrl && body) {
-    addHeaderSection(container, [header, body, footerLine].filter(Boolean), thumbnailUrl);
+    builder.addSection([header, body, footerLine].filter(Boolean), {
+      thumbnail: thumbnailUrl,
+      fallbackToText: true,
+    });
   } else {
-    addHeaderSection(container, [header], thumbnailUrl);
+    builder.addSection([header], { thumbnail: thumbnailUrl, fallbackToText: true });
     if (body) {
-      addSeparator(container, SeparatorSpacingSize.Small, divider);
-      addTextBlock(container, body);
+      builder[divider ? "addSeparator" : "addSpacer"]("small");
+      builder.addText(body);
     }
     if (footerLine) {
-      addSeparator(container, SeparatorSpacingSize.Small, false);
-      addTextBlock(container, footerLine, 190);
+      builder.addSpacer("small").addText(footerLine);
     }
   }
 
   if (links.length) {
-    addSeparator(container, SeparatorSpacingSize.Small, false);
-    addLinkButtons(container, links);
+    builder.addSpacer("small").addButtonsRow(
+      links.map((l) => ({ label: l.label, style: "link", url: l.url })),
+      { autoWrap: true }
+    );
   }
 
-  return container;
+  return builder;
 }
 
-function buildDmStatusContainer({ title, guildName, iconUrl = null, rows = [], filters = [], color = RED }) {
-  const container = createContainer(color);
-  const header = `### ${clipV2Text(title, 120)}\n-# ${clipV2Text(guildName, 80)}`;
+function buildDmStatusCard({ title, guildName, iconUrl = null, rows = [], filters = [], color = RED }) {
+  const builder = new ComponentsV2Builder({ color })
+    .addSection(
+      [`${V2Text.heading(title, 3, 120)}\n${V2Text.subtext(guildName, 80)}`],
+      { thumbnail: iconUrl, fallbackToText: true }
+    )
+    .addSeparator("small")
+    .addFields(rows);
 
-  addHeaderSection(container, [header], iconUrl);
-  addSeparator(container);
-  addTextBlock(container, fields(rows));
   if (filters.length) {
-    addSeparator(container);
-    addTextBlock(container, sectionBlock("Filtros", filters));
+    builder.addSectionBlock("Filtros", filters, { separator: true });
   }
-  return container;
+  return builder;
 }
 
-function buildJumboContainer({ title, subtitle, imageUrl }) {
-  const container = createContainer(RED);
-  addTextBlock(container, `### ${title}\n-# ${subtitle}`);
-  container.addMediaGalleryComponents(
-    new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl))
-  );
-  addSeparator(container, SeparatorSpacingSize.Small, false);
-  addLinkButtons(container, [{ label: "Abrir imagen", url: imageUrl }]);
-  return container;
+function buildJumboCard({ title, subtitle, imageUrl }) {
+  return ComponentsV2Builder.imageView({
+    title,
+    subtitle: V2Text.subtext(subtitle),
+    image: imageUrl,
+    links: [{ label: "Abrir imagen", url: imageUrl }],
+    color: RED,
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -200,24 +174,21 @@ const data = {
 
     async code(ctx) {
       try {
-        const thinking = createContainer(RED);
-        addTextBlock(thinking, THINKING_TEXT);
-
         const before = Date.now();
-        const sent = await ctx.send(buildV2Payload(thinking));
+        const sent = await ctx.send(new ComponentsV2Builder({ color: RED }).addText(THINKING_TEXT));
         const msgPing = Date.now() - before;
         const apiPing = Math.max(0, ctx.bot?.ws?.ping ?? 0);
 
         const result = buildCompactCard({
           title: "Pong!",
-          body: fields([
-            ["Mensaje", code(`${msgPing}ms`)],
-            ["API", code(`${apiPing}ms`)],
+          body: V2Text.fields([
+            ["Mensaje", V2Text.code(`${msgPing}ms`)],
+            ["API", V2Text.code(`${apiPing}ms`)],
           ]),
           color: RED,
         });
 
-        await sent.edit(buildV2Payload(result));
+        await sent.edit(result.toPayload());
       } catch (err) {
         log.error("[util ping]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -237,55 +208,43 @@ const data = {
     async code(ctx) {
       try {
         const bot = ctx.bot;
-        if (!bot?.user) return ctx.send({ content: "Error al obtener la información", flags: MessageFlags.Ephemeral });
+        if (!bot?.user) return ctx.ephemeral("Error al obtener la información");
 
         const servers = bot.guilds.cache.size;
         const users = bot.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
         const createdAt = Math.floor(bot.user.createdTimestamp / 1000);
 
-        const container = createContainer(RED);
+        const generalRows = [
+          ["ID", V2Text.code(bot.user.id)],
+          ["Versión", V2Text.code(cleanVersion(botVersion))],
+          ["Creación", `<t:${createdAt}:D> (<t:${createdAt}:R>)`],
+        ];
+        const statsRows = [
+          ["Servidores", V2Text.code(num(servers))],
+          ["Usuarios", V2Text.code(num(users))],
+          ["Tiempo activo", V2Text.code(formatUptime(bot.uptime ?? 0))],
+        ];
+        const extraRows = [
+          ["Creador", V2Text.code("carzo.")],
+          ["Node.js", V2Text.code(process.version)],
+          ["discord.js", V2Text.code(cleanVersion(djsVersion))],
+          ["Gralonium", V2Text.code(cleanVersion(graloniumVersion))],
+        ];
 
-        addHeaderSection(
-          container,
-          [
-            `### ${clipV2Text(bot.user.username, 100)}`,
-            sectionBlock("General", [
-              ["ID", code(bot.user.id)],
-              ["Versión", code(cleanVersion(botVersion))],
-              ["Creación", `<t:${createdAt}:D> (<t:${createdAt}:R>)`],
-            ]),
-          ],
-          bot.user.displayAvatarURL({ size: 1024 })
-        );
-        addSeparator(container);
+        const builder = new ComponentsV2Builder({ color: RED })
+          .addSection(
+            [V2Text.heading(bot.user.username, 3, 100), V2Text.sectionBlock("General", generalRows)],
+            { thumbnail: bot.user.displayAvatarURL({ size: 1024 }) }
+          )
+          .addSectionBlock("Estadísticas", statsRows, { separator: true })
+          .addSectionBlock("Extra", extraRows, { separator: true })
+          .addSpacer("small")
+          .addButtonsRow([
+            { label: "Invitar", style: "link", url: INVITE_URL },
+            { label: "Soporte", style: "link", url: SUPPORT_URL },
+          ]);
 
-        addTextBlock(
-          container,
-          sectionBlock("Estadísticas", [
-            ["Servidores", code(num(servers))],
-            ["Usuarios", code(num(users))],
-            ["Tiempo activo", code(formatUptime(bot.uptime ?? 0))],
-          ])
-        );
-        addSeparator(container);
-
-        addTextBlock(
-          container,
-          sectionBlock("Extra", [
-            ["Creador", code("carzo.")],
-            ["Node.js", code(process.version)],
-            ["discord.js", code(cleanVersion(djsVersion))],
-            ["Gralonium", code(cleanVersion(graloniumVersion))],
-          ])
-        );
-        addSeparator(container, SeparatorSpacingSize.Small, false);
-
-        addLinkButtons(container, [
-          { label: "Invitar", url: INVITE_URL },
-          { label: "Soporte", url: SUPPORT_URL },
-        ]);
-
-        await ctx.send(buildV2Payload(container));
+        await ctx.send(builder);
       } catch (err) {
         log.error("[util botinfo]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -304,7 +263,7 @@ const data = {
 
     async code(ctx) {
       try {
-        const container = buildCompactCard({
+        const card = buildCompactCard({
           title: ctx.bot?.user?.username ?? "RedBot",
           subtitle: cleanVersion(botVersion),
           body: "Invítame a tu servidor o únete al servidor de soporte.",
@@ -315,7 +274,7 @@ const data = {
             { label: "Soporte", url: SUPPORT_URL },
           ],
         });
-        await ctx.send(buildV2Payload(container));
+        await ctx.send(card);
       } catch (err) {
         log.error("[util invite]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -348,38 +307,34 @@ const data = {
         if (!nuevo) {
           const prefix = await getPrefix(ctx.guild.id);
           return ctx.send(
-            buildV2Payload(
-              buildCompactCard({
-                title: "Prefix actual",
-                subtitle: ctx.guild.name,
-                body: fields([["Prefix", code(prefix)]]),
-                thumbnailUrl: guildIcon,
-                color: RED,
-              })
-            )
+            buildCompactCard({
+              title: "Prefix actual",
+              subtitle: ctx.guild.name,
+              body: V2Text.fields([["Prefix", V2Text.code(prefix)]]),
+              thumbnailUrl: guildIcon,
+              color: RED,
+            })
           );
         }
 
         if (nuevo.length > 3) {
-          return ctx.send({ content: "El prefix no puede tener más de 3 caracteres", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("El prefix no puede tener más de 3 caracteres");
         }
 
         const anterior = await getPrefix(ctx.guild.id);
         await setPrefix(ctx.guild.id, nuevo);
 
         await ctx.send(
-          buildV2Payload(
-            buildCompactCard({
-              title: "Prefix actualizado",
-              subtitle: ctx.guild.name,
-              body: fields([
-                ["Anterior", code(anterior)],
-                ["Nuevo", code(nuevo)],
-              ]),
-              thumbnailUrl: guildIcon,
-              color: GREEN,
-            })
-          )
+          buildCompactCard({
+            title: "Prefix actualizado",
+            subtitle: ctx.guild.name,
+            body: V2Text.fields([
+              ["Anterior", V2Text.code(anterior)],
+              ["Nuevo", V2Text.code(nuevo)],
+            ]),
+            thumbnailUrl: guildIcon,
+            color: GREEN,
+          })
         );
       } catch (err) {
         log.error("[util setprefix]", { err: err?.message ?? String(err) });
@@ -402,13 +357,11 @@ const data = {
         const userId = ctx.user?.id ?? ctx.author?.id;
         deleteConversacion(userId);
         await ctx.send(
-          buildV2Payload(
-            buildCompactCard({
-              title: "Historial reiniciado",
-              body: "Se limpió tu conversación con la IA.",
-              color: GREEN,
-            })
-          )
+          buildCompactCard({
+            title: "Historial reiniciado",
+            body: "Se limpió tu conversación con la IA.",
+            color: GREEN,
+          })
         );
       } catch (err) {
         log.error("[util askreset]", { err: err?.message ?? String(err) });
@@ -433,29 +386,27 @@ const data = {
 
     async code(ctx) {
       try {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
         const invoker = ctx.user ?? ctx.author;
         const customReason = ctx.get("razon")?.trim();
-        const reason = customReason ? clipV2Text(customReason, 256) : "Sin motivo";
+        const reason = customReason ? V2Text.clip(customReason, 256) : "Sin motivo";
 
         const saved = await setAfk(ctx.guild.id, invoker.id, reason);
         const sinceTs = Math.floor(new Date(saved?.createdAt ?? Date.now()).getTime() / 1000);
 
         await ctx.send(
-          buildV2Payload(
-            buildCompactCard({
-              title: invoker.username,
-              body: fields([
-                ["Motivo", clipV2Text(reason, 256)],
-                ["Desde", `<t:${sinceTs}:R>`],
-              ]),
-              footer: "Ahora estás AFK",
-              thumbnailUrl: invoker.displayAvatarURL({ size: 256 }),
-              color: RED,
-            })
-          )
+          buildCompactCard({
+            title: invoker.username,
+            body: V2Text.fields([
+              ["Motivo", V2Text.clip(reason, 256)],
+              ["Desde", `<t:${sinceTs}:R>`],
+            ]),
+            footer: "Ahora estás AFK",
+            thumbnailUrl: invoker.displayAvatarURL({ size: 256 }),
+            color: RED,
+          })
         );
       } catch (err) {
         log.error("[util afk]", { err: err?.message ?? String(err) });
@@ -479,11 +430,11 @@ const data = {
       }),
 
     async code(ctx) {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+      await ctx.defer();
       try {
         const raw = (ctx.get("emoji") ?? "").trim();
         if (!raw) {
-          return ctx.send({ content: "Debes ingresar un emoji válido", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Debes ingresar un emoji válido");
         }
 
         const customMatch = raw.match(/<(a)?:([a-zA-Z0-9_]+):(\d{17,20})>/);
@@ -495,44 +446,40 @@ const data = {
           const url = `https://cdn.discordapp.com/emojis/${id}.${ext}?size=4096&quality=lossless`;
 
           return ctx.send(
-            buildV2Payload(
-              buildJumboContainer({
-                title: `:${clipV2Text(name, 80)}:`,
-                subtitle: `ID ${id} · ${ext.toUpperCase()}`,
-                imageUrl: url,
-              })
-            )
+            buildJumboCard({
+              title: `:${V2Text.clip(name, 80)}:`,
+              subtitle: `ID ${id} · ${ext.toUpperCase()}`,
+              imageUrl: url,
+            })
           );
         }
 
         const chars = [...raw];
         if (!chars.length || chars.length > 10 || /^[a-zA-Z0-9\s!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(raw)) {
-          return ctx.send({ content: "Debes ingresar un emoji válido", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Debes ingresar un emoji válido");
         }
 
         const rawCps = chars.map((c) => c.codePointAt(0).toString(16));
         const filteredCps = rawCps.includes("200d") ? rawCps : rawCps.filter((cp) => cp !== "fe0f");
         if (!filteredCps.length) {
-          return ctx.send({ content: "Debes ingresar un emoji válido", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Debes ingresar un emoji válido");
         }
 
         const twemojiUrl = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/${filteredCps.join("-")}.png`;
         const checkRes = await fetchWithTimeout(twemojiUrl, { method: "HEAD" }, 5000).catch(() => null);
         if (!checkRes?.ok) {
-          return ctx.send({ content: "No pude encontrar ese emoji", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("No pude encontrar ese emoji");
         }
 
         const highResUrl = `https://emojicdn.elk.sh/${encodeURIComponent(raw)}?style=twitter`;
         const codepoints = filteredCps.map((cp) => `U+${cp.toUpperCase()}`).join(" ");
 
         return ctx.send(
-          buildV2Payload(
-            buildJumboContainer({
-              title: raw,
-              subtitle: `Código ${codepoints} · PNG`,
-              imageUrl: highResUrl,
-            })
-          )
+          buildJumboCard({
+            title: raw,
+            subtitle: `Código ${codepoints} · PNG`,
+            imageUrl: highResUrl,
+          })
         );
       } catch (err) {
         log.error("[util jumbo]", { err: err?.message ?? String(err) });
@@ -562,7 +509,7 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepareReply(ctx);
+      await ctx.defer();
       const texto = ctx.get("texto");
       const idioma = ctx.get("idioma") ?? "es";
 
@@ -574,23 +521,23 @@ const data = {
         const traduccion = result.text;
 
         if (!traduccion) {
-          return reply({ content: "No se pudo generar la traducción", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("No se pudo generar la traducción");
         }
 
-        const container = createContainer(RED);
-        addTextBlock(container, `### Traducción\n-# ${formatLanguage(origen)} → ${formatLanguage(idioma)}`);
-        addSeparator(container);
-        addTextBlock(container, `**Original**\n${quote(texto, 1300)}`);
-        addSeparator(container, SeparatorSpacingSize.Small, false);
-        addTextBlock(container, `**Resultado**\n${quote(traduccion, 2100)}`);
+        const builder = new ComponentsV2Builder({ color: RED })
+          .addText(`${V2Text.heading("Traducción", 3)}\n${V2Text.subtext(`${formatLanguage(origen)} → ${formatLanguage(idioma)}`)}`)
+          .addSeparator("small")
+          .addText(`**Original**\n${V2Text.quote(texto, 1300)}`)
+          .addSpacer("small")
+          .addText(`**Resultado**\n${V2Text.quote(traduccion, 2100)}`);
 
-        await reply(buildV2Payload(container));
+        await ctx.send(builder);
       } catch (err) {
         log.error("[util translate]", { err: err?.message ?? String(err) });
         if (err.name === "TooManyRequestsError") {
-          return reply({ content: "Google Translate está saturado, intenta en unos segundos", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Google Translate está saturado, intenta en unos segundos");
         }
-        await reply({ content: "No se pudo conectar con el servicio de traducción", flags: MessageFlags.Ephemeral });
+        await ctx.ephemeral("No se pudo conectar con el servicio de traducción");
       }
     },
   })
@@ -610,22 +557,19 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepareReply(ctx, { thinking: true });
+      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
       const rawInput = ctx.get("url");
       const url = extractFirstUrl(rawInput);
 
       if (!url) {
-        return reply({ content: "Debes proporcionar un enlace válido (`https://...`)", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Debes proporcionar un enlace válido (`https://...`)");
       }
 
       try {
         const meta = await resolveVideoMetadata(url);
         if (!meta?.videoUrl) {
           log.warn("[util download] sin video extraíble", { url });
-          return reply({
-            content: "No pude extraer ningún video de ese enlace. Verifica que sea público y contenga un video.",
-            flags: MessageFlags.Ephemeral,
-          });
+          return ctx.ephemeral("No pude extraer ningún video de ese enlace. Verifica que sea público y contenga un video.");
         }
 
         const maxBytes = getGuildUploadLimitBytes(ctx.guild);
@@ -633,23 +577,20 @@ const data = {
         const payload = buildDownloadV2Payload(meta, downloadResult);
 
         try {
-          await reply(payload);
+          await ctx.send(payload);
         } catch (sendErr) {
           if (sendErr?.code === 40005 || sendErr?.status === 413) {
             const fallbackPayload = buildDownloadV2Payload(meta, {
               tooLarge: true,
               size: downloadResult.size,
             });
-            return await reply(fallbackPayload);
+            return await ctx.send(fallbackPayload);
           }
           throw sendErr;
         }
       } catch (err) {
         log.error("[util download]", { err: err?.message ?? String(err) });
-        return reply({
-          content: "No se pudo descargar el video en este momento. Intenta con otro enlace.",
-          flags: MessageFlags.Ephemeral,
-        });
+        return ctx.ephemeral("No se pudo descargar el video en este momento. Intenta con otro enlace.");
       }
     },
   })
@@ -668,32 +609,35 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepareReply(ctx, { thinking: true });
+      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
       const attachment = ctx.get("imagen");
       if (!attachment) {
-        return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Debes adjuntar una imagen");
       }
 
       const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
       if (!validTypes.some((t) => attachment.contentType?.startsWith(t))) {
-        return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
       }
 
       if (attachment.size > 8 * 1024 * 1024) {
-        return reply({ content: "La imagen no puede superar los 8MB", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("La imagen no puede superar los 8MB");
       }
 
       try {
         const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
         const texto = await generateVision(prompt, attachment.url);
 
-        const header = `### Descripción de imagen\n-# ${formatAttachmentMeta(attachment, "imagen")}`;
-        const container = createContainer(RED);
-        addHeaderSection(container, [header], attachment.url);
-        addSeparator(container);
-        addTextBlock(container, budgetBodyText(texto ?? "No pude generar una descripción", header.length));
+        const meta = formatAttachmentMeta(attachment, "imagen");
+        const builder = new ComponentsV2Builder({ color: RED })
+          .addSection(
+            [`${V2Text.heading("Descripción de imagen", 3)}\n${V2Text.subtext(meta)}`],
+            { thumbnail: attachment.url, fallbackToText: true }
+          )
+          .addSeparator("small")
+          .addSmartText(texto ?? "No pude generar una descripción", { overflow: "clip" });
 
-        await reply(buildV2Payload(container));
+        await ctx.send(builder);
       } catch (err) {
         log.error("[util describe]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -715,21 +659,21 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepareReply(ctx, { thinking: true });
+      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
       const attachment = ctx.get("archivo");
       if (!attachment) {
-        return reply({ content: "Debes adjuntar un audio o video", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Debes adjuntar un audio o video");
       }
 
       const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i;
 
       if (!VALID_EXT.test(attachment.name ?? "")) {
-        return reply({ content: "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac, mov", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac, mov");
       }
 
       const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
       if (attachment.size > MAX_MEDIA_BYTES) {
-        return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("El archivo no puede superar los 25MB");
       }
 
       const isMov = /\.mov$/i.test(attachment.name ?? "") || attachment.contentType === "video/quicktime";
@@ -739,7 +683,7 @@ const data = {
         if (!fileRes.ok) throw new Error(`No se pudo descargar archivo (${fileRes.status})`);
         const body = await readBodyLimited(fileRes, MAX_MEDIA_BYTES);
         if (body.tooLarge) {
-          return reply({ content: "El archivo no puede superar los 25MB", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("El archivo no puede superar los 25MB");
         }
         const buffer = body.buffer;
 
@@ -768,27 +712,22 @@ const data = {
           }
         }
 
-        if (!texto) return reply({ content: "No se detectó voz inteligible en el archivo", flags: MessageFlags.Ephemeral });
+        if (!texto) return ctx.ephemeral("No se detectó voz inteligible en el archivo");
 
         const meta = formatAttachmentMeta(attachment, "audio");
+        const subtitle = texto.length > 3600 ? `${meta} · ${num(texto.length)} caracteres` : meta;
+        const builder = new ComponentsV2Builder({ color: RED })
+          .addText(`${V2Text.heading("Transcripción", 3)}\n${V2Text.subtext(subtitle)}`)
+          .addSeparator("small")
+          .addSmartText(texto, {
+            maxLength: 3600,
+            overflow: "file",
+            filename: "transcripcion.txt",
+            preview: false,
+            overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
+          });
 
-        if (texto.length > 3600) {
-          const fileContainer = createContainer(RED);
-          addTextBlock(fileContainer, `### Transcripción\n-# ${meta} · ${num(texto.length)} caracteres`);
-          addSeparator(fileContainer);
-          addTextBlock(fileContainer, "El texto supera el límite del mensaje, se adjunta como archivo.");
-          addSeparator(fileContainer, SeparatorSpacingSize.Small, false);
-          const fileAtt = addAttachmentFile(fileContainer, Buffer.from(texto, "utf-8"), "transcripcion.txt");
-          return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
-        }
-
-        const header = `### Transcripción\n-# ${meta}`;
-        const container = createContainer(RED);
-        addTextBlock(container, header);
-        addSeparator(container);
-        addTextBlock(container, budgetBodyText(texto, header.length));
-
-        await reply(buildV2Payload(container));
+        await ctx.send(builder);
       } catch (err) {
         log.error("[util transcribe]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -846,21 +785,19 @@ const data = {
       const usuarioExcluido = ctx.get("excluir_usuario");
       const imagen = ctx.get("imagen");
 
-      const isSlash = Boolean(ctx.interaction);
-      if (isSlash) await ctx.interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await ctx.defer({ ephemeral: true });
 
       let statusMsg = null;
-      const sendStatus = async (container) => {
-        const payload = buildV2Payload(container);
-        if (isSlash) return ctx.interaction.editReply(payload);
-        if (!statusMsg) {
-          statusMsg = await ctx.send(payload);
-          return statusMsg;
+      const sendStatus = async (builder) => {
+        if (!ctx.interaction && statusMsg && typeof statusMsg.edit === "function") {
+          return statusMsg.edit(builder.toPayload());
         }
-        return statusMsg.edit(payload);
+        const sent = await ctx.send(builder);
+        if (!statusMsg) statusMsg = sent;
+        return sent;
       };
 
-      const author = ctx.user ?? ctx.author;
+      const author = ctx.user;
       const embed = buildDmAllEmbed({ titulo, texto, author, guild: ctx.guild, imagenUrl: imagen?.url });
       const guildIcon = ctx.guild.iconURL({ size: 256 });
       const displayFilters = [
@@ -878,11 +815,11 @@ const data = {
         onProgress: (done, total) => {
           const pct = total > 0 ? Math.round((done / total) * 100) : 0;
           return sendStatus(
-            buildDmStatusContainer({
+            buildDmStatusCard({
               title: "Enviando DM masivo",
               guildName: ctx.guild.name,
               iconUrl: guildIcon,
-              rows: [["Progreso", `${code(`${num(done)} / ${num(total)}`)} (${pct}%)`]],
+              rows: [["Progreso", `${V2Text.code(`${num(done)} / ${num(total)}`)} (${pct}%)`]],
               filters: displayFilters,
               color: RED,
             })
@@ -912,14 +849,14 @@ const data = {
       await sendLog(ctx.guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros: filtrosLog })).catch(() => null);
 
       await sendStatus(
-        buildDmStatusContainer({
+        buildDmStatusCard({
           title: "DM masivo completado",
           guildName: ctx.guild.name,
           iconUrl: guildIcon,
           rows: [
-            ["Enviados", code(num(enviados))],
-            ["Fallidos", code(num(fallidos))],
-            ["Total", code(num(total))],
+            ["Enviados", V2Text.code(num(enviados))],
+            ["Fallidos", V2Text.code(num(fallidos))],
+            ["Total", V2Text.code(num(total))],
           ],
           filters: displayFilters,
           color: enviados === 0 && fallidos > 0 ? YELLOW : GREEN,
@@ -943,11 +880,11 @@ const data = {
       }),
 
     async code(ctx) {
-      const reply = await prepareReply(ctx, { thinking: true });
+      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
       const texto = ctx.get("texto");
 
       if (texto.length < 100) {
-        return reply({ content: "El texto es demasiado corto para resumir", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("El texto es demasiado corto para resumir");
       }
 
       try {
@@ -956,14 +893,14 @@ const data = {
         );
 
         const header = resumen
-          ? `### Resumen\n-# ${num(texto.length)} → ${num(resumen.length)} caracteres`
-          : "### Resumen";
-        const container = createContainer(RED);
-        addTextBlock(container, header);
-        addSeparator(container);
-        addTextBlock(container, budgetBodyText(resumen || "No pude generar un resumen", header.length));
+          ? `${V2Text.heading("Resumen", 3)}\n${V2Text.subtext(`${num(texto.length)} → ${num(resumen.length)} caracteres`)}`
+          : V2Text.heading("Resumen", 3);
+        const builder = new ComponentsV2Builder({ color: RED })
+          .addText(header)
+          .addSeparator("small")
+          .addSmartText(resumen || "No pude generar un resumen", { overflow: "clip" });
 
-        await reply(buildV2Payload(container));
+        await ctx.send(builder);
       } catch (err) {
         log.error("[util resume]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
@@ -1014,13 +951,13 @@ const pollCommand = {
         .filter(Boolean);
 
       if (!pregunta || pregunta.length > 300) {
-        return ctx.send({ content: "La pregunta debe tener entre 1 y 300 caracteres", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("La pregunta debe tener entre 1 y 300 caracteres");
       }
       if (opciones.length < 2 || opciones.length > 10) {
-        return ctx.send({ content: "Debes dar entre 2 y 10 opciones separadas por `/`", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Debes dar entre 2 y 10 opciones separadas por `/`");
       }
       if (opciones.some((o) => o.length > 55)) {
-        return ctx.send({ content: "Cada opción puede tener como máximo 55 caracteres", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Cada opción puede tener como máximo 55 caracteres");
       }
 
       const horas = Math.min(768, Math.max(1, Number.parseInt(ctx.get("duracion"), 10) || 24));
@@ -1062,22 +999,19 @@ const remindCommand = {
 
   async code(ctx) {
     try {
-      if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
-
       const duration = parseDuration(String(ctx.get("tiempo") ?? ""));
       const texto = String(ctx.get("texto") ?? "").trim().slice(0, 500);
 
       if (!duration || duration < 10_000 || duration > 365 * 86_400_000) {
-        return ctx.send({
-          content: "Tiempo inválido. Usa `30s`, `10m`, `2h`, `1d` o `1w` (entre 10s y 365d)",
-          flags: MessageFlags.Ephemeral,
-        });
+        return ctx.ephemeral("Tiempo inválido. Usa `30s`, `10m`, `2h`, `1d` o `1w` (entre 10s y 365d)");
       }
       if (!texto) {
-        return ctx.send({ content: "Debes indicar qué quieres que te recuerde", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("Debes indicar qué quieres que te recuerde");
       }
 
-      const invoker = ctx.user ?? ctx.author;
+      await ctx.defer();
+
+      const invoker = ctx.user;
       const remindAt = new Date(Date.now() + duration);
 
       const result = await createReminder(ctx.bot, {
@@ -1089,19 +1023,16 @@ const remindCommand = {
       });
 
       if (result.error === "limit") {
-        return ctx.send({
-          content: `Ya tienes ${result.max} recordatorios pendientes, espera a que alguno se cumpla`,
-          flags: MessageFlags.Ephemeral,
-        });
+        return ctx.ephemeral(`Ya tienes ${result.max} recordatorios pendientes, espera a que alguno se cumpla`);
       }
 
       const ts = Math.floor(remindAt.getTime() / 1000);
-      const container = createContainer(GREEN);
-      addTextBlock(container, `### Recordatorio creado\n-# <t:${ts}:f> · <t:${ts}:R>`);
-      addSeparator(container);
-      addTextBlock(container, quote(texto, 1200));
+      const builder = new ComponentsV2Builder({ color: GREEN })
+        .addText(`${V2Text.heading("Recordatorio creado", 3)}\n${V2Text.subtext(`<t:${ts}:f> · <t:${ts}:R>`)}`)
+        .addSeparator("small")
+        .addQuote(texto, { maxLength: 1200 });
 
-      await ctx.send(buildV2Payload(container));
+      await ctx.send(builder);
     } catch (err) {
       log.error("[util remind]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);
@@ -1121,19 +1052,19 @@ const ocrCommand = {
   }),
 
   async code(ctx) {
-    const reply = await prepareReply(ctx, { thinking: true });
+    await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
     const attachment = ctx.get("imagen");
     if (!attachment) {
-      return reply({ content: "Debes adjuntar una imagen", flags: MessageFlags.Ephemeral });
+      return ctx.ephemeral("Debes adjuntar una imagen");
     }
 
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     if (!validTypes.some((t) => attachment.contentType?.startsWith(t))) {
-      return reply({ content: "El archivo debe ser una imagen (jpg, png, gif, webp)", flags: MessageFlags.Ephemeral });
+      return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
     }
 
     if (attachment.size > 8 * 1024 * 1024) {
-      return reply({ content: "La imagen no puede superar los 8MB", flags: MessageFlags.Ephemeral });
+      return ctx.ephemeral("La imagen no puede superar los 8MB");
     }
 
     try {
@@ -1143,33 +1074,26 @@ const ocrCommand = {
       const texto = await generateVision(prompt, attachment.url);
 
       if (!texto || texto.includes("SIN_TEXTO")) {
-        return reply({ content: "No se detectó texto legible en la imagen", flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral("No se detectó texto legible en la imagen");
       }
 
       const meta = formatAttachmentMeta(attachment, "imagen");
+      const subtitle = texto.length > 3600 ? `${meta} · ${num(texto.length)} caracteres` : meta;
+      const builder = new ComponentsV2Builder({ color: RED })
+        .addSection(
+          [`${V2Text.heading("Texto extraído", 3)}\n${V2Text.subtext(subtitle)}`],
+          { thumbnail: attachment.url, fallbackToText: true }
+        )
+        .addSeparator("small")
+        .addSmartText(texto, {
+          maxLength: 3600,
+          overflow: "file",
+          filename: "texto.txt",
+          preview: false,
+          overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
+        });
 
-      if (texto.length > 3600) {
-        const fileContainer = createContainer(RED);
-        addHeaderSection(
-          fileContainer,
-          [
-            `### Texto extraído\n-# ${meta} · ${num(texto.length)} caracteres`,
-            "El texto supera el límite del mensaje, se adjunta como archivo.",
-          ],
-          attachment.url
-        );
-        addSeparator(fileContainer, SeparatorSpacingSize.Small, false);
-        const fileAtt = addAttachmentFile(fileContainer, Buffer.from(texto, "utf-8"), "texto.txt");
-        return reply(buildV2Payload(fileContainer, { files: [fileAtt] }));
-      }
-
-      const header = `### Texto extraído\n-# ${meta}`;
-      const container = createContainer(RED);
-      addHeaderSection(container, [header], attachment.url);
-      addSeparator(container);
-      addTextBlock(container, budgetBodyText(texto, header.length));
-
-      await reply(buildV2Payload(container));
+      await ctx.send(builder);
     } catch (err) {
       log.error("[util ocr]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);

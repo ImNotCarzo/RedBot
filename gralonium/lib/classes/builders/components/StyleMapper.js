@@ -10,6 +10,7 @@ const STYLE_MAP = {
   success: discord_js_1.ButtonStyle.Success,
   danger: discord_js_1.ButtonStyle.Danger,
   link: discord_js_1.ButtonStyle.Link,
+  ...(discord_js_1.ButtonStyle.Premium !== undefined ? { premium: discord_js_1.ButtonStyle.Premium } : {}),
 };
 
 /**
@@ -23,7 +24,7 @@ function mapButtonStyle(style) {
   if (typeof style === "number") {
     return style;
   }
-  const mapped = STYLE_MAP[style.toLowerCase()];
+  const mapped = STYLE_MAP[String(style).toLowerCase()];
   if (mapped === undefined) {
     return discord_js_1.ButtonStyle.Primary;
   }

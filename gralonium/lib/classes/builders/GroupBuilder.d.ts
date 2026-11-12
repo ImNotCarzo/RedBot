@@ -1,3 +1,4 @@
+import type { ApplicationIntegrationType, InteractionContextType } from "discord.js";
 import { Command, Types } from "../Loader.js";
 
 type GroupBuilderOptions = {
@@ -11,6 +12,8 @@ type GroupBuilderOptions = {
   userPermissions?: string[];
   botPermissions?: string[];
   guards?: Array<(ctx: any) => boolean | Promise<boolean>>;
+  integrationTypes?: Array<ApplicationIntegrationType | number>;
+  contexts?: Array<InteractionContextType | number>;
 };
 
 export declare class GroupBuilder {
@@ -25,6 +28,8 @@ export declare class GroupBuilder {
   userPermissions: string[];
   botPermissions: string[];
   guards: Array<(ctx: any) => boolean | Promise<boolean>>;
+  integrationTypes?: Array<ApplicationIntegrationType | number>;
+  contexts?: Array<InteractionContextType | number>;
   constructor(ops?: GroupBuilderOptions);
   setName(name: string): GroupBuilder;
   setDescription(description: string): GroupBuilder;
@@ -34,12 +39,16 @@ export declare class GroupBuilder {
   setBotPermissions(...permissions: string[]): GroupBuilder;
   allowPrefix(allow: boolean): GroupBuilder;
   allowSlash(allow: boolean): GroupBuilder;
+  setIntegrationTypes(...types: Array<ApplicationIntegrationType | number | Array<ApplicationIntegrationType | number>>): GroupBuilder;
+  setContexts(...contexts: Array<InteractionContextType | number | Array<InteractionContextType | number>>): GroupBuilder;
   toJSON(): {
     name: string;
     description: string;
     options: any[];
     default_member_permissions: string | null | undefined;
     dm_permission: boolean | undefined;
+    integration_types?: Array<ApplicationIntegrationType | number>;
+    contexts?: Array<InteractionContextType | number>;
   };
 }
 

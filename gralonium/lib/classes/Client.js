@@ -121,7 +121,7 @@ class Gralonium extends discord_js_1.Client {
   #registerHelpCommand() {
     if (!this.ops.helpCommand) return;
 
-    const help = new this.ops.helpCommand();
+    const help = new this.ops.helpCommand(this.ops.helpCommandOptions);
     if (!this.loader.commands.normal) this.loader.commands.normal = new discord_js_1.Collection();
 
     this.loader.commands.normal.set("help", {
