@@ -10,7 +10,7 @@ const {
 } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
-const { RED, GREEN, YELLOW } = require("../../src/config");
+const { RED, GREEN, YELLOW, USER_APP_CONFIG } = require("../../src/config");
 const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
 const {
   Logger,
@@ -179,6 +179,7 @@ const data = {
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
+    ...USER_APP_CONFIG,
   })
 
   // ── PING ──────────────────────────────────────
@@ -565,6 +566,7 @@ const data = {
       name: "download",
       description: "Descarga un video desde un enlace (TikTok, X, Instagram, Reddit, etc.)",
       aliases: ["dl", "video", "bajar"],
+      cooldown: { seconds: 8, bucket: "USER" },
     }),
     params: new ParamsBuilder()
       .addString({
@@ -617,6 +619,7 @@ const data = {
     data: new CommandBuilder({
       name: "describe",
       description: "Describe el contenido de una imagen",
+      cooldown: { seconds: 8, bucket: "USER" },
     }),
     params: new ParamsBuilder()
       .addAttachment({
@@ -657,6 +660,7 @@ const data = {
     data: new CommandBuilder({
       name: "transcribe",
       description: "Transcribe un audio o video a texto",
+      cooldown: { seconds: 10, bucket: "USER" },
     }),
     params: new ParamsBuilder()
       .addAttachment({
@@ -878,6 +882,7 @@ const data = {
       name: "resume",
       description: "Resume un texto largo",
       aliases: ["resumir", "summarize"],
+      cooldown: { seconds: 6, bucket: "USER" },
     }),
     params: new ParamsBuilder()
       .addString({
@@ -1051,6 +1056,7 @@ const ocrCommand = {
   data: new CommandBuilder({
     name: "ocr",
     description: "Extrae el texto de una imagen",
+    cooldown: { seconds: 8, bucket: "USER" },
   }),
   params: new ParamsBuilder().addAttachment({
     name: "imagen",

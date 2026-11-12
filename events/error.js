@@ -118,6 +118,11 @@ const event = {
       return safeSend("Este comando solo lo pueden usar usuarios específicos");
     }
 
+    if (is(err, Errors.CommandInCooldown)) {
+      const secs = Math.max(1, Math.ceil((err.timeLeft ?? 1000) / 1000));
+      return safeSend(`Espera \`${secs}s\` antes de volver a usar este comando`);
+    }
+
     if (is(err, Errors.MissingRequiredParam)) {
       if (!err.ctx) return;
       const bot = err.ctx?.bot?.user ?? _client?.user;

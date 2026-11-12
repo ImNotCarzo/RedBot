@@ -5,6 +5,7 @@ const { logAction } = require("../../src/guild");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
+const { getSnipedMessage } = require("../../src/snipe");
 
 const log = new Logger("CMD_CHANNEL", process.env.LOG_LEVEL);
 
@@ -502,6 +503,7 @@ const recapCommand = {
   data: new CommandBuilder({
     name: "recap",
     description: "Resume los últimos mensajes del canal",
+    cooldown: { seconds: 10, bucket: "USER" },
   }),
   params: new ParamsBuilder().addString({
     name: "cantidad",
@@ -557,6 +559,40 @@ const recapCommand = {
   },
 };
 
-data.data.addCommand(recapCommand);
+const snipeCommand = {
+  data: new CommandBuilder({
+    name: "snipe",
+    description: "Muestra el último mensaje borrado recientemente en este canal",
+  }),
+  params: new ParamsBuilder(),
+  async code(ctx) {
+    if (!ctx.guild) return noGuildReply(ctx);
+
+    const entry = getSnipedMessage(ctx.channel?.id);
+    if (!entry) {
+      return ctx.ephemeral("No hay mensajes borrados recientes en este canal");
+    }
+
+    const ts = Math.floor(entry.deletedAt / 1000);
+    const builder = new ComponentsV2Builder({ color: RED }).addSection(
+      [
+        V2Text.heading(entry.authorName, 3, 120),
+        V2Text.subtext(`@${entry.authorTag} · Borrado <t:${ts}:R>`),
+      ],
+      { thumbnail: entry.authorAvatar, fallbackToText: true }
+    );
+
+    if (entry.content) {
+      builder.addSeparator("small").addText(V2Text.quote(entry.content, 2000));
+    }
+    if (entry.attachmentUrl) {
+      builder.addSpacer("small").addGallery(entry.attachmentUrl);
+    }
+
+    await ctx.send(builder);
+  },
+};
+
+data.data.addCommand(recapCommand).addCommand(snipeCommand);
 
 module.exports = { data };

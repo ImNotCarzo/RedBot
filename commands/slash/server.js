@@ -29,6 +29,8 @@ const {
 const { RED, GREEN } = require("../../src/config");
 const { logAction } = require("../../src/guild");
 const { fetchPublic, readBodyLimited } = require("../../src/security");
+const { recordImageIfNew, replyWithImageHistory } = require("../../src/history");
+const { sendServerSetupPanel } = require("../../src/panels");
 
 const PAGE_SIZE = 15;
 const MAX_BOT_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -473,24 +475,41 @@ async function sendCustomBotPanel(ctx) {
   await view.send(ctx);
 }
 
-function buildServerImageCard(guild, title, imageUrl) {
-  return ComponentsV2Builder.imageView({
-    title,
-    image: imageUrl,
-    color: RED,
-    links: [{ label: "Abrir imagen", url: imageUrl }],
-  });
+function buildServerImageCard(title, imageUrl, { historyButtonId = null } = {}) {
+  const builder = new ComponentsV2Builder({ color: RED })
+    .addText(V2Text.heading(title, 3, 200))
+    .addGallery(imageUrl)
+    .addSpacer("small");
+
+  if (historyButtonId) {
+    return builder.addButtonsRow([
+      { label: "Abrir imagen", style: "link", url: imageUrl },
+      { customId: historyButtonId, label: "Historial", style: "secondary" },
+    ]);
+  }
+  return builder.addButton({ label: "Abrir imagen", style: "link", url: imageUrl });
 }
 
-function getServerViewBuilder(guild, selected) {
+function getServerViewBuilder(guild, selected, { historyButtonId = null } = {}) {
   if (selected === "logo") {
-    if (!guild.iconURL()) return { error: "Este servidor no tiene logo" };
-    return { builder: buildServerImageCard(guild, `Logo de ${guild.name}`, guild.iconURL({ size: 4096, extension: "png" })) };
+    const iconURL = guild.iconURL({ size: 4096, extension: "png" });
+    if (!iconURL) return { error: "Este servidor no tiene logo" };
+    return {
+      targetType: "server_logo",
+      imageUrl: iconURL,
+      historyTitle: `Historial de logo (${guild.name})`,
+      builder: buildServerImageCard(`Logo de ${guild.name}`, iconURL, { historyButtonId }),
+    };
   }
   if (selected === "banner") {
     const bannerURL = guild.bannerURL({ size: 4096, extension: "png" });
     if (!bannerURL) return { error: "Este servidor no tiene banner" };
-    return { builder: buildServerImageCard(guild, `Banner de ${guild.name}`, bannerURL) };
+    return {
+      targetType: "server_banner",
+      imageUrl: bannerURL,
+      historyTitle: `Historial de banner (${guild.name})`,
+      builder: buildServerImageCard(`Banner de ${guild.name}`, bannerURL, { historyButtonId }),
+    };
   }
   if (selected === "emojis") {
     const emojis = guild.emojis.cache.map((e) => e.toString());
@@ -564,10 +583,39 @@ function createServerViewCommand(name, description) {
         const guild = ctx.guild;
         if (!guild) return noGuildReply(ctx);
 
-        const view = getServerViewBuilder(guild, name);
-        if (view.error) return ctx.send(view.error);
+        const initial = getServerViewBuilder(guild, name);
+        if (initial.error) return ctx.send(initial.error);
 
-        await ctx.send(view.builder);
+        if (!initial.targetType) {
+          return ctx.send(initial.builder);
+        }
+
+        await recordImageIfNew(initial.targetType, guild.id, initial.imageUrl);
+        const invoker = ctx.user ?? ctx.member?.user;
+
+        const imgView = new V2View({
+          authorId: invoker?.id,
+          timeout: 60_000,
+          thirdPartyMode: "ephemeral-view",
+          onEnd: "static",
+          state: { tab: name },
+          render: ({ view, isEnded }) =>
+            getServerViewBuilder(guild, name, { historyButtonId: isEnded ? null : view.id("history") }).builder,
+          renderStatic: () => getServerViewBuilder(guild, name).builder,
+          actions: {
+            history: async ({ interaction }) => {
+              await replyWithImageHistory(interaction, {
+                targetType: initial.targetType,
+                targetId: guild.id,
+                title: initial.historyTitle,
+                color: RED,
+              });
+              return false;
+            },
+          },
+        });
+
+        await imgView.send(ctx);
       } catch (err) {
         log.error(`Error en server ${name}`, { err: err?.message ?? String(err) });
         return handleCommandError(ctx, err);
@@ -622,7 +670,9 @@ const data = {
                 : null;
               builder = buildServerRolesCard(guild, roles.length, pageItems, safePage, totalRolePages, { controls });
             } else if (state.tab !== "info") {
-              builder = getServerViewBuilder(guild, state.tab).builder;
+              builder = getServerViewBuilder(guild, state.tab, {
+                historyButtonId: !isEnded && (state.tab === "logo" || state.tab === "banner") ? view.id("history") : null,
+              }).builder;
             } else {
               builder = buildServerInfoCard(guild, owner);
             }
@@ -666,9 +716,23 @@ const data = {
                     await interaction.reply({ content: view.error, flags: MessageFlags.Ephemeral }).catch(() => {});
                     return false;
                   }
+                  if (view?.targetType) {
+                    await recordImageIfNew(view.targetType, guild.id, view.imageUrl);
+                  }
                 }
 
                 setState({ tab: selected, pageIndex: 0 });
+              },
+              history: async ({ interaction, state }) => {
+                const view = getServerViewBuilder(guild, state.tab);
+                if (!view?.targetType) return false;
+                await replyWithImageHistory(interaction, {
+                  targetType: view.targetType,
+                  targetId: guild.id,
+                  title: view.historyTitle,
+                  color: RED,
+                });
+                return false;
               },
               page: ({ parts, state, setState }) => {
                 const delta = parts[0] === "prev" ? -1 : 1;
@@ -804,6 +868,24 @@ const data = {
           if (friendly) return ctx.ephemeral(friendly);
           log.error("Error en server customreset", { err: err?.message ?? String(err) });
           return failWith(ctx, err, "No se pudo restablecer el perfil del bot");
+        }
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "setup",
+        description: "Panel interactivo de configuración del servidor",
+      }),
+      plugins: [Plugins.hasPerms("ManageGuild")],
+
+      async code(ctx) {
+        await ctx.defer();
+        try {
+          if (!ctx.guild) return noGuildReply(ctx);
+          await sendServerSetupPanel(ctx, { onOpenCustomBot: sendCustomBotPanel });
+        } catch (err) {
+          log.error("Error en server setup", { err: err?.message ?? String(err) });
+          return failWith(ctx, err, "No se pudo abrir el panel de configuración");
         }
       },
     }),

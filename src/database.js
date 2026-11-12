@@ -61,6 +61,14 @@ const releaseNoticeSchema = new Schema({
 }, { timestamps: true });
 releaseNoticeSchema.index({ userId: 1, version: 1 }, { unique: true });
 
+const imageHistorySchema = new Schema({
+  targetType: { type: String, required: true, enum: ["avatar", "server_avatar", "banner", "server_logo", "server_banner"] },
+  targetId:   { type: String, required: true },
+  url:        { type: String, required: true },
+  hash:       { type: String, required: true },
+}, { timestamps: true });
+imageHistorySchema.index({ targetType: 1, targetId: 1, createdAt: -1 });
+
 const GuildConfig   = models.GuildConfig   || model("GuildConfig", guildSchema);
 const JoinRole      = models.JoinRole      || model("JoinRole", joinRoleSchema);
 const Log           = models.Log           || model("Log", logSchema);
@@ -69,6 +77,7 @@ const Warn          = models.Warn          || model("Warn", warnSchema);
 const Afk           = models.Afk           || model("Afk", afkSchema);
 const Reminder      = models.Reminder      || model("Reminder", reminderSchema);
 const ReleaseNotice = models.ReleaseNotice || model("ReleaseNotice", releaseNoticeSchema);
+const ImageHistory  = models.ImageHistory  || model("ImageHistory", imageHistorySchema);
 
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
@@ -112,4 +121,5 @@ module.exports = {
   Afk,
   Reminder,
   ReleaseNotice,
+  ImageHistory,
 };

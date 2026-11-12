@@ -1,7 +1,7 @@
 const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { generateChatReply, setConversacion, getConversacion } = require("../../src/ai");
-const { MAX_HISTORIAL, RED } = require("../../src/config");
+const { MAX_HISTORIAL, RED, USER_APP_CONFIG } = require("../../src/config");
 const {
   Logger,
   THINKING_TEXT,
@@ -17,6 +17,8 @@ const data = {
     aliases: ["ia", "ai"],
     as_prefix: true,
     as_slash: true,
+    cooldown: { seconds: 5, bucket: "USER" },
+    ...USER_APP_CONFIG,
   }),
   params: new ParamsBuilder().addString({
     name: "pregunta",

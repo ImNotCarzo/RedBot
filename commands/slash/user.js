@@ -16,7 +16,8 @@ const {
   formatSortedRoles,
 } = require("../../src/runtime");
 const { resolveMemberFlexible: resolveMember } = require("../../src/adapter");
-const { RED, DARK, BADGE_NAMES } = require("../../src/config");
+const { RED, DARK, BADGE_NAMES, USER_APP_CONFIG } = require("../../src/config");
+const { recordImageIfNew, replyWithImageHistory } = require("../../src/history");
 
 const PAGE_SIZE = 15;
 
@@ -98,12 +99,19 @@ function buildPermsCard(user, perms, pageIndex, totalPages, color, { controls = 
   });
 }
 
-function buildUserImageCard(user, { title, imageUrl, color } = {}) {
-  return new ComponentsV2Builder({ color })
+function buildUserImageCard(user, { title, imageUrl, color, historyButtonId = null } = {}) {
+  const builder = new ComponentsV2Builder({ color })
     .addText(`${V2Text.subtext(user.username, 120)}\n${V2Text.heading(title, 3, 200)}`)
     .addGallery(imageUrl)
-    .addSpacer("small")
-    .addButton({ label: "Abrir imagen", style: "link", url: imageUrl });
+    .addSpacer("small");
+
+  if (historyButtonId) {
+    return builder.addButtonsRow([
+      { label: "Abrir imagen", style: "link", url: imageUrl },
+      { customId: historyButtonId, label: "Historial", style: "secondary" },
+    ]);
+  }
+  return builder.addButton({ label: "Abrir imagen", style: "link", url: imageUrl });
 }
 
 async function sendImageSwitcher(
@@ -121,20 +129,24 @@ async function sendImageSwitcher(
     globalTitle,
     placeholder,
     options,
+    historyTarget = null,
   }
 ) {
-  if (!hasDistinct) {
+  if (!hasDistinct && !historyTarget) {
     return ctx.send(buildUserImageCard(user, { title: singleTitle, imageUrl: serverUrl || globalUrl, color }));
   }
 
   const renderImage = ({ state, view, isEnded }) => {
     const isServer = state.type === "server";
+    const imageUrl = hasDistinct ? (isServer ? serverUrl : globalUrl) : (serverUrl || globalUrl);
+    const title = hasDistinct ? (isServer ? serverTitle : globalTitle) : singleTitle;
     const builder = buildUserImageCard(user, {
-      title: isServer ? serverTitle : globalTitle,
-      imageUrl: isServer ? serverUrl : globalUrl,
+      title,
+      imageUrl,
       color,
+      historyButtonId: !isEnded && historyTarget ? view.id("history") : null,
     });
-    if (!isEnded) {
+    if (!isEnded && hasDistinct) {
       builder.addSpacer("small").addSelectMenu({
         customId: view.id("select"),
         placeholder,
@@ -156,6 +168,13 @@ async function sendImageSwitcher(
       select: ({ values, setState }) => {
         if (!values[0]) return false;
         setState({ type: values[0] });
+      },
+      history: async ({ interaction, state }) => {
+        if (!historyTarget) return false;
+        const target = historyTarget(state.type);
+        if (!target) return false;
+        await replyWithImageHistory(interaction, { ...target, color });
+        return false;
       },
     },
   });
@@ -286,6 +305,7 @@ const data = {
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
+    ...USER_APP_CONFIG,
   })
     .addCommand({
       data: new CommandBuilder({ name: "info", description: "Muestra información general de un usuario" }),
@@ -463,12 +483,18 @@ const data = {
           const avatarOpts = { extension: "png", size: 4096 };
           const serverAvatar = member ? member.displayAvatarURL(avatarOpts) : user.displayAvatarURL(avatarOpts);
           const globalAvatar = user.displayAvatarURL(avatarOpts);
+          const hasDistinctAvatar = Boolean(member?.avatar && member.avatar !== user.avatar);
+
+          await recordImageIfNew("avatar", user.id, globalAvatar);
+          if (hasDistinctAvatar && ctx.guild?.id) {
+            await recordImageIfNew("server_avatar", `${ctx.guild.id}:${user.id}`, serverAvatar);
+          }
 
           await sendImageSwitcher(ctx, {
             invoker,
             user,
             color: getMemberColor(member, member ? DARK : RED),
-            hasDistinct: Boolean(member?.avatar && member.avatar !== user.avatar),
+            hasDistinct: hasDistinctAvatar,
             serverUrl: serverAvatar,
             globalUrl: globalAvatar,
             singleTitle: "Avatar",
@@ -479,6 +505,10 @@ const data = {
               { label: "Avatar del Servidor", description: "Avatar de servidor", value: "server" },
               { label: "Avatar Global", description: "Avatar global", value: "global" },
             ],
+            historyTarget: (type) =>
+              type === "server" && hasDistinctAvatar && ctx.guild?.id
+                ? { targetType: "server_avatar", targetId: `${ctx.guild.id}:${user.id}`, title: `Historial de avatar (${user.username})` }
+                : { targetType: "avatar", targetId: user.id, title: `Historial de avatar (${user.username})` },
           });
         } catch (err) {
           log.error("Error en user avatar", { err: err?.message ?? String(err) });
@@ -513,6 +543,10 @@ const data = {
           const globalBannerURL = user.bannerURL({ size: 4096 });
           if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
 
+          if (globalBannerURL) {
+            await recordImageIfNew("banner", user.id, globalBannerURL);
+          }
+
           await sendImageSwitcher(ctx, {
             invoker,
             user,
@@ -529,6 +563,11 @@ const data = {
               { label: "Banner del Servidor", description: "Banner de servidor", value: "server" },
               { label: "Banner Global", description: "Banner global", value: "global" },
             ],
+            historyTarget: () => ({
+              targetType: "banner",
+              targetId: user.id,
+              title: `Historial de banner (${user.username})`,
+            }),
           });
         } catch (err) {
           log.error("Error en user banner", { err: err?.message ?? String(err) });

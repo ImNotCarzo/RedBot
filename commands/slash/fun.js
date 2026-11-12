@@ -1,7 +1,7 @@
 const { GroupBuilder, CommandBuilder, ParamsBuilder, ComponentsV2Builder, V2Text } = require("gralonium");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError } = require("../../src/runtime");
 const { generateText, generateVision, fetchImageAsInlineData } = require("../../src/ai");
-const { RED, BADGE_NAMES } = require("../../src/config");
+const { RED, BADGE_NAMES, USER_APP_CONFIG } = require("../../src/config");
 
 const log = new Logger("CMD_FUN", process.env.LOG_LEVEL);
 
@@ -48,6 +48,7 @@ const data = {
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
+    ...USER_APP_CONFIG,
   })
     .addCommand({
       data: new CommandBuilder({

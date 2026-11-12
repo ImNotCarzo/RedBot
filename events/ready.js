@@ -56,6 +56,14 @@ async function syncSlashAndContexts(client) {
   log.info("Comandos slash sincronizados");
 
   const rest = new REST().setToken(token);
+  const { buildContextMenuPayloads } = require("../commands/interactions/contextMenus");
+  for (const payload of buildContextMenuPayloads()) {
+    await runReadyStep(`Sincronización menú contextual: ${payload.name}`, () =>
+      rest.post(Routes.applicationCommands(clientId), { body: payload })
+    );
+  }
+  log.info("Menús contextuales sincronizados");
+
   const commands = await runReadyStep("Lectura de comandos de aplicación", () =>
     rest.get(Routes.applicationCommands(clientId))
   );

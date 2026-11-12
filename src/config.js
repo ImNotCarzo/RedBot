@@ -1,4 +1,4 @@
-const { GatewayIntentBits, Partials } = require("discord.js");
+const { ApplicationIntegrationType, GatewayIntentBits, InteractionContextType, Partials } = require("discord.js");
 
 const REQUIRED_ENV = ["TOKEN", "MONGO", "CLIENT_ID"];
 
@@ -62,6 +62,10 @@ const COLORS = {
 const MAX_HISTORIAL = 10;
 const MAX_EMBED_DESCRIPTION = 4096;
 const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
+const USER_APP_CONFIG = {
+  integrationTypes: [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
+  contexts: [InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel],
+};
 
 const SYSTEM_PROMPT = `Eres RedBot, un asistente dentro de un bot de Discord.
 Personalidad: sarcástico, ingenioso e irreverente pero sin pasarte de la raya.
@@ -115,6 +119,7 @@ module.exports = {
   MAX_HISTORIAL,
   MAX_EMBED_DESCRIPTION,
   COMMANDS_TO_UPDATE,
+  USER_APP_CONFIG,
   SYSTEM_PROMPT,
   BADGE_NAMES,
   setId,

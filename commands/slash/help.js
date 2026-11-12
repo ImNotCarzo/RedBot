@@ -5,7 +5,7 @@ const {
   V2Text,
   V2View,
 } = require("gralonium");
-const { getId, RED } = require("../../src/config");
+const { getId, RED, USER_APP_CONFIG } = require("../../src/config");
 const { getPrefix } = require("../../src/guild");
 const { Logger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../../src/runtime");
 const log = new Logger("CMD_HELP", process.env.LOG_LEVEL);
@@ -91,6 +91,7 @@ const getBaseCommands = () => ({
     roles:       { short: "sroles",      slash: "server roles",       id: IDS.server(), usage: ".sroles",              aliases: ["serverroles", "listroles"], description: "Lista los roles del servidor." },
     custombot:   { short: "custombot",   slash: "server custombot",   id: IDS.server(), usage: ".custombot",           aliases: ["botprofile", "cbot"],       description: "Personaliza avatar, banner, apodo y biografía del bot en el servidor." },
     customreset: { short: "customreset", slash: "server customreset", id: IDS.server(), usage: ".customreset [campo]", aliases: ["botreset", "creset"],       description: "Restablece el perfil personalizado del bot en el servidor." },
+    setup:       { short: "setup",       slash: "server setup",       id: IDS.server(), usage: ".setup",               aliases: ["config", "panel"],          description: "Panel interactivo de configuración del servidor." },
   },
   roles: {
     info:        { short: "role",    slash: "role info",        id: IDS.role(), usage: ".role <@rol>",             aliases: ["roleinfo", "ri"],              description: "Muestra información de un rol." },
@@ -120,6 +121,7 @@ const getBaseCommands = () => ({
     permit:   { short: "permit", slash: "channel permit",   id: IDS.channel(), usage: ".permit <@usuario> [#canal]",aliases: ["allow", "acceso"],         description: "Da acceso a un usuario en un canal." },
     deny:     { short: "deny",   slash: "channel deny",     id: IDS.channel(), usage: ".deny <@usuario> [#canal]",  aliases: ["block", "denegar"],        description: "Quita el acceso a un usuario en un canal." },
     hide:     { short: "hide",   slash: "channel hide",     id: IDS.channel(), usage: ".hide [#canal]",             aliases: ["ocultar", "esconder"],     description: "Oculta un canal a @everyone." },
+    snipe:    { short: "snipe",  slash: "channel snipe",    id: IDS.channel(), usage: ".snipe",                     aliases: ["borrado"],                 description: "Muestra el último mensaje borrado recientemente en el canal." },
   },
   diversion: {
     choose:  { short: "choose",  slash: "fun choose",  id: IDS.fun(), usage: ".choose <op1, op2, ...>", aliases: ["elegir", "escoger", "pick"], description: "Elige una opción al azar entre varias." },
@@ -161,6 +163,7 @@ const data = {
     description: "Muestra la lista de comandos disponibles",
     as_prefix: true,
     as_slash: true,
+    ...USER_APP_CONFIG,
   }),
 
   async code(ctx) {

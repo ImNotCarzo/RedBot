@@ -216,6 +216,8 @@ const DEFINITIONS = [
   { name: "transcribe", description: "Transcribe un audio o video a texto", aliases: ["transcribir"], authorName: "Comando Transcribe", descriptionText: "**Usos:**\nTranscribe un audio o video a texto\n\n**Aliases:**\n`transcribir`\n\n```js\n.transcribe <url | adjunto>\nEjemplo: .transcribe https://ejemplo.com/audio.mp3```" },
   { name: "translate", description: "Traduce texto a otro idioma", aliases: ["traducir", "trans"], authorName: "Comando Translate", descriptionText: "**Usos:**\nTraduce texto a cualquier idioma\n\n**Aliases:**\n`traducir`, `trans`\n\n```js\n.translate <texto> [idioma]\nEjemplo: .translate כלב español```", noMention: true },
   { name: "recap", description: "Resume los últimos mensajes del canal", aliases: ["resumen", "tldr"], authorName: "Comando Recap", descriptionText: "**Usos:**\nResume la conversación reciente del canal (10 a 100 mensajes)\n\n**Aliases:**\n`resumen`, `tldr`\n\n```js\n.recap [cantidad]\nEjemplo: .recap 50```" },
+  { name: "setup", description: "Panel interactivo de configuración del servidor", aliases: ["config", "panel"] },
+  { name: "snipe", description: "Muestra el último mensaje borrado recientemente en el canal", aliases: ["borrado"] },
 ];
 
 module.exports = {

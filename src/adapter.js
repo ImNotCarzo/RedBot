@@ -99,6 +99,8 @@ const PREFIXED_TO_SLASH_MAP = {
   roleperms: "role/permissions",
   server: "server/info",
   serverbanner: "server/banner",
+  setup: "server/setup",
+  snipe: "channel/snipe",
   ubanner: "user/banner",
   unlock: "channel/unlock",
   user: "user/info",
@@ -408,6 +410,27 @@ function resolveSlashKeyForPrefixedName(prefixedName) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+async function applyDelegatedCooldown(ctx, slashCommand) {
+  const cooldown = slashCommand?.data?.cooldown;
+  const cooldowns = ctx?.bot?.cooldowns;
+  if (!cooldown?.seconds || cooldown.seconds <= 0 || !cooldowns) return;
+
+  const { Errors } = require("gralonium");
+  const bucket = cooldown.bucket || "USER";
+  const authorId = ctx.author?.id ?? ctx.user?.id ?? "-1";
+  let source = authorId;
+  if (bucket === "GUILD") source = ctx.guild?.id || "-1";
+  else if (bucket === "MEMBER") source = ctx.guild ? `${ctx.guild.id}_${authorId}` : authorId;
+  else if (bucket === "CHANNEL") source = ctx.channel?.id || "-1";
+
+  const cooldownMs = cooldown.seconds * 1000;
+  const cmdName = slashCommand.data.name;
+  const active = await cooldowns.check(cmdName, source, cooldownMs, bucket);
+  if (active) throw new Errors.CommandInCooldown(ctx, active.left);
+
+  await cooldowns.setCooldownSource(cmdName, source, bucket, cooldownMs);
+}
+
 async function runCommandPlugins(ctx, slashCommand) {
   const plugins = [...(slashCommand.plugins ?? []), ...(ctx?.bot?.loader?.globalPlugins ?? [])];
   for (const plugin of plugins) {
@@ -445,6 +468,8 @@ function wrapSingleCommand(command, file, log) {
           if (fallbackResult !== undefined) return fallbackResult;
           return ctx.send("Faltan parámetros requeridos para ejecutar este comando.");
         }
+
+        await applyDelegatedCooldown(ctx, slashCommand);
 
         const prevGet = ctx.get;
         ctx.get = (name) => parsedValues.values[name] ?? null;

@@ -316,12 +316,12 @@ function failWith(ctx, err, message) {
   return ctx.ephemeral(ComponentsV2Builder.card({ description: message, color: RED }));
 }
 
-function createListPaginator({ items, ownerId, perPage = 15, timeout = 2 * 60 * 1000, render }) {
+function createListPaginator({ items, ownerId, perPage = 15, timeout = 2 * 60 * 1000, thirdPartyMode = "ephemeral-view", render }) {
   return new V2Paginator({
     items,
     perPage,
     ownerId,
-    thirdPartyMode: "reject",
+    thirdPartyMode,
     thirdPartyMessage: "No es tu comando",
     wrap: false,
     prevButton: { label: "◀" },
