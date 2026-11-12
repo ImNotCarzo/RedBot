@@ -55,13 +55,20 @@ const reminderSchema = new Schema({
 reminderSchema.index({ userId: 1 });
 reminderSchema.index({ remindAt: 1 });
 
-const GuildConfig = models.GuildConfig || model("GuildConfig", guildSchema);
-const JoinRole    = models.JoinRole    || model("JoinRole", joinRoleSchema);
-const Log         = models.Log         || model("Log", logSchema);
-const TempBan     = models.TempBan     || model("TempBan", tempBanSchema);
-const Warn        = models.Warn        || model("Warn", warnSchema);
-const Afk         = models.Afk         || model("Afk", afkSchema);
-const Reminder    = models.Reminder    || model("Reminder", reminderSchema);
+const releaseNoticeSchema = new Schema({
+  userId:  { type: String, required: true },
+  version: { type: String, required: true },
+}, { timestamps: true });
+releaseNoticeSchema.index({ userId: 1, version: 1 }, { unique: true });
+
+const GuildConfig   = models.GuildConfig   || model("GuildConfig", guildSchema);
+const JoinRole      = models.JoinRole      || model("JoinRole", joinRoleSchema);
+const Log           = models.Log           || model("Log", logSchema);
+const TempBan       = models.TempBan       || model("TempBan", tempBanSchema);
+const Warn          = models.Warn          || model("Warn", warnSchema);
+const Afk           = models.Afk           || model("Afk", afkSchema);
+const Reminder      = models.Reminder      || model("Reminder", reminderSchema);
+const ReleaseNotice = models.ReleaseNotice || model("ReleaseNotice", releaseNoticeSchema);
 
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
@@ -104,4 +111,5 @@ module.exports = {
   Warn,
   Afk,
   Reminder,
+  ReleaseNotice,
 };

@@ -1,6 +1,6 @@
 {
   "name": "RedBot",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "gralonium bot",
   "main": "src/index.js",
   "scripts": {

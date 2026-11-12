@@ -3,6 +3,63 @@ const fs = require("fs");
 const { isPromise } = require("util/types");
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
+const RELEASE_NOTICE_VERSION = "0.4.0";
+const seenReleaseUsers = new Set();
+const handledReleaseCtx = new WeakSet();
+
+function buildReleaseNoticeEmbed() {
+  const { EmbedBuilder } = require("discord.js");
+  const { RED } = require("./config");
+  return new EmbedBuilder()
+    .setColor(RED)
+    .setTitle(`Nuevos comandos añadidos (${RELEASE_NOTICE_VERSION})`)
+    .setDescription([
+      "/server custombot ``.custombot`` -> personaliza el avatar, banner, apodo y biografia de redbot en tu servidor",
+      "",
+      "/server customreset ``.customreset``",
+      "/util poll ``.poll``",
+      "/util remind ``.remind``",
+      "/util ocr ``.ocr``",
+      "/channel recap ``.recap``",
+    ].join("\n"));
+}
+
+async function maybeSendReleaseNotice(ctx) {
+  if (!ctx || handledReleaseCtx.has(ctx)) return;
+  handledReleaseCtx.add(ctx);
+
+  const userId = ctx.user?.id ?? ctx.author?.id ?? ctx.message?.author?.id ?? ctx.interaction?.user?.id;
+  if (!userId || ctx.user?.bot || ctx.author?.bot || ctx.message?.author?.bot) return;
+  if (seenReleaseUsers.has(userId)) return;
+
+  try {
+    const mongoose = require("mongoose");
+    if (mongoose.connection.readyState !== 1) return;
+
+    const { ReleaseNotice } = require("./database");
+    const exists = await ReleaseNotice.exists({ userId, version: RELEASE_NOTICE_VERSION });
+    if (exists) {
+      seenReleaseUsers.add(userId);
+      return;
+    }
+
+    seenReleaseUsers.add(userId);
+    await ReleaseNotice.updateOne(
+      { userId, version: RELEASE_NOTICE_VERSION },
+      { $setOnInsert: { userId, version: RELEASE_NOTICE_VERSION } },
+      { upsert: true }
+    );
+
+    const payload = { embeds: [buildReleaseNoticeEmbed()] };
+    if (ctx.interaction && (ctx.interaction.replied || ctx.interaction.deferred)) {
+      await ctx.interaction.followUp(payload).catch(() => {});
+    } else {
+      await ctx.channel?.send?.(payload).catch(() => {});
+    }
+  } catch {
+    // Nunca interrumpir la ejecución del comando por el aviso de novedades
+  }
+}
 
 const PREFIXED_TO_SLASH_MAP = {
   afk: "util/afk",
@@ -152,11 +209,18 @@ const USER_LOOKUP_COMMANDS = new Set([
   "fun/roast",
 ]);
 
+const TRANSLATE_REPLY_LANGS = new Set([
+  "es", "en", "pt", "fr", "de", "it", "ja", "ko", "zh", "zh-cn", "zh-tw", "ru", "ar", "nl",
+]);
+
 function getMessageText(message) {
   const direct = message?.content?.trim();
   if (direct) return direct;
   const snapshots = message?.messageSnapshots?.values ? [...message.messageSnapshots.values()] : [];
-  return snapshots.map((s) => s.content?.trim()).filter(Boolean).join("\n");
+  const snapshotText = snapshots.map((s) => s.content?.trim()).filter(Boolean).join("\n");
+  if (snapshotText) return snapshotText;
+  const embed = message?.embeds?.[0];
+  return [embed?.title?.trim(), embed?.description?.trim()].filter(Boolean).join("\n");
 }
 
 function getFirstAttachment(message) {
@@ -258,7 +322,10 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
     } else if (def.type === 3) {
       if (args.length) {
         if (slashName === "translate" && def.name === "texto") {
-          if (args.length > 1 && /^[a-z]{2,5}(-[a-z]{2,4})?$/i.test(args[args.length - 1])) {
+          const replyText = getMessageText(replyMsg);
+          if (args.length === 1 && replyText && TRANSLATE_REPLY_LANGS.has(args[0].toLowerCase())) {
+            value = replyText;
+          } else if (args.length > 1 && /^[a-z]{2,5}(-[a-z]{2,4})?$/i.test(args[args.length - 1])) {
             const langArg = args.pop();
             value = args.splice(0).join(" ");
             args.push(langArg);
@@ -295,6 +362,19 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
   return { values, missingRequired, notFound };
 }
 
+function wrapSlashCommand(cmd) {
+  const originalCode = cmd?.code;
+  if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
+
+  cmd.code = async function (ctx, ...args) {
+    const result = await originalCode.call(this, ctx, ...args);
+    await maybeSendReleaseNotice(ctx);
+    return result;
+  };
+
+  wrappedOriginalCodes.add(originalCode);
+}
+
 function loadSlashCommandMap(log) {
   if (slashCommandMap.size) return;
 
@@ -305,12 +385,16 @@ function loadSlashCommandMap(log) {
     if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
 
     try {
-      const rootData = require(path.join(targetDir, entry.name))?.data?.data;
+      const exported = require(path.join(targetDir, entry.name))?.data;
+      const rootData = exported?.data;
       if (Array.isArray(rootData?.commands)) {
         const groupName = rootData.name ?? entry.name.slice(0, -3);
         for (const cmd of rootData.commands) {
+          wrapSlashCommand(cmd);
           if (cmd?.data?.name) slashCommandMap.set(`${groupName}/${cmd.data.name}`, cmd);
         }
+      } else if (typeof exported?.code === "function") {
+        wrapSlashCommand(exported);
       }
     } catch (err) {
       log?.warn(`No se pudo cargar comando slash desde ${entry.name}`, { err: err?.message ?? String(err) });
@@ -382,7 +466,9 @@ function wrapSingleCommand(command, file, log) {
     }
 
     try {
-      return await originalCode.call(this, ctx, ...args);
+      const result = await originalCode.call(this, ctx, ...args);
+      await maybeSendReleaseNotice(ctx);
+      return result;
     } catch (err) {
       log?.error(`[${command?.data?.name ?? file}]`, { err: err.message });
       return ctx.send("Ocurrió un error ejecutando el comando");
