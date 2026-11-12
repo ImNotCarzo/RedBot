@@ -2,7 +2,7 @@ const { EmbedBuilder, ChannelType } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
 const { sendLog } = require("../../src/guild");
-const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, failWith } = require("../../src/runtime");
+const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, failWith } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
 
@@ -49,21 +49,24 @@ function createEveryoneOverwriteCommand({ name, description, paramDesc, overwrit
       await ctx.defer();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
-      const modTag = ctx.user?.tag ?? ctx.author?.tag;
+      const modTag = ctx.user?.tag;
 
       try {
         await channel.permissionOverwrites.edit(ctx.guild.roles.everyone, overwrite, {
           reason: `${modTag}: channel ${name}`,
         });
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setDescription(publicText(channel))
-              .setColor(color)
-              .setTimestamp(),
-          ],
-        });
+        await ctx.send(
+          buildActionCard({
+            title: logTitle,
+            fields: [
+              ["Canal", `${channel}`],
+              ["Detalle", publicText(channel)],
+            ],
+            moderator: modTag,
+            color,
+          })
+        );
 
         await sendLog(
           ctx.guild,
@@ -95,21 +98,26 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
       if (!ctx.guild) return noGuildReply(ctx);
       const member = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
-      const modTag = ctx.user?.tag ?? ctx.author?.tag;
+      const modTag = ctx.user?.tag;
 
       try {
         await channel.permissionOverwrites.edit(member, {
           ViewChannel: allow,
         }, { reason: `${modTag}: channel ${name}` });
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setDescription(publicText(member, channel))
-              .setColor(color)
-              .setTimestamp(),
-          ],
-        });
+        await ctx.send(
+          buildActionCard({
+            title: logTitle,
+            thumbnail: member.user?.displayAvatarURL?.({ size: 256 }) ?? null,
+            fields: [
+              ["Usuario", `${member}`],
+              ["Canal", `${channel}`],
+              ["Detalle", publicText(member, channel)],
+            ],
+            moderator: modTag,
+            color,
+          })
+        );
 
         await sendLog(
           ctx.guild,
@@ -202,24 +210,24 @@ const data = {
         const rawName = ctx.get("nombre");
         const isTextLike = channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement;
         const newName = (isTextLike ? rawName.toLowerCase().replace(/\s+/g, "-") : rawName).trim().slice(0, 100);
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
 
         try {
           const oldName = channel.name;
           await channel.setName(newName, `${modTag}: channel rename`);
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("Canal renombrado")
-                .setColor(GREEN)
-                .addFields(
-                  { name: "Antes", value: `\`${oldName}\``, inline: true },
-                  { name: "Ahora", value: `\`${newName}\``, inline: true },
-                )
-                .setTimestamp(),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: "Canal renombrado",
+              fields: [
+                ["Canal", `${channel}`],
+                ["Antes", V2Text.code(oldName)],
+                ["Ahora", V2Text.code(newName)],
+              ],
+              moderator: modTag,
+              color: GREEN,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -245,7 +253,7 @@ const data = {
         description: "Bloquea un canal para usuarios normales",
         paramDesc: "Canal a bloquear (opcional, por defecto el actual)",
         overwrite: { SendMessages: false },
-        publicText: (channel) => `**${channel} fue cerrado**`,
+        publicText: (channel) => `${channel} fue cerrado`,
         color: RED,
         logTitle: "Canal bloqueado",
         errorMsg: "No se pudo bloquear el canal",
@@ -257,7 +265,7 @@ const data = {
         description: "Abre un canal bloqueado",
         paramDesc: "Canal a abrir (opcional, por defecto el actual)",
         overwrite: { SendMessages: null },
-        publicText: (channel) => `**${channel} fue abierto**`,
+        publicText: (channel) => `${channel} fue abierto`,
         color: GREEN,
         logTitle: "Canal desbloqueado",
         errorMsg: "No se pudo desbloquear el canal",
@@ -276,7 +284,7 @@ const data = {
         await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
         const channel = ctx.get("canal") ?? ctx.channel;
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
         const seconds = parseSlowmode(ctx.get("tiempo"));
 
         if (seconds === null) {
@@ -288,18 +296,17 @@ const data = {
           const formatted = formatSlowmode(seconds);
           const color = seconds === 0 ? GREEN : RED;
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setDescription(
-                  seconds === 0
-                    ? `El slowmode en ${channel} fue desactivado`
-                    : `El slowmode de ${channel} se estableció en **${formatted}**`
-                )
-                .setColor(color)
-                .setTimestamp(),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: seconds === 0 ? "Slowmode desactivado" : "Slowmode establecido",
+              fields: [
+                ["Canal", `${channel}`],
+                ["Slowmode", V2Text.code(formatted)],
+              ],
+              moderator: modTag,
+              color,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -332,8 +339,8 @@ const data = {
       async code(ctx) {
         const channel = ctx.get("canal") ?? ctx.channel;
         const guild = ctx.guild;
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
-        const authorId = ctx.user?.id ?? ctx.author?.id;
+        const modTag = ctx.user?.tag;
+        const authorId = ctx.user?.id;
 
         if (!guild) return noGuildReply(ctx);
         if (!channel) return ctx.ephemeral("No se pudo obtener el canal");
@@ -380,7 +387,14 @@ const data = {
                 await channel.delete(`${modTag}: channel nuke`);
 
                 await newChannel
-                  .send({ embeds: [new EmbedBuilder().setDescription("Canal nukeado").setColor(RED)] })
+                  .send(
+                    buildActionCard({
+                      title: "Canal nukeado",
+                      fields: [["Canal", `${newChannel}`]],
+                      moderator: modTag,
+                      color: RED,
+                    }).toPayload()
+                  )
                   .catch(() => {});
 
                 await sendLog(
@@ -432,19 +446,22 @@ const data = {
         await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
         const channel = ctx.get("canal") ?? ctx.channel;
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
 
         try {
           const cloned = await channel.clone({ reason: `${modTag}: channel clone` });
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setDescription(`${channel} fue clonado → ${cloned}`)
-                .setColor(GREEN)
-                .setTimestamp(),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: "Canal clonado",
+              fields: [
+                ["Original", `${channel}`],
+                ["Clon", `${cloned}`],
+              ],
+              moderator: modTag,
+              color: GREEN,
+            })
+          );
 
           await sendLog(
             ctx.guild,

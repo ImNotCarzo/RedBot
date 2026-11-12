@@ -15,6 +15,7 @@ const {
   noGuildReply,
   formatPermissionName: formatPerm,
   handleCommandError,
+  buildActionCard,
   failWith,
 } = require("../../src/runtime");
 const { JoinRole } = require("../../src/database");
@@ -65,11 +66,11 @@ async function executeBulkRole({
   if (!guild) return noGuildReply(ctx);
 
   const hierr = roleHierarchyCheck(ctx, role);
-  if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+  if (hierr) return ctx.ephemeral(hierr);
 
   const lockKey = `${guild.id}:${role.id}`;
   if (activeRoleOps.has(lockKey)) {
-    return ctx.send({ content: "Ya hay una operación masiva ejecutándose para este rol en este servidor.", flags: MessageFlags.Ephemeral });
+    return ctx.ephemeral("Ya hay una operación masiva ejecutándose para este rol en este servidor.");
   }
   activeRoleOps.add(lockKey);
 
@@ -80,20 +81,30 @@ async function executeBulkRole({
 
     const targets = guild.members.cache.filter(filterMember);
     if (!targets.size) {
-      return ctx.send({ content: emptyMessage, flags: MessageFlags.Ephemeral });
+      return ctx.ephemeral(emptyMessage);
     }
 
     const total = targets.size;
-    const progressEmbed = (current) =>
-      new EmbedBuilder()
-        .setDescription(`${actionWord} ${role} a **${current}/${total}** miembros...`)
-        .setColor(color);
-
-    const msg = await ctx.send({ embeds: [progressEmbed(0)] });
-
+    const guildIcon = guild.iconURL?.({ size: 256 }) ?? null;
     let done = 0;
     let failed = 0;
     let consecutiveFails = 0;
+
+    const buildProgressCard = (current) =>
+      buildActionCard({
+        title: `${actionWord} rol`,
+        subtitle: guild.name,
+        thumbnail: guildIcon,
+        fields: [
+          ["Procesados", V2Text.code(`${current} / ${total}`)],
+          ["Fallidos", V2Text.code(failed)],
+        ],
+        sections: [{ heading: "Rol", rows: [["Rol", `${role}`]] }],
+        moderator: modTag,
+        color,
+      });
+
+    const msg = await ctx.send(buildProgressCard(0));
 
     for (const [, member] of targets) {
       if (consecutiveFails >= 10) {
@@ -118,21 +129,25 @@ async function executeBulkRole({
 
       const processed = done + failed;
       if (processed % 10 === 0 || processed === total) {
-        await msg.edit({ embeds: [progressEmbed(processed)] }).catch(() => {});
+        await msg.edit(buildProgressCard(processed).toPayload()).catch(() => {});
       }
     }
 
-    const finalEmbed = new EmbedBuilder()
-      .setTitle(`${title} completado${consecutiveFails >= 10 ? " (interrumpido por errores)" : ""}`)
-      .setColor(color)
-      .addFields(
-        { name: "Rol", value: `${role}`, inline: true },
-        { name: pastWord, value: `${done}`, inline: true },
-        { name: "Fallidos", value: `${failed}`, inline: true }
-      )
-      .setTimestamp();
+    const finalCard = buildActionCard({
+      title: `${pastWord}${consecutiveFails >= 10 ? " (interrumpido por errores)" : ""}`,
+      subtitle: guild.name,
+      thumbnail: guildIcon,
+      fields: [
+        [pastWord, V2Text.code(done)],
+        ["Fallidos", V2Text.code(failed)],
+        ["Total", V2Text.code(total)],
+      ],
+      sections: [{ heading: "Rol", rows: [["Rol", `${role}`]] }],
+      moderator: modTag,
+      color,
+    });
 
-    await msg.edit({ embeds: [finalEmbed] }).catch(() => {});
+    await msg.edit(finalCard.toPayload()).catch(() => {});
 
     const logEmbed = new EmbedBuilder()
       .setTitle(`${title} ejecutado`)
@@ -219,17 +234,17 @@ function createMemberRoleCommand({ name, description, isAdd }) {
       await ctx.defer();
       const member = ctx.get("usuario");
       const role = ctx.get("rol");
-      const modTag = ctx.user?.tag ?? ctx.author?.tag;
+      const modTag = ctx.user?.tag;
 
       const hierr = roleHierarchyCheck(ctx, role);
-      if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+      if (hierr) return ctx.ephemeral(hierr);
 
       const hasRole = member.roles.cache.has(role.id);
       if (isAdd && hasRole) {
-        return ctx.send({ content: `${member} ya tiene el rol ${role}`, flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral(`${member} ya tiene el rol ${role}`);
       }
       if (!isAdd && !hasRole) {
-        return ctx.send({ content: `${member} no tiene el rol ${role}`, flags: MessageFlags.Ephemeral });
+        return ctx.ephemeral(`${member} no tiene el rol ${role}`);
       }
 
       try {
@@ -240,14 +255,18 @@ function createMemberRoleCommand({ name, description, isAdd }) {
         }
 
         const color = isAdd ? GREEN : RED;
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setDescription(isAdd ? `${role} fue añadido a ${member}` : `${role} fue removido de ${member}`)
-              .setColor(color)
-              .setTimestamp(),
-          ],
-        });
+        await ctx.send(
+          buildActionCard({
+            title: isAdd ? "Rol añadido" : "Rol removido",
+            thumbnail: member.user?.displayAvatarURL?.({ size: 256 }) ?? null,
+            fields: [
+              ["Usuario", `${member}`],
+              ["Rol", `${role}`],
+            ],
+            moderator: modTag,
+            color,
+          })
+        );
 
         await sendLog(
           ctx.guild,
@@ -278,10 +297,10 @@ function createRoleToggleCommand({ name, description, prop, setter, label, logTi
       if (!ctx.guild) return noGuildReply(ctx);
 
       const role = ctx.get("rol");
-      const modTag = ctx.user?.tag ?? ctx.author?.tag;
+      const modTag = ctx.user?.tag;
 
       const hierr = roleHierarchyCheck(ctx, role);
-      if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+      if (hierr) return ctx.ephemeral(hierr);
 
       try {
         const nextVal = !role[prop];
@@ -290,14 +309,18 @@ function createRoleToggleCommand({ name, description, prop, setter, label, logTi
         const estado = nextVal ? "activado" : "desactivado";
         const color = nextVal ? GREEN : RED;
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setDescription(`${label} de **${role.name}** ${estado}`)
-              .setColor(color)
-              .setTimestamp(),
-          ],
-        });
+        await ctx.send(
+          buildActionCard({
+            title: `${label} ${estado}`,
+            thumbnail: role.icon ? role.iconURL({ size: 256 }) : null,
+            fields: [
+              ["Rol", `${role}`],
+              ["Estado", V2Text.code(estado)],
+            ],
+            moderator: modTag,
+            color,
+          })
+        );
 
         await sendLog(
           ctx.guild,
@@ -337,7 +360,7 @@ function createTargetBulkRoleCommand({ name, description, isBots, targetNoun, ti
       await ctx.defer();
       const role = ctx.get("rol");
       const isAdd = ctx.get("accion") === "add";
-      const modTag = ctx.user?.tag ?? ctx.author?.tag;
+      const modTag = ctx.user?.tag;
 
       return executeBulkRole({
         ctx,
@@ -588,27 +611,28 @@ const data = {
 
         const role = ctx.get("rol");
         const newName = ctx.get("nombre").slice(0, 100);
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
 
         const hierr = roleHierarchyCheck(ctx, role);
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         try {
           const oldName = role.name;
           await role.setName(newName, `${modTag}: role rename`);
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("Rol renombrado")
-                .setColor(role.color || DARK)
-                .addFields(
-                  { name: "Antes", value: `\`${oldName}\``, inline: true },
-                  { name: "Ahora", value: `\`${newName}\``, inline: true },
-                )
-                .setTimestamp(),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: "Rol renombrado",
+              thumbnail: role.icon ? role.iconURL({ size: 256 }) : null,
+              fields: [
+                ["Rol", `${role}`],
+                ["Antes", V2Text.code(oldName)],
+                ["Ahora", V2Text.code(newName)],
+              ],
+              moderator: modTag,
+              color: role.color || DARK,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -673,7 +697,7 @@ const data = {
         await ctx.defer();
         const role = ctx.get("rol");
         const incluirBot = ctx.get("incluir_bots") === "true";
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
 
         return executeBulkRole({
           ctx,
@@ -713,7 +737,7 @@ const data = {
         await ctx.defer();
         const role = ctx.get("rol");
         const incluirBot = ctx.get("incluir_bots") === "true";
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
 
         return executeBulkRole({
           ctx,
@@ -773,25 +797,33 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const role = ctx.get("rol");
         const ignoreBots = ctx.get("ignorar_bots") === "true";
-        const modTag = ctx.user?.tag ?? ctx.author?.tag;
+        const modTag = ctx.user?.tag;
 
         if (!role) {
           const deleted = await JoinRole.findOneAndDelete({ guildId: ctx.guild.id });
           if (!deleted) {
-            return ctx.send({ content: "No hay un rol automático configurado", flags: MessageFlags.Ephemeral });
+            return ctx.ephemeral("No hay un rol automático configurado");
           }
+
+          await ctx.send(
+            buildActionCard({
+              title: "Rol automático desactivado",
+              description: "Ya no se asignará un rol automático al entrar",
+              moderator: modTag,
+              color: RED,
+            })
+          );
 
           const embed = new EmbedBuilder()
             .setDescription("Rol automático al entrar desactivado")
             .setColor(RED)
             .setTimestamp();
 
-          await ctx.send({ embeds: [embed] });
           return sendLog(ctx.guild, embed);
         }
 
         const hierr = roleHierarchyCheck(ctx, role);
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         await JoinRole.findOneAndUpdate(
           { guildId: ctx.guild.id },
@@ -799,14 +831,18 @@ const data = {
           { upsert: true }
         );
 
-        const embed = new EmbedBuilder()
-          .setTitle("Rol automático configurado")
-          .setDescription(`${role} se asignará a cada usuario que entre al servidor`)
-          .setColor(GREEN)
-          .addFields({ name: "Ignorar bots", value: ignoreBots ? "Sí" : "No", inline: true })
-          .setTimestamp();
-
-        await ctx.send({ embeds: [embed] });
+        await ctx.send(
+          buildActionCard({
+            title: "Rol automático configurado",
+            thumbnail: role.icon ? role.iconURL({ size: 256 }) : null,
+            fields: [
+              ["Rol", `${role}`],
+              ["Ignorar bots", V2Text.code(ignoreBots ? "Sí" : "No")],
+            ],
+            moderator: modTag,
+            color: GREEN,
+          })
+        );
         await sendLog(
           ctx.guild,
           new EmbedBuilder()

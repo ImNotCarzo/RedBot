@@ -1,7 +1,7 @@
 const path = require("path");
 const fs = require("fs");
-const { EmbedBuilder, MessageFlags } = require("discord.js");
-const { Gralonium, ComponentsV2Builder } = require("gralonium");
+const { EmbedBuilder } = require("discord.js");
+const { Gralonium, ComponentsV2Builder, V2Text } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
 
@@ -282,13 +282,37 @@ function handleCommandError(ctx, err) {
 
 const commandErrorLog = new Logger("CMD_ERROR");
 
-function failWith(ctx, err, message, send = (payload) => ctx.send(payload)) {
+function buildActionCard({
+  title,
+  subtitle = null,
+  description = null,
+  fields = null,
+  sections = null,
+  moderator = null,
+  footer = null,
+  color = RED,
+  thumbnail = null,
+}) {
+  const resolvedFooter = footer ?? (moderator ? `Moderador: ${moderator}` : null);
+  return ComponentsV2Builder.card({
+    title: title ? V2Text.heading(title, 3, 200) : null,
+    subtitle: subtitle ? V2Text.subtext(subtitle, 120) : null,
+    description,
+    fields: Array.isArray(fields) && fields.length ? fields : undefined,
+    sections: Array.isArray(sections) && sections.length ? sections : undefined,
+    footer: resolvedFooter ? V2Text.subtext(resolvedFooter, 200) : null,
+    color,
+    thumbnail,
+  });
+}
+
+function failWith(ctx, err, message, send = (payload) => ctx.ephemeral(payload)) {
   if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
   commandErrorLog.error(message, {
     command: ctx?.command?.data?.name,
     err: err?.stack || err?.message || String(err),
   });
-  return send({ content: message, flags: MessageFlags.Ephemeral });
+  return send(ComponentsV2Builder.card({ description: message, color: RED }));
 }
 
 const activeBroadcasts = new Set();
@@ -394,6 +418,7 @@ module.exports = {
   fetchWithTimeout,
   noGuildReply,
   handleCommandError,
+  buildActionCard,
   failWith,
   broadcastDm,
   buildDmAllEmbed,

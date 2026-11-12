@@ -2,9 +2,8 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builde
 const {
   ChannelType,
   EmbedBuilder,
-  MessageFlags,
 } = require("discord.js");
-const { failWith } = require("../../src/runtime");
+const { buildActionCard, failWith } = require("../../src/runtime");
 const { RED, YELLOW, GREEN } = require("../../src/config");
 const {
   generateId,
@@ -33,7 +32,13 @@ function hierarchyChecks(ctx, member, action = "actuar sobre") {
   return null;
 }
 
-const modTag = (ctx) => ctx.user?.tag ?? ctx.author?.tag;
+const modTag = (ctx) => ctx.user?.tag;
+const userAvatar = (user) => user?.displayAvatarURL?.({ size: 256 }) ?? null;
+const userValue = (user, fallbackId = null) => {
+  if (!user) return V2Text.code(fallbackId ?? "");
+  const name = user.globalName || user.username;
+  return `${user} (**${name}**)`;
+};
 
 const data = {
   data: new GroupBuilder({
@@ -52,7 +57,7 @@ const data = {
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const member = ctx.get("usuario");
         const reason = ctx.get("razon") ?? "Sin razón";
@@ -60,7 +65,7 @@ const data = {
         const tag = modTag(ctx);
 
         const hierr = hierarchyChecks(ctx, member, "banear a");
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         try {
           await member.user.send({
@@ -70,9 +75,19 @@ const data = {
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `${tag}: ${reason}` });
           await cancelTempBan(ctx.guild.id, member.id);
 
-          const username = member.user.globalName || member.user.username;
-
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue baneado`).setColor(RED)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario baneado",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Mensajes borrados", V2Text.code(`${days} días`)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: RED,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -100,14 +115,14 @@ const data = {
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const userId = ctx.get("id");
         const reason = ctx.get("razon") ?? "Sin razón";
         const tag = modTag(ctx);
 
         try {
           const ban = await ctx.guild.bans.fetch(userId).catch(() => null);
-          if (!ban) return ctx.send({ content: "Ese usuario no está baneado", flags: MessageFlags.Ephemeral });
+          if (!ban) return ctx.ephemeral("Ese usuario no está baneado");
 
           await ban.user.send({
             embeds: [new EmbedBuilder().setColor(GREEN).setDescription(`Fuiste desbaneado de **${ctx.guild.name}**\nRazón: ${reason}`)],
@@ -116,9 +131,18 @@ const data = {
           await ctx.guild.members.unban(userId, `${tag}: ${reason}`);
           await cancelTempBan(ctx.guild.id, userId);
 
-          const username = ban.user.globalName || ban.user.username;
-
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue desbaneado`).setColor(GREEN)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario desbaneado",
+              thumbnail: userAvatar(ban.user),
+              fields: [
+                ["Usuario", userValue(ban.user, userId)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: GREEN,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -146,7 +170,7 @@ const data = {
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const member = ctx.get("usuario");
         const reason = ctx.get("razon") ?? "Sin razón";
@@ -154,7 +178,7 @@ const data = {
         const tag = modTag(ctx);
 
         const hierr = hierarchyChecks(ctx, member, "softbanear a");
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         try {
           await member.user.send({
@@ -164,9 +188,19 @@ const data = {
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `[SOFTBAN] ${tag}: ${reason}` });
           await ctx.guild.members.unban(member.id, `[SOFTBAN] ${tag}`);
 
-          const username = member.user.globalName || member.user.username;
-
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue softbaneado`).setColor(RED)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario softbaneado",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Mensajes borrados", V2Text.code(`${days} días`)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: RED,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -196,7 +230,7 @@ const data = {
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const member = ctx.get("usuario");
         const durStr = ctx.get("duracion");
@@ -205,18 +239,17 @@ const data = {
         const tag = modTag(ctx);
 
         if (!duration) {
-          return ctx.send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`");
         }
         if (duration > 28 * 86_400_000) {
-          return ctx.send({ content: "La duración máxima es 28 días", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("La duración máxima es 28 días");
         }
 
         const hierr = hierarchyChecks(ctx, member, "banear a");
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         try {
           const unbanAt = new Date(Date.now() + duration);
-          const username = member.user.globalName || member.user.username;
 
           await member.user.send({
             embeds: [new EmbedBuilder().setColor(RED)
@@ -232,13 +265,19 @@ const data = {
           await upsertTempBan({ guildId: ctx.guild.id, userId: member.id, unbanAt });
           scheduleTempUnban(ctx.guild.client, ctx.guild.id, member.id, unbanAt);
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setDescription(`**${username}** fue tempbaneado por **${formatDuration(duration)}**`)
-                .setColor(RED),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario tempbaneado",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Duración", V2Text.code(formatDuration(duration))],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: RED,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -271,14 +310,14 @@ const data = {
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const users = [1, 2, 3, 4, 5].map((i) => ctx.get(`usuario${i}`)).filter(Boolean);
         const reason = ctx.get("razon") ?? "Sin razón";
         const tag = modTag(ctx);
 
         if (!users.length) {
-          return ctx.send({ content: "Debes seleccionar al menos un usuario", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Debes seleccionar al menos un usuario");
         }
 
         const banned = [];
@@ -306,14 +345,19 @@ const data = {
 
         const desc = banned.map((m, i) => `${i + 1}. ${m.user.tag}`).join("\n") || "Ninguno";
 
-        await ctx.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("Usuarios baneados")
-              .setDescription(`Los siguientes usuarios fueron baneados:\n${desc}`)
-              .setColor(RED),
-          ],
-        });
+        await ctx.send(
+          buildActionCard({
+            title: "Usuarios baneados",
+            fields: [
+              ["Baneados", V2Text.code(banned.length)],
+              ["Fallidos", V2Text.code(failed.length)],
+              ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+            ],
+            sections: [{ text: `**Detalle**\n${desc}`, separator: true }],
+            moderator: tag,
+            color: RED,
+          })
+        );
 
         const logEmbed = new EmbedBuilder()
           .setTitle("Massban ejecutado")
@@ -341,14 +385,14 @@ const data = {
       plugins: [Plugins.hasPerms("KickMembers"), Plugins.hasBotPerms("KickMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const member = ctx.get("usuario");
         const reason = ctx.get("razon") ?? "Sin razón";
         const tag = modTag(ctx);
 
         const hierr = hierarchyChecks(ctx, member, "expulsar a");
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         try {
           await member.user.send({
@@ -357,9 +401,18 @@ const data = {
 
           await member.kick(`${tag}: ${reason}`);
 
-          const username = member.user.globalName || member.user.username;
-
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue expulsado`).setColor(RED)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario expulsado",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: RED,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -387,7 +440,7 @@ const data = {
       plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const member = ctx.get("usuario");
         const durStr = ctx.get("duracion");
@@ -396,23 +449,34 @@ const data = {
         const tag = modTag(ctx);
 
         if (!duration) {
-          return ctx.send({ content: "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`");
         }
         if (duration > 28 * 86_400_000) {
-          return ctx.send({ content: "La duración máxima de timeout es 28 días", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("La duración máxima de timeout es 28 días");
         }
 
         const hierr = hierarchyChecks(ctx, member, "silenciar a");
-        if (hierr) return ctx.send({ content: hierr, flags: MessageFlags.Ephemeral });
+        if (hierr) return ctx.ephemeral(hierr);
 
         try {
           await member.timeout(duration, `${tag}: ${reason}`);
 
-          const username = member.user.globalName || member.user.username;
           const tiempo = formatDuration(duration);
           const expireTs = Math.floor((Date.now() + duration) / 1000);
 
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue silenciado por **${tiempo}**`).setColor(RED)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario silenciado",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Duración", V2Text.code(tiempo)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: RED,
+            })
+          );
 
           await member.user.send({
             embeds: [new EmbedBuilder().setColor(RED)
@@ -447,21 +511,30 @@ const data = {
       plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const member = ctx.get("usuario");
         const reason = ctx.get("razon") ?? "Sin razón";
         const tag = modTag(ctx);
         if (!member.communicationDisabledUntil) {
-          return ctx.send({ content: "Ese usuario no está silenciado", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Ese usuario no está silenciado");
         }
 
         try {
           await member.timeout(null, `${tag}: ${reason}`);
 
-          const username = member.user.globalName || member.user.username;
-
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`El mute de **${username}** fue removido`).setColor(GREEN)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Silencio removido",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: GREEN,
+            })
+          );
 
           await member.user.send({
             embeds: [new EmbedBuilder().setColor(GREEN).setDescription(`Tu silencio en **${ctx.guild.name}** fue removido`)],
@@ -492,14 +565,14 @@ const data = {
       plugins: [Plugins.hasPerms("ManageMessages"), Plugins.hasBotPerms("ManageMessages")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
 
         const parsedAmount = Number.parseInt(ctx.get("cantidad"), 10);
         const target = ctx.get("usuario") ?? null;
         const tag = modTag(ctx);
 
         if (!Number.isInteger(parsedAmount) || parsedAmount < 1) {
-          return ctx.send({ content: "Ingresa un número válido entre 1 y 100", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("Ingresa un número válido entre 1 y 100");
         }
 
         const amount = Math.min(100, parsedAmount);
@@ -518,18 +591,26 @@ const data = {
             )
             .first(amount);
           if (!toDelete.length) {
-            return ctx.send({ content: "No hay mensajes recientes para borrar", flags: MessageFlags.Ephemeral });
+            return ctx.ephemeral("No hay mensajes recientes para borrar");
           }
 
           if (cmdMessage && toDelete.length < 100) toDelete.push(cmdMessage);
           else if (cmdMessage) cmdMessage.delete().catch(() => {});
           const deleted = await ctx.channel.bulkDelete(toDelete, true);
           const cantidad = Math.max(0, deleted.size - (cmdMessage && deleted.has(cmdMessage.id) ? 1 : 0));
-          const texto = target
-            ? `Se eliminaron **${cantidad}** mensaje${cantidad !== 1 ? "s" : ""} de **${target.user.globalName || target.user.username}**`
-            : `Se eliminaron **${cantidad}** mensaje${cantidad !== 1 ? "s" : ""}`;
 
-          const reply = await ctx.send({ embeds: [new EmbedBuilder().setDescription(texto).setColor(GREEN).setTimestamp()] });
+          const reply = await ctx.send(
+            buildActionCard({
+              title: "Mensajes eliminados",
+              fields: [
+                ["Canal", `${ctx.channel}`],
+                ["Cantidad", V2Text.code(cantidad)],
+                target ? ["Usuario", userValue(target.user)] : null,
+              ].filter(Boolean),
+              moderator: tag,
+              color: GREEN,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -559,15 +640,15 @@ const data = {
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const member = ctx.get("usuario");
         const reason = ctx.get("razon");
         const tag = modTag(ctx);
         if (member.user.bot) {
-          return ctx.send({ content: "No puedes advertir a un bot", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("No puedes advertir a un bot");
         }
         if (ctx.member.id !== ctx.guild.ownerId && member.roles.highest.position >= ctx.member.roles.highest.position) {
-          return ctx.send({ content: "No puedes advertir a alguien con igual o mayor rango que el tuyo", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("No puedes advertir a alguien con igual o mayor rango que el tuyo");
         }
 
         try {
@@ -579,7 +660,7 @@ const data = {
               ({ total } = await addWarn({
                 guildId: ctx.guild.id,
                 userId: member.id,
-                moderatorId: ctx.user?.id ?? ctx.author?.id,
+                moderatorId: ctx.user?.id,
                 reason,
                 warnId,
               }));
@@ -589,9 +670,21 @@ const data = {
               throw dupErr;
             }
           }
-          const username = member.user.globalName || member.user.username;
 
-          await ctx.send({ embeds: [new EmbedBuilder().setDescription(`**${username}** fue advertido`).setColor(YELLOW)] });
+          await ctx.send(
+            buildActionCard({
+              title: "Usuario advertido",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["ID de advertencia", V2Text.code(warnId)],
+                ["Total", V2Text.code(total)],
+                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+              ],
+              moderator: tag,
+              color: YELLOW,
+            })
+          );
 
           await sendLog(
             ctx.guild,
@@ -629,24 +722,37 @@ const data = {
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const warnId = ctx.get("id").toUpperCase();
+        const tag = modTag(ctx);
 
         try {
           const warn = await removeWarnById({ guildId: ctx.guild.id, warnId });
           if (!warn) {
-            return ctx.send({ content: `No encontré la advertencia con ID \`${warnId}\``, flags: MessageFlags.Ephemeral });
+            return ctx.ephemeral(`No encontré la advertencia con ID \`${warnId}\``);
           }
 
           const user = await ctx.guild.client.users.fetch(warn.userId).catch(() => null);
           const username = user?.globalName || user?.username || warn.userId;
 
-          const embed = new EmbedBuilder()
+          await ctx.send(
+            buildActionCard({
+              title: "Advertencia eliminada",
+              thumbnail: userAvatar(user),
+              fields: [
+                ["Usuario", userValue(user, warn.userId)],
+                ["ID de advertencia", V2Text.code(warnId)],
+              ],
+              moderator: tag,
+              color: GREEN,
+            })
+          );
+
+          const logEmbed = new EmbedBuilder()
             .setDescription(`Advertencia \`${warnId}\` de **${username}** eliminada`)
             .setColor(GREEN);
 
-          await ctx.send({ embeds: [embed] });
-          await sendLog(ctx.guild, embed);
+          await sendLog(ctx.guild, logEmbed);
         } catch (err) {
           return failWith(ctx, err, "No se pudo eliminar la advertencia");
         }
@@ -658,24 +764,37 @@ const data = {
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const member = ctx.get("usuario");
+        const tag = modTag(ctx);
 
         try {
           const deletedCount = await clearWarnsForUser({ guildId: ctx.guild.id, userId: member.id });
           if (!deletedCount) {
-            return ctx.send({ content: `${member.user.tag} no tiene advertencias`, flags: MessageFlags.Ephemeral });
+            return ctx.ephemeral(`${member.user.tag} no tiene advertencias`);
           }
 
           const username = member.user.globalName || member.user.username;
 
-          const embed = new EmbedBuilder()
+          await ctx.send(
+            buildActionCard({
+              title: "Advertencias eliminadas",
+              thumbnail: userAvatar(member.user),
+              fields: [
+                ["Usuario", userValue(member.user)],
+                ["Cantidad", V2Text.code(deletedCount)],
+              ],
+              moderator: tag,
+              color: GREEN,
+            })
+          );
+
+          const logEmbed = new EmbedBuilder()
             .setDescription(`Se eliminaron **${deletedCount}** advertencia${deletedCount !== 1 ? "s" : ""} de **${username}**`)
             .setColor(GREEN)
             .setTimestamp();
 
-          await ctx.send({ embeds: [embed] });
-          await sendLog(ctx.guild, embed);
+          await sendLog(ctx.guild, logEmbed);
         } catch (err) {
           return failWith(ctx, err, "No se pudieron limpiar las advertencias");
         }
@@ -753,24 +872,24 @@ const data = {
       plugins: [Plugins.hasPerms("ManageGuild")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
         const channel = ctx.get("canal");
+        const tag = modTag(ctx);
         if (!channel.isTextBased()) {
-          return ctx.send({ content: "El canal debe ser de texto", flags: MessageFlags.Ephemeral });
+          return ctx.ephemeral("El canal debe ser de texto");
         }
 
         try {
           await setLogChannel(ctx.guild.id, channel.id);
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("Canal de logs establecido")
-                .setDescription(`Los logs se enviarán a ${channel}`)
-                .setColor(GREEN)
-                .setTimestamp(),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: "Canal de logs establecido",
+              fields: [["Canal", `${channel}`]],
+              moderator: tag,
+              color: GREEN,
+            })
+          );
         } catch (err) {
           return failWith(ctx, err, "No se pudo establecer el canal de logs");
         }
@@ -782,22 +901,22 @@ const data = {
       plugins: [Plugins.hasPerms("ManageGuild")],
 
       async code(ctx) {
-        if (ctx.interaction && !ctx.interaction.deferred) await ctx.interaction.deferReply();
+        await ctx.defer();
+        const tag = modTag(ctx);
         try {
           const removed = await clearLogChannel(ctx.guild.id);
           if (!removed) {
-            return ctx.send({ content: "No hay un canal de logs configurado", flags: MessageFlags.Ephemeral });
+            return ctx.ephemeral("No hay un canal de logs configurado");
           }
 
-          await ctx.send({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("Logs desactivados")
-                .setDescription("Ya no se enviarán logs en este servidor")
-                .setColor(RED)
-                .setTimestamp(),
-            ],
-          });
+          await ctx.send(
+            buildActionCard({
+              title: "Logs desactivados",
+              description: "Ya no se enviarán logs en este servidor",
+              moderator: tag,
+              color: RED,
+            })
+          );
         } catch (err) {
           return failWith(ctx, err, "No se pudo desactivar los logs");
         }
