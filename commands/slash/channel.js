@@ -2,7 +2,7 @@ const { EmbedBuilder, ChannelType } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
 const { sendLog } = require("../../src/guild");
-const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, failWith } = require("../../src/runtime");
+const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
 
@@ -108,7 +108,7 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
         await ctx.send(
           buildActionCard({
             title: logTitle,
-            thumbnail: member.user?.displayAvatarURL?.({ size: 256 }) ?? null,
+            thumbnail: avatarUrl(member.user),
             fields: [
               ["Usuario", `${member}`],
               ["Canal", `${channel}`],

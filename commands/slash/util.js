@@ -357,7 +357,7 @@ const data = {
 
     async code(ctx) {
       try {
-        const userId = ctx.user?.id ?? ctx.author?.id;
+        const userId = ctx.user?.id;
         deleteConversacion(userId);
         await ctx.send(
           buildCompactCard({
@@ -392,7 +392,7 @@ const data = {
         await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
 
-        const invoker = ctx.user ?? ctx.author;
+        const invoker = ctx.user;
         const customReason = ctx.get("razon")?.trim();
         const reason = customReason ? V2Text.clip(customReason, 256) : "Sin motivo";
 

@@ -140,7 +140,7 @@ const data = {
           if (!guild) return noGuildReply(ctx);
 
           const owner = await guild.fetchOwner().catch(() => null);
-          const authorId = ctx.user?.id ?? ctx.author?.id;
+          const authorId = ctx.user?.id;
 
           const baseOptions = [
             { label: "Logo", value: "logo", description: "Logo del servidor" },
@@ -246,7 +246,7 @@ const data = {
           const roles = getSortedServerRoles(guild);
           if (!roles.length) return ctx.send("No hay roles");
 
-          const authorId = ctx.user?.id ?? ctx.author?.id;
+          const authorId = ctx.user?.id;
           const paginator = new V2Paginator({
             items: roles,
             perPage: PAGE_SIZE,

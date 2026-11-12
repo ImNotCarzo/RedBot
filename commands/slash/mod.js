@@ -3,7 +3,7 @@ const {
   ChannelType,
   EmbedBuilder,
 } = require("discord.js");
-const { buildActionCard, failWith } = require("../../src/runtime");
+const { buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
 const { RED, YELLOW, GREEN } = require("../../src/config");
 const {
   generateId,
@@ -33,7 +33,6 @@ function hierarchyChecks(ctx, member, action = "actuar sobre") {
 }
 
 const modTag = (ctx) => ctx.user?.tag;
-const userAvatar = (user) => user?.displayAvatarURL?.({ size: 256 }) ?? null;
 const userValue = (user, fallbackId = null) => {
   if (!user) return V2Text.code(fallbackId ?? "");
   const name = user.globalName || user.username;
@@ -78,7 +77,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario baneado",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Mensajes borrados", V2Text.code(`${days} días`)],
@@ -134,7 +133,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario desbaneado",
-              thumbnail: userAvatar(ban.user),
+              thumbnail: avatarUrl(ban.user),
               fields: [
                 ["Usuario", userValue(ban.user, userId)],
                 ["Razón", V2Text.clip(reason, 300, "Sin razón")],
@@ -191,7 +190,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario softbaneado",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Mensajes borrados", V2Text.code(`${days} días`)],
@@ -268,7 +267,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario tempbaneado",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Duración", V2Text.code(formatDuration(duration))],
@@ -404,7 +403,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario expulsado",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Razón", V2Text.clip(reason, 300, "Sin razón")],
@@ -467,7 +466,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario silenciado",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Duración", V2Text.code(tiempo)],
@@ -526,7 +525,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Silencio removido",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Razón", V2Text.clip(reason, 300, "Sin razón")],
@@ -674,7 +673,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Usuario advertido",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["ID de advertencia", V2Text.code(warnId)],
@@ -738,7 +737,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Advertencia eliminada",
-              thumbnail: userAvatar(user),
+              thumbnail: avatarUrl(user),
               fields: [
                 ["Usuario", userValue(user, warn.userId)],
                 ["ID de advertencia", V2Text.code(warnId)],
@@ -779,7 +778,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Advertencias eliminadas",
-              thumbnail: userAvatar(member.user),
+              thumbnail: avatarUrl(member.user),
               fields: [
                 ["Usuario", userValue(member.user)],
                 ["Cantidad", V2Text.code(deletedCount)],
@@ -808,7 +807,7 @@ const data = {
       async code(ctx) {
         await ctx.defer();
         const member = ctx.get("usuario");
-        const authorId = ctx.user?.id ?? ctx.author?.id;
+        const authorId = ctx.user?.id;
 
         try {
           const warns = await listWarnsForUser({ guildId: ctx.guild.id, userId: member.id });

@@ -44,9 +44,9 @@ const data = {
     }
 
     try {
-      const userId = ctx.user?.id ?? ctx.author?.id;
-      const username = ctx.user?.username ?? ctx.author?.username;
-      const invoker = ctx.user ?? ctx.author;
+      const userId = ctx.user?.id;
+      const username = ctx.user?.username;
+      const invoker = ctx.user;
 
       await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
 

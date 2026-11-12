@@ -165,7 +165,7 @@ const data = {
     try {
       await ctx.defer();
       const isSlash  = Boolean(ctx.interaction);
-      const authorId = ctx.user?.id ?? ctx.author?.id;
+      const authorId = ctx.user?.id;
       const prefix   = ctx.guild?.id ? await getPrefix(ctx.guild.id) : ".";
       const COMMANDS = getCommands();
 

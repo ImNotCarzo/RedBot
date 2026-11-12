@@ -61,7 +61,7 @@ function cleanDecoLabel(raw, fallback) {
 }
 
 async function resolveUser(ctx, input) {
-  const invoker = ctx.user ?? ctx.author;
+  const invoker = ctx.user;
   if (!input) return invoker ?? null;
   if (typeof input === "object") return input.user ?? input;
   const match = String(input).trim().match(/^(?:<@!?)?(\d{17,20})>?$/);
@@ -231,7 +231,7 @@ const data = {
         await ctx.defer();
         try {
           const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+          const invoker = ctx.user ?? ctx.member?.user;
           const guild = ctx.guild;
 
           let user;
@@ -383,7 +383,7 @@ const data = {
         await ctx.defer();
         try {
           const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+          const invoker = ctx.user ?? ctx.member?.user;
           let user;
           let member = null;
 
@@ -456,7 +456,7 @@ const data = {
         await ctx.defer();
         try {
           const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+          const invoker = ctx.user ?? ctx.member?.user;
           let user;
           let member = null;
 
@@ -535,7 +535,7 @@ const data = {
         try {
           if (!ctx.guild) return noGuildReply(ctx);
           const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+          const invoker = ctx.user ?? ctx.member?.user;
           const member = await resolveMember(ctx, input);
           if (!member) return ctx.send("No pude encontrar al usuario");
 
@@ -580,7 +580,7 @@ const data = {
         try {
           if (!ctx.guild) return noGuildReply(ctx);
           const input = ctx.get("usuario") ?? null;
-          const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+          const invoker = ctx.user ?? ctx.member?.user;
           const member = await resolveMember(ctx, input);
           if (!member) return ctx.send("No pude encontrar al usuario");
 

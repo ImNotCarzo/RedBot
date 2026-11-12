@@ -282,6 +282,9 @@ function handleCommandError(ctx, err) {
 
 const commandErrorLog = new Logger("CMD_ERROR");
 
+const avatarUrl = (user, size = 256) => user?.displayAvatarURL?.({ size }) ?? null;
+const roleIconUrl = (role, size = 256) => (role.icon ? role.iconURL({ size }) : null);
+
 function buildActionCard({
   title,
   subtitle = null,
@@ -289,30 +292,28 @@ function buildActionCard({
   fields = null,
   sections = null,
   moderator = null,
-  footer = null,
   color = RED,
   thumbnail = null,
 }) {
-  const resolvedFooter = footer ?? (moderator ? `Moderador: ${moderator}` : null);
   return ComponentsV2Builder.card({
     title: title ? V2Text.heading(title, 3, 200) : null,
     subtitle: subtitle ? V2Text.subtext(subtitle, 120) : null,
     description,
     fields: Array.isArray(fields) && fields.length ? fields : undefined,
     sections: Array.isArray(sections) && sections.length ? sections : undefined,
-    footer: resolvedFooter ? V2Text.subtext(resolvedFooter, 200) : null,
+    footer: moderator ? V2Text.subtext(`Moderador: ${moderator}`, 200) : null,
     color,
     thumbnail,
   });
 }
 
-function failWith(ctx, err, message, send = (payload) => ctx.ephemeral(payload)) {
+function failWith(ctx, err, message) {
   if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
   commandErrorLog.error(message, {
     command: ctx?.command?.data?.name,
     err: err?.stack || err?.message || String(err),
   });
-  return send(ComponentsV2Builder.card({ description: message, color: RED }));
+  return ctx.ephemeral(ComponentsV2Builder.card({ description: message, color: RED }));
 }
 
 const activeBroadcasts = new Set();
@@ -409,7 +410,6 @@ module.exports = {
   sanitizeError,
   withTimeout,
   runWithRetry,
-  loadAndRegisterEvents,
   createBot,
   initializeBot,
   registerProcessErrorHandlers,
@@ -419,6 +419,8 @@ module.exports = {
   noGuildReply,
   handleCommandError,
   buildActionCard,
+  avatarUrl,
+  roleIconUrl,
   failWith,
   broadcastDm,
   buildDmAllEmbed,

@@ -16,6 +16,8 @@ const {
   formatPermissionName: formatPerm,
   handleCommandError,
   buildActionCard,
+  avatarUrl,
+  roleIconUrl,
   failWith,
 } = require("../../src/runtime");
 const { JoinRole } = require("../../src/database");
@@ -181,7 +183,7 @@ function buildRoleInfoCard(role) {
 
   return new ComponentsV2Builder({ color }).addSection(
     [V2Text.heading(role.name, 3, 100), V2Text.sectionBlock("Información", rows)],
-    { thumbnail: role.icon ? role.iconURL({ size: 1024 }) : null, fallbackToText: true }
+    { thumbnail: roleIconUrl(role, 1024), fallbackToText: true }
   );
 }
 
@@ -204,7 +206,7 @@ function buildRoleColorCard(role) {
         ["Decimal", V2Text.code(role.color)],
       ]),
     ],
-    { thumbnail: role.icon ? role.iconURL({ size: 1024 }) : null, fallbackToText: true }
+    { thumbnail: roleIconUrl(role, 1024), fallbackToText: true }
   );
 }
 
@@ -212,7 +214,7 @@ function buildRoleListCard({ role, title, lines, pageIndex, totalPages, footer =
   const builder = new ComponentsV2Builder({ color: role.color || DARK })
     .addSection(
       [V2Text.heading(title, 3, 200)],
-      { thumbnail: role.icon ? role.iconURL({ size: 256 }) : null, fallbackToText: true }
+      { thumbnail: roleIconUrl(role), fallbackToText: true }
     )
     .addSeparator("small")
     .addText(V2Text.clip(lines.join("\n"), 3600));
@@ -258,7 +260,7 @@ function createMemberRoleCommand({ name, description, isAdd }) {
         await ctx.send(
           buildActionCard({
             title: isAdd ? "Rol añadido" : "Rol removido",
-            thumbnail: member.user?.displayAvatarURL?.({ size: 256 }) ?? null,
+            thumbnail: avatarUrl(member.user),
             fields: [
               ["Usuario", `${member}`],
               ["Rol", `${role}`],
@@ -312,7 +314,7 @@ function createRoleToggleCommand({ name, description, prop, setter, label, logTi
         await ctx.send(
           buildActionCard({
             title: `${label} ${estado}`,
-            thumbnail: role.icon ? role.iconURL({ size: 256 }) : null,
+            thumbnail: roleIconUrl(role),
             fields: [
               ["Rol", `${role}`],
               ["Estado", V2Text.code(estado)],
@@ -398,7 +400,7 @@ const data = {
         const role = ctx.get("rol");
         if (!role) return ctx.ephemeral("No encontré ese rol");
 
-        const authorId = ctx.user?.id ?? ctx.author?.id;
+        const authorId = ctx.user?.id;
         const navOptions = [
           { label: "Color", value: "color", description: "Color del rol" },
           { label: "Permisos", value: "permissions", description: "Permisos del rol" },
@@ -565,7 +567,7 @@ const data = {
         const members = Array.from(role.members.values()).map((m, i) => `${i + 1}. ${m}`);
         if (!members.length) return ctx.ephemeral("Nadie tiene este rol");
 
-        const authorId = ctx.user?.id ?? ctx.author?.id;
+        const authorId = ctx.user?.id;
         const paginator = new V2Paginator({
           items: members,
           perPage: PAGE_SIZE,
@@ -623,7 +625,7 @@ const data = {
           await ctx.send(
             buildActionCard({
               title: "Rol renombrado",
-              thumbnail: role.icon ? role.iconURL({ size: 256 }) : null,
+              thumbnail: roleIconUrl(role),
               fields: [
                 ["Rol", `${role}`],
                 ["Antes", V2Text.code(oldName)],
@@ -834,7 +836,7 @@ const data = {
         await ctx.send(
           buildActionCard({
             title: "Rol automático configurado",
-            thumbnail: role.icon ? role.iconURL({ size: 256 }) : null,
+            thumbnail: roleIconUrl(role),
             fields: [
               ["Rol", `${role}`],
               ["Ignorar bots", V2Text.code(ignoreBots ? "Sí" : "No")],
@@ -877,7 +879,7 @@ const data = {
           const role = ctx.get("rol");
           if (!role) return ctx.send("No pude encontrar el rol");
 
-          const invoker = ctx.user ?? ctx.author ?? ctx.member?.user;
+          const invoker = ctx.user ?? ctx.member?.user;
           const perms = role.permissions.toArray().sort().map(formatPerm);
           if (!perms.length) return ctx.send("Este rol no tiene permisos");
 
