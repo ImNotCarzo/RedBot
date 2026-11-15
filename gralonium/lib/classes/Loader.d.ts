@@ -76,16 +76,23 @@ type InteractionTypes =
   | "mentionableSelectMenu"
   | "anyInteraction";
 
+export type CommandLocalizer = (
+  commandJSON: Record<string, any>
+) => Record<string, any> | void | Promise<Record<string, any> | void>;
+
 export declare class Loader {
   client: Gralonium;
   commands: GraloniumCollected;
   interactions: Record<InteractionTypes, Collection<string, ModuleData<InteractionBuilder>>>;
   interactionMatchers: Map<InteractionTypes, ModuleData<InteractionBuilder>[]>;
+  localizer: CommandLocalizer | null;
   globalPlugins: Plugin[];
   rest: REST;
   constructor(options: LoaderOptions);
+  setLocalizer(localizer: CommandLocalizer | null): this;
   load(dir: string, reload?: boolean): Promise<ModuleData<InteractionBuilder | CommandBuilder | EventBuilder | GroupBuilder, any[]>[]>;
   resolvePatternInteraction(type: InteractionTypes, key: string, interaction?: any): ModuleData<InteractionBuilder> | null;
   walkCommands(callable?: (command: Command<Types>) => number): CommandHelpingObject[];
-  sync(guildIDs?: string[]): Promise<void>;
+  buildApplicationCommands(): Promise<Record<string, any>[]>;
+  sync(guildIDs?: string[]): Promise<Record<string, any>[]>;
 }

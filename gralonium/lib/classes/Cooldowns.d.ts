@@ -13,6 +13,8 @@ export declare class Cooldowns {
         expiresAt: number;
     }>;
     constructor(bot: Gralonium);
+    static resolveKey(command: unknown, group?: unknown): string;
+    sweep(now?: number): number;
     getCooldownSource(command: string, id: string, bucket: Bucket): Promise<number | undefined>;
     setCooldownSource(command: string, id: string, bucket: Bucket, time: number): Promise<void>;
     check(command: string, id: string, cooldown: number, bucket: Bucket): Promise<{

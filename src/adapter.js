@@ -460,12 +460,12 @@ function resolveSlashKeyForPrefixedName(prefixedName) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-async function applyDelegatedCooldown(ctx, slashCommand) {
+async function applyDelegatedCooldown(ctx, slashCommand, slashKey = null) {
   const cooldown = slashCommand?.data?.cooldown;
   const cooldowns = ctx?.bot?.cooldowns;
   if (!cooldown?.seconds || cooldown.seconds <= 0 || !cooldowns) return;
 
-  const { Errors } = require("gralonium");
+  const { Errors, Cooldowns } = require("gralonium");
   const bucket = cooldown.bucket || "USER";
   const authorId = ctx.author?.id ?? ctx.user?.id ?? "-1";
   let source = authorId;
@@ -474,11 +474,14 @@ async function applyDelegatedCooldown(ctx, slashCommand) {
   else if (bucket === "CHANNEL") source = ctx.channel?.id || "-1";
 
   const cooldownMs = cooldown.seconds * 1000;
-  const cmdName = slashCommand.data.name;
-  const active = await cooldowns.check(cmdName, source, cooldownMs, bucket);
+  const groupName = slashKey?.includes("/") ? slashKey.split("/")[0] : null;
+  const cmdKey = typeof Cooldowns?.resolveKey === "function"
+    ? Cooldowns.resolveKey(slashCommand, groupName)
+    : slashCommand.data.name;
+  const active = await cooldowns.check(cmdKey, source, cooldownMs, bucket);
   if (active) throw new Errors.CommandInCooldown(ctx, active.left);
 
-  await cooldowns.setCooldownSource(cmdName, source, bucket, cooldownMs);
+  await cooldowns.setCooldownSource(cmdKey, source, bucket, cooldownMs);
 }
 
 async function runCommandPlugins(ctx, slashCommand) {
@@ -523,7 +526,7 @@ function wrapSingleCommand(command, file, log) {
           return ctx.send(lang === "en" ? "Missing required parameters to run this command." : "Faltan parámetros requeridos para ejecutar este comando.");
         }
 
-        await applyDelegatedCooldown(ctx, slashCommand);
+        await applyDelegatedCooldown(ctx, slashCommand, slashKey);
 
         const prevGet = ctx.get;
         ctx.get = (name) => parsedValues.values[name] ?? null;

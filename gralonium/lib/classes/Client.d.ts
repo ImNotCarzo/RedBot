@@ -1,6 +1,6 @@
 import { Client, ClientOptions, CommandInteraction, Message, Snowflake } from "discord.js";
 import { Context } from "./Context.js";
-import { Loader, Plugin } from "./Loader.js";
+import { CommandLocalizer, Loader, Plugin } from "./Loader.js";
 import { HelpCommand, HelpCommandOptions } from "./HelpCommand.js";
 import { Cooldowns } from "./Cooldowns.js";
 
@@ -25,6 +25,10 @@ export interface GraloniumOptions extends ClientOptions {
   debug?: boolean;
   bindProcessHandlers?: boolean;
   retryOnRateLimit?: boolean;
+  defaultLocale?: string;
+  localizeCommand?: CommandLocalizer;
+  beforeExecute?: (ctx: Context, command: any, options: any) => boolean | void | Promise<boolean | void>;
+  afterExecute?: (ctx: Context, command: any, options: any) => void | Promise<void>;
 }
 
 export declare class Gralonium extends Client {
@@ -35,7 +39,7 @@ export declare class Gralonium extends Client {
   addGlobalPlugins(plugins: Plugin[]): this;
   getContext(data: CommandInteraction | Message): Context;
   load(dir: string, reload?: boolean): Promise<import("./Loader.js").ModuleData<import("./builders/InteractionBuilder.js").InteractionBuilder | import("./builders/CommandBuilder.js").CommandBuilder | import("./builders/EventBuilder.js").EventBuilder | import("./builders/GroupBuilder.js").GroupBuilder, any[]>[]>;
-  sync(guildIDs?: string[]): Promise<void>;
+  sync(guildIDs?: string[]): Promise<Record<string, any>[]>;
   handleFrameworkError(error: unknown, ctx?: Context | null): void;
   login(token: string): Promise<string>;
   destroy(): this;

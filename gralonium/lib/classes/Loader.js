@@ -57,8 +57,17 @@ class Loader {
     this.globalPlugins = [];
     this.rest = new discord_js_1.REST();
     this.interactionMatchers = new Map();
+    this.localizer = options.client?.ops?.localizeCommand ?? null;
     this.#eventHandlers = new Map();
     this.#loadedSignature = new Set();
+  }
+
+  /**
+   * Registers a global command localization transformer executed before syncing application commands.
+   */
+  setLocalizer(localizer) {
+    this.localizer = typeof localizer === "function" ? localizer : null;
+    return this;
   }
 
   #toAbsolutePath(inputPath) {
@@ -91,14 +100,39 @@ class Loader {
       const mod = require(absolute)?.data;
       if (!mod) continue;
 
-      if (Array.isArray(mod)) output.push(...mod);
-      else output.push(mod);
+      if (Array.isArray(mod)) {
+        for (const item of mod) {
+          const normalized = this.#normalizeLoadedModule(item);
+          if (normalized) output.push(normalized);
+        }
+      } else {
+        const normalized = this.#normalizeLoadedModule(mod);
+        if (normalized) output.push(normalized);
+      }
     }
+  }
+
+  #normalizeLoadedModule(item) {
+    if (!item || typeof item !== "object") return null;
+    if (!item.data && typeof item.name === "string" && typeof item.code === "function") {
+      return {
+        data: new EventBuilder_js_1.EventBuilder({
+          name: item.name,
+          once: Boolean(item.once),
+          description: item.description,
+        }),
+        code: item.code,
+      };
+    }
+    return item;
   }
 
   #moduleSignature(moduleData) {
     const data = moduleData?.data;
     const type = data?.constructor?.name || "Unknown";
+    if (data instanceof EventBuilder_js_1.EventBuilder) {
+      return `${type}:${data.name}:${(0, crypto_1.randomUUID)()}`;
+    }
     if (data instanceof InteractionBuilder_js_1.InteractionBuilder) {
       const kind = data.type || "unknown";
       const patternTag =
@@ -274,9 +308,18 @@ class Loader {
     return output.sort(sorter);
   }
 
+  #serializeCommandParams(paramsBuilder) {
+    if (!paramsBuilder) return [];
+    if (typeof paramsBuilder.toJSON === "function") {
+      return paramsBuilder.toJSON();
+    }
+    return paramsBuilder.params || [];
+  }
+
   #buildTopLevelSlash(command) {
     const payload = { ...command.data.toJSON() };
-    payload.options = command.params?.params || [];
+    payload.type = discord_js_1.ApplicationCommandType.ChatInput;
+    payload.options = this.#serializeCommandParams(command.params);
     return payload;
   }
 
@@ -285,7 +328,7 @@ class Loader {
     const subCommandJSON = { ...commandRef.data.toJSON() };
 
     subCommandJSON.type = 1;
-    subCommandJSON.options = commandRef.params?.params || [];
+    subCommandJSON.options = this.#serializeCommandParams(commandRef.params);
 
     if (subCommandJSON.default_member_permissions === undefined && groupJSON.default_member_permissions !== undefined) {
       subCommandJSON.default_member_permissions = groupJSON.default_member_permissions;
@@ -315,6 +358,62 @@ class Loader {
     payloads.push(groupPayload);
   }
 
+  /**
+   * Builds all application command payloads (ChatInput slash commands + User/Message Context Menus)
+   * and applies the configured localization hook if set.
+   */
+  async buildApplicationCommands() {
+    const commands = this.walkCommands();
+    const payload = [];
+    const registeredSignatures = new Set();
+
+    for (const command of commands) {
+      if (!command.data.as_slash) continue;
+
+      if (!command.group) {
+        const built = this.#buildTopLevelSlash(command);
+        const sig = `${built.type}:${built.name}`;
+        if (registeredSignatures.has(sig)) {
+          throw new Error(`Duplicate slash command name detected during sync: ${built.name}`);
+        }
+        registeredSignatures.add(sig);
+        payload.push(built);
+        continue;
+      }
+
+      if (!command.group.data.as_slash) continue;
+      this.#mergeGroupSlashPayload(payload, command.group, command);
+      registeredSignatures.add(`${discord_js_1.ApplicationCommandType.ChatInput}:${command.group.data.name}`);
+    }
+
+    const contextMenuCollections = [this.interactions.userContextMenu, this.interactions.messageContextMenu];
+    for (const collection of contextMenuCollections) {
+      for (const entry of collection.values()) {
+        if (entry?.data?.as_command === false || !entry?.data?.name) continue;
+        const built = entry.data.toCommandJSON();
+        if (!built) continue;
+        const sig = `${built.type}:${built.name}`;
+        if (registeredSignatures.has(sig)) {
+          throw new Error(`Duplicate context menu command detected during sync: ${built.name}`);
+        }
+        registeredSignatures.add(sig);
+        payload.push(built);
+      }
+    }
+
+    const localizer = this.localizer ?? this.client?.ops?.localizeCommand;
+    if (typeof localizer === "function") {
+      for (let i = 0; i < payload.length; i += 1) {
+        const transformed = await localizer(payload[i]);
+        if (transformed && typeof transformed === "object") {
+          payload[i] = transformed;
+        }
+      }
+    }
+
+    return payload;
+  }
+
   async sync(guildIDs) {
     if (!this.client.token) {
       throw new Error("Cannot sync application commands before login token is set.");
@@ -326,35 +425,18 @@ class Loader {
 
     this.rest.setToken(this.client.token);
 
-    const commands = this.walkCommands();
-    const payload = [];
-    const slashNames = new Set();
-
-    for (const command of commands) {
-      if (!command.data.as_slash) continue;
-
-      if (!command.group) {
-        const built = this.#buildTopLevelSlash(command);
-        if (slashNames.has(built.name)) {
-          throw new Error(`Duplicate slash command name detected during sync: ${built.name}`);
-        }
-        slashNames.add(built.name);
-        payload.push(built);
-        continue;
-      }
-
-      if (!command.group.data.as_slash) continue;
-      this.#mergeGroupSlashPayload(payload, command.group, command);
-    }
+    const payload = await this.buildApplicationCommands();
 
     if (!guildIDs?.length) {
       await this.rest.put(discord_js_1.Routes.applicationCommands(this.client.user.id), { body: payload });
-      return;
+      return payload;
     }
 
     for (const guildID of guildIDs) {
       await this.rest.put(discord_js_1.Routes.applicationGuildCommands(this.client.user.id, guildID), { body: payload });
     }
+
+    return payload;
   }
 }
 exports.Loader = Loader;

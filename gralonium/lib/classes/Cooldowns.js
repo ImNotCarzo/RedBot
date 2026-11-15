@@ -23,6 +23,30 @@ class Cooldowns {
     return `${command}#${bucket}#${id}`;
   }
 
+  static resolveKey(command, group = null) {
+    const commandName =
+      typeof command === "string"
+        ? command
+        : command?.data?.name || command?.name || "unknown";
+    const groupName =
+      typeof group === "string"
+        ? group
+        : group?.data?.name || group?.name || "";
+
+    return groupName ? `${groupName}:${commandName}` : commandName;
+  }
+
+  sweep(now = Date.now()) {
+    let cleared = 0;
+    for (const [key, entry] of this.track.entries()) {
+      if (!entry || now >= entry.expiresAt) {
+        this.track.delete(key);
+        cleared += 1;
+      }
+    }
+    return cleared;
+  }
+
   async getCooldownSource(command, id, bucket) {
     const key = this.#key(command, id, bucket);
     const tracked = this.track.get(key);
@@ -38,6 +62,10 @@ class Cooldowns {
 
   async setCooldownSource(command, id, bucket, time) {
     const now = Date.now();
+    if (this.track.size >= 500) {
+      this.sweep(now);
+    }
+
     this.track.set(this.#key(command, id, bucket), {
       startedAt: now,
       expiresAt: now + time,

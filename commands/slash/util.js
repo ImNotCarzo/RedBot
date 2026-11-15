@@ -177,7 +177,7 @@ function buildJumboCard({ title, subtitle, imageUrl }) {
 const data = {
   data: new GroupBuilder({
     name: "util",
-    description: "Comandos de utilidad general",
+    description: "Utilidades, herramientas multimedia e IA",
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
@@ -188,7 +188,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "ping",
-      description: "Muestra la latencia del bot",
+      description: "Latencia actual del bot y conexión API",
     }),
     params: new ParamsBuilder(),
 
@@ -220,7 +220,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "botinfo",
-      description: "Información general del bot",
+      description: "Información técnica y estadísticas del bot",
       aliases: ["bot", "info"],
     }),
     params: new ParamsBuilder(),
@@ -276,7 +276,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "invite",
-      description: "Obtén los links de invitación del bot",
+      description: "Enlaces de invitación y servidor de soporte",
       aliases: ["inv"],
     }),
     params: new ParamsBuilder(),
@@ -306,7 +306,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "setprefix",
-      description: "Cambia o muestra el prefix del bot en este servidor",
+      description: "Configura o consulta el prefix del servidor",
     }),
     params: new ParamsBuilder()
       .addString({
@@ -367,7 +367,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "askreset",
-      description: "Limpia tu historial de conversación con la IA",
+      description: "Reinicia tu memoria de conversación con la IA",
       aliases: ["reset"],
     }),
     params: new ParamsBuilder(),
@@ -394,13 +394,13 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "afk",
-      description: "Ponte en ausente",
+      description: "Activa tu estado AFK (ausente) en el servidor",
       aliases: ["ausente"],
     }),
     params: new ParamsBuilder()
       .addString({
         name: "razon",
-        description: "Motivo",
+        description: "Motivo de ausencia (opcional)",
         required: false,
       }),
 
@@ -439,7 +439,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "jumbo",
-      description: "Muestra un emoji en tamaño grande",
+      description: "Amplía un emoji personalizado o estándar en alta resolución",
       aliases: ["emojijumbo", "bigemoji"],
     }),
     params: new ParamsBuilder()
@@ -523,7 +523,7 @@ const data = {
       })
       .addString({
         name: "idioma",
-        description: "Idioma destino (ej: es, en, fr, de) por defecto español",
+        description: "Idioma destino (ej: es, en, fr, de)",
         required: false,
         autocomplete: true,
       }),
@@ -566,14 +566,14 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "download",
-      description: "Descarga un video desde un enlace (TikTok, X, Instagram, Reddit, etc.)",
+      description: "Descarga un video desde un enlace (TikTok, X, Instagram, Reddit)",
       aliases: ["dl", "video", "bajar"],
       cooldown: { seconds: 8, bucket: "USER" },
     }),
     params: new ParamsBuilder()
       .addString({
         name: "url",
-        description: "Enlace del video a descargar",
+        description: "URL o enlace del video",
         required: true,
       }),
 
@@ -620,13 +620,13 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "describe",
-      description: "Describe el contenido de una imagen",
+      description: "Analiza y describe el contenido de una imagen con IA",
       cooldown: { seconds: 8, bucket: "USER" },
     }),
     params: new ParamsBuilder()
       .addAttachment({
         name: "imagen",
-        description: "Imagen a describir (jpg, png, gif, webp)",
+        description: "Imagen a analizar (jpg, png, gif, webp)",
         required: true,
       }),
 
@@ -663,7 +663,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "transcribe",
-      description: "Transcribe un audio o video a texto",
+      description: "Transcribe un archivo de audio o video a texto",
       cooldown: { seconds: 10, bucket: "USER" },
     }),
     params: new ParamsBuilder()
@@ -754,27 +754,27 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "dm",
-      description: "Envía un DM con embed a todos los miembros del servidor",
+      description: "Envía un anuncio por DM a los miembros del servidor",
     }),
     params: new ParamsBuilder()
       .addString({
         name: "titulo",
-        description: "Título del embed",
+        description: "Título del anuncio",
         required: true,
       })
       .addString({
         name: "texto",
-        description: "Mensaje que recibirán los usuarios",
+        description: "Contenido del mensaje",
         required: true,
       })
       .addRole({
         name: "solo_rol",
-        description: "Enviar solo a miembros con este rol",
+        description: "Filtrar solo miembros con este rol",
         required: false,
       })
       .addRole({
         name: "excluir_rol",
-        description: "Excluir todos los miembros con este rol",
+        description: "Excluir miembros con este rol",
         required: false,
       })
       .addMember({
@@ -784,7 +784,7 @@ const data = {
       })
       .addAttachment({
         name: "imagen",
-        description: "Imagen opcional para adjuntar al embed",
+        description: "Imagen opcional para el anuncio",
         required: false,
       }),
 
@@ -884,7 +884,7 @@ const data = {
   .addCommand({
     data: new CommandBuilder({
       name: "resume",
-      description: "Resume un texto largo",
+      description: "Genera un resumen conciso de un texto largo con IA",
       aliases: ["resumir", "summarize"],
       cooldown: { seconds: 6, bucket: "USER" },
     }),
@@ -934,7 +934,7 @@ const data = {
 const pollCommand = {
   data: new CommandBuilder({
     name: "poll",
-    description: "Crea una encuesta nativa",
+    description: "Crea una encuesta interactiva en el canal",
   }),
   params: new ParamsBuilder()
     .addString({
@@ -950,12 +950,12 @@ const pollCommand = {
     })
     .addString({
       name: "duracion",
-      description: "Horas de duración (1-768, por defecto 24)",
+      description: "Duración en horas (1-768, por defecto 24)",
       required: false,
     })
     .addString({
       name: "multiple",
-      description: "¿Permitir varias respuestas?",
+      description: "Permitir múltiples respuestas (opcional)",
       required: false,
       choices: [{ name: "Sí", value: "true" }],
     }),
@@ -999,7 +999,7 @@ const pollCommand = {
 const remindCommand = {
   data: new CommandBuilder({
     name: "remind",
-    description: "Crea un recordatorio personal",
+    description: "Programa un recordatorio personal",
     aliases: ["recordar"],
   }),
   params: new ParamsBuilder()
@@ -1010,7 +1010,7 @@ const remindCommand = {
     })
     .addString({
       name: "texto",
-      description: "Qué quieres que te recuerde",
+      description: "Nota o mensaje del recordatorio",
       required: true,
       max_length: 500,
     }),
@@ -1061,7 +1061,7 @@ const remindCommand = {
 const ocrCommand = {
   data: new CommandBuilder({
     name: "ocr",
-    description: "Extrae el texto de una imagen",
+    description: "Extrae el texto visible de una imagen (OCR)",
     cooldown: { seconds: 8, bucket: "USER" },
   }),
   params: new ParamsBuilder().addAttachment({
@@ -1208,7 +1208,7 @@ const remindersCommand = {
 const setlangCommand = {
   data: new CommandBuilder({
     name: "setlang",
-    description: "Cambia o consulta el idioma del bot en este servidor",
+    description: "Configura o consulta el idioma del bot en el servidor",
     aliases: ["lang", "idioma"],
   }),
   params: new ParamsBuilder().addString({

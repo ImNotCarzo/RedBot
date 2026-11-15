@@ -1,15 +1,19 @@
 import {
   ApplicationIntegrationType,
+  ButtonStyle,
   ChannelType,
   CommandBuilder,
   ComponentsV2Builder,
   Context,
+  Cooldowns,
   Gralonium,
+  GraloniumUtils,
   GroupBuilder,
   HelpCommand,
   InteractionBuilder,
   Interactions,
   InteractionContextType,
+  ParamsBuilder,
   V2Paginator,
   V2Text,
   V2View,
@@ -74,17 +78,38 @@ const cmd = new CommandBuilder({
   description: "Shows info",
   integrationTypes: [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
   contexts: [InteractionContextType.Guild, InteractionContextType.BotDM],
+  nameLocalizations: { "es-ES": "informacion" },
+  descriptionLocalizations: { "es-ES": "Muestra información" },
 })
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
-  .setContexts(InteractionContextType.Guild);
+  .setContexts(InteractionContextType.Guild)
+  .setNameLocalizations({ "en-US": "info" })
+  .setDescriptionLocalizations({ "en-US": "Shows info" });
 
 const group = new GroupBuilder({ name: "mod", description: "Moderation" })
   .setIntegrationTypes(0, 1)
-  .setContexts(0);
+  .setContexts(0)
+  .setNameLocalizations({ "es-ES": "moderacion" })
+  .setDescriptionLocalizations({ "es-ES": "Moderación" });
 
-const inter = new InteractionBuilder({ type: Interactions.Button })
+const inter = new InteractionBuilder({ type: Interactions.UserContextMenu, name: "Info" })
   .setPrefix("ticket:")
-  .setMatcher(/^ticket:\d+$/);
+  .setMatcher(/^ticket:\d+$/)
+  .setGuildOnly(true)
+  .setDefaultMemberPermissions(8n)
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
+  .setContexts(InteractionContextType.Guild)
+  .setNameLocalizations({ "es-ES": "Información" });
+const _interCmdJson = inter.toCommandJSON();
+
+const params = new ParamsBuilder()
+  .addInteger({ name: "count", description: "Count", minValue: 1, maxValue: 5 })
+  .addMentionable({ name: "target", description: "Target" })
+  .addUser({ name: "user", description: "User" })
+  .toJSON();
+
+ComponentsV2Builder.setDefaultButtonStyle("secondary");
+const _defStyle: ButtonStyle = ComponentsV2Builder.getDefaultButtonStyle();
 
 const help = new HelpCommand({
   useV2: true,
@@ -125,17 +150,29 @@ const legacyConf = Confirmator.Buttons({
 async function useContext(ctx: Context) {
   const _u = ctx.user;
   const _isS = ctx.isSlash;
+  const _loc = ctx.locale;
+  const _gLoc = ctx.guildLocale;
   await ctx.defer({ ephemeral: true, thinking: true });
   await ctx.send(card);
   await ctx.ephemeral(builder);
+  void [_loc, _gLoc];
 }
 
 const bot = new Gralonium({
   intents: [],
   prefix: "!",
   replyOnPrefix: true,
+  defaultLocale: "en-US",
+  localizeCommand: (payload) => payload,
+  beforeExecute: async () => true,
+  afterExecute: async () => {},
   helpCommand: HelpCommand,
   helpCommandOptions: { useV2: true },
 });
 
-void [payload, _remaining, _componentsCount, legacySelect, cmd, group, inter, help, view, paginator, legacyPag, legacyConf, ExpV2View, ExpV2Paginator, useContext, bot];
+bot.loader.setLocalizer((p) => p);
+const _resolvedKey: string = Cooldowns.resolveKey(cmd, group);
+const _swept: number = bot.cooldowns.sweep();
+const _transformed = GraloniumUtils.Utils.transform("1", { name: "x", type: 4, description: "d" }, {} as Context, false, 0);
+
+void [payload, _remaining, _componentsCount, legacySelect, cmd, group, inter, _interCmdJson, params, _defStyle, help, view, paginator, legacyPag, legacyConf, ExpV2View, ExpV2Paginator, useContext, bot, _resolvedKey, _swept, _transformed];

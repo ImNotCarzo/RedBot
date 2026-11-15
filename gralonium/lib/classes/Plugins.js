@@ -91,11 +91,12 @@ function cooldown(seconds, bucket) {
     }
 
     const cooldownInMs = 1000 * seconds;
+    const commandKey = Cooldowns_js_1.Cooldowns.resolveKey(ctx.command, ctx.parent);
 
-    const active = await ctx.bot.cooldowns.check(ctx.command.data.name, source, cooldownInMs, bucket);
+    const active = await ctx.bot.cooldowns.check(commandKey, source, cooldownInMs, bucket);
     if (active) throw new Errors.CommandInCooldown(ctx, active.left);
 
-    await ctx.bot.cooldowns.setCooldownSource(ctx.command.data.name, source, bucket, cooldownInMs);
+    await ctx.bot.cooldowns.setCooldownSource(commandKey, source, bucket, cooldownInMs);
     return true;
   };
 }

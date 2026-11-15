@@ -171,6 +171,8 @@ class ComponentsV2Builder {
   static text = text_js_1.V2Text;
   static clipText = helpers_js_1.clipText;
   static resolveColor = helpers_js_1.resolveAccentColor;
+  static setDefaultButtonStyle = StyleMapper_js_1.setDefaultButtonStyle;
+  static getDefaultButtonStyle = StyleMapper_js_1.getDefaultButtonStyle;
   static parseEmoji = helpers_js_1.parseEmoji;
   static isValidMediaUrl = helpers_js_1.isValidMediaUrl;
   static isValidLinkUrl = helpers_js_1.isValidLinkUrl;
@@ -306,7 +308,7 @@ class ComponentsV2Builder {
         ? StyleMapper_js_1.mapButtonStyle(cfg.style)
         : cfg.url
         ? discord_js_1.ButtonStyle.Link
-        : discord_js_1.ButtonStyle.Primary;
+        : StyleMapper_js_1.getDefaultButtonStyle();
 
     button.setStyle(resolvedStyle);
 

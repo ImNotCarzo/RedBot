@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CommandBuilder = exports.validateDefaultMemberPermissions = void 0;
+exports.CommandBuilder = exports.normalizeDescriptionLocalizations = exports.normalizeNameLocalizations = exports.validateDefaultMemberPermissions = void 0;
 
 const shapeshift_1 = require("@sapphire/shapeshift");
 
@@ -14,6 +14,36 @@ function validateDefaultMemberPermissions(permissions) {
   return memberPermissionPredicate.parse(permissions);
 }
 exports.validateDefaultMemberPermissions = validateDefaultMemberPermissions;
+
+function normalizeLocaleMap(map, maxLength) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return undefined;
+  const out = {};
+  let hasEntries = false;
+  for (const [locale, raw] of Object.entries(map)) {
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    out[locale] = trimmed.slice(0, maxLength);
+    hasEntries = true;
+  }
+  return hasEntries ? out : undefined;
+}
+
+/**
+ * Normalizes a localization map for Discord command/option names (max 32 chars).
+ */
+function normalizeNameLocalizations(map) {
+  return normalizeLocaleMap(map, 32);
+}
+exports.normalizeNameLocalizations = normalizeNameLocalizations;
+
+/**
+ * Normalizes a localization map for Discord descriptions (max 100 chars).
+ */
+function normalizeDescriptionLocalizations(map) {
+  return normalizeLocaleMap(map, 100);
+}
+exports.normalizeDescriptionLocalizations = normalizeDescriptionLocalizations;
 
 class CommandBuilder {
   name;
@@ -31,6 +61,8 @@ class CommandBuilder {
   cooldown;
   integrationTypes;
   contexts;
+  nameLocalizations;
+  descriptionLocalizations;
 
   constructor(options) {
     this.name = options?.name ?? "";
@@ -47,6 +79,10 @@ class CommandBuilder {
     this.cooldown = options?.cooldown;
     this.integrationTypes = options?.integrationTypes;
     this.contexts = options?.contexts;
+    this.nameLocalizations = normalizeNameLocalizations(options?.nameLocalizations ?? options?.name_localizations);
+    this.descriptionLocalizations = normalizeDescriptionLocalizations(
+      options?.descriptionLocalizations ?? options?.description_localizations
+    );
   }
 
   setName(name) {
@@ -109,12 +145,24 @@ class CommandBuilder {
     return this;
   }
 
+  setNameLocalizations(locales) {
+    this.nameLocalizations = normalizeNameLocalizations(locales);
+    return this;
+  }
+
+  setDescriptionLocalizations(locales) {
+    this.descriptionLocalizations = normalizeDescriptionLocalizations(locales);
+    return this;
+  }
+
   toJSON() {
     return {
       name: this.name,
-      description: this.description,
+      description: String(this.description ?? "...").slice(0, 100),
       default_member_permissions: this.defaultMemberPermissions ? validateDefaultMemberPermissions(this.defaultMemberPermissions) : undefined,
       dm_permission: typeof this.guildOnly === "boolean" ? !this.guildOnly : undefined,
+      ...(this.nameLocalizations ? { name_localizations: this.nameLocalizations } : {}),
+      ...(this.descriptionLocalizations ? { description_localizations: this.descriptionLocalizations } : {}),
       ...(this.integrationTypes !== undefined ? { integration_types: this.integrationTypes } : {}),
       ...(this.contexts !== undefined ? { contexts: this.contexts } : {}),
     };

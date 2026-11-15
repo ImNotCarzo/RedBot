@@ -73,7 +73,7 @@ async function runTextFunCommand(ctx, { logTag, buildPrompt, prompt, fallbackTex
 const data = {
   data: new GroupBuilder({
     name: "fun",
-    description: "Comandos de personalidad y diversión",
+    description: "Comandos de entretenimiento, humor e IA",
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
@@ -82,11 +82,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "opinion",
-        description: "Pide mi opinión sin filtro sobre algo",
+        description: "Genera una opinión sarcástica sobre un tema",
       }),
       params: new ParamsBuilder().addString({
         name: "tema",
-        description: "¿Sobre qué quieres mi opinión?",
+        description: "Tema a opinar",
         required: true,
       }),
       async code(ctx) {
@@ -105,11 +105,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "critica",
-        description: "Te doy una crítica despiadada de algo",
+        description: "Genera una crítica directa e irónica sobre un tema",
       }),
       params: new ParamsBuilder().addString({
         name: "tema",
-        description: "¿Qué quieres que critique?",
+        description: "Tema a criticar",
         required: true,
       }),
       async code(ctx) {
@@ -128,11 +128,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "excusa",
-        description: "Genera una excusa ridícula pero creativa",
+        description: "Genera una excusa creativa o absurda",
       }),
       params: new ParamsBuilder().addString({
         name: "situacion",
-        description: "¿Para qué necesitas la excusa?",
+        description: "Situación o contexto (opcional)",
         required: false,
       }),
       async code(ctx) {
@@ -157,11 +157,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "teoria",
-        description: "Una teoría conspirativa sobre cualquier cosa",
+        description: "Genera una teoría conspirativa sobre un tema",
       }),
       params: new ParamsBuilder().addString({
         name: "tema",
-        description: "¿Sobre qué quieres la teoría?",
+        description: "Tema de la teoría",
         required: true,
       }),
       async code(ctx) {
@@ -181,11 +181,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "roast",
-        description: "Critica despiadadamente a un usuario",
+        description: "Genera un roast humorístico del perfil de un usuario",
       }),
       params: new ParamsBuilder().addMember({
         name: "usuario",
-        description: "Menciona a alguien",
+        description: "Usuario objetivo (opcional)",
         required: false,
       }),
       async code(ctx) {
@@ -288,7 +288,7 @@ ${datosUsuario}`;
     .addCommand({
       data: new CommandBuilder({
         name: "choose",
-        description: "Elige una opción al azar entre varias",
+        description: "Selecciona una opción aleatoria de una lista",
         aliases: ["elegir", "escoger", "pick"],
       }),
       params: new ParamsBuilder().addString({
@@ -344,7 +344,7 @@ ${datosUsuario}`;
     .addCommand({
       data: new CommandBuilder({
         name: "lol",
-        description: "Ríete de algo así bien jaja",
+        description: "Reacción rápida de risa irónica",
       }),
       params: new ParamsBuilder(),
       async code(ctx) {

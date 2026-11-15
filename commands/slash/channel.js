@@ -88,7 +88,7 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
   return {
     data: new CommandBuilder({ name, description }),
     params: new ParamsBuilder()
-      .addMember({ name: "usuario", description: "Usuario", required: true })
+      .addMember({ name: "usuario", description: "Usuario objetivo", required: true })
       .addChannel({ name: "canal", description: "Canal objetivo (opcional, por defecto el actual)", required: false }),
     plugins: MANAGE_CHANNELS_PLUGINS,
     async code(ctx) {
@@ -136,7 +136,7 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
 const data = {
   data: new GroupBuilder({
     name: "channel",
-    description: "Comandos de gestión de canales",
+    description: "Gestión, control y utilidades de canales",
     guildOnly: true,
     as_prefix: false,
     as_slash: true,
@@ -144,7 +144,7 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "info",
-        description: "Muestra información de un canal",
+        description: "Información general y configuración de un canal",
       }),
       params: new ParamsBuilder().addChannel({
         name: "canal",
@@ -192,11 +192,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "rename",
-        description: "Renombra un canal",
+        description: "Modifica el nombre de un canal",
       }),
       params: new ParamsBuilder()
-        .addChannel({ name: "canal", description: "Canal a renombrar", required: true })
-        .addString({ name: "nombre", description: "Nombre nuevo", required: true }),
+        .addChannel({ name: "canal", description: "Canal a modificar", required: true })
+        .addString({ name: "nombre", description: "Nuevo nombre del canal", required: true }),
       plugins: MANAGE_CHANNELS_PLUGINS,
       async code(ctx) {
         await ctx.defer();
@@ -242,8 +242,8 @@ const data = {
     .addCommand(
       createEveryoneOverwriteCommand({
         name: "lock",
-        description: "Bloquea un canal para usuarios normales",
-        paramDesc: "Canal a bloquear (opcional, por defecto el actual)",
+        description: "Restringe el envío de mensajes en un canal (lock)",
+        paramDesc: "Canal a restringir (opcional, por defecto el actual)",
         overwrite: { SendMessages: false },
         publicText: (channel) => `${channel} fue cerrado`,
         color: RED,
@@ -254,8 +254,8 @@ const data = {
     .addCommand(
       createEveryoneOverwriteCommand({
         name: "unlock",
-        description: "Abre un canal bloqueado",
-        paramDesc: "Canal a abrir (opcional, por defecto el actual)",
+        description: "Restaura el envío de mensajes en un canal (unlock)",
+        paramDesc: "Canal a restaurar (opcional, por defecto el actual)",
         overwrite: { SendMessages: null },
         publicText: (channel) => `${channel} fue abierto`,
         color: GREEN,
@@ -266,10 +266,10 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "slowmode",
-        description: "Establece el slowmode de un canal (0 para desactivar, máx 6h)",
+        description: "Configura el slowmode de un canal (0 desactiva, máx 6h)",
       }),
       params: new ParamsBuilder()
-        .addString({ name: "tiempo", description: "Tiempo (ej: 5s, 10m, 1h, 0 para desactivar)", required: true })
+        .addString({ name: "tiempo", description: "Duración (ej: 5s, 10m, 1h, 0 desactiva)", required: true })
         .addChannel({ name: "canal", description: "Canal objetivo (opcional, por defecto el actual)", required: false }),
       plugins: MANAGE_CHANNELS_PLUGINS,
       async code(ctx) {
@@ -317,11 +317,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "nuke",
-        description: "Recrea el canal borrando todos sus mensajes",
+        description: "Recrea y limpia completamente un canal (nuke)",
       }),
       params: new ParamsBuilder().addChannel({
         name: "canal",
-        description: "Canal a nukear (opcional, por defecto el actual)",
+        description: "Canal objetivo (opcional, por defecto el actual)",
         required: false,
       }),
       plugins: [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageChannels")],
@@ -420,7 +420,7 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "clone",
-        description: "Clona un canal con su configuración",
+        description: "Clona un canal con sus permisos y configuración",
       }),
       params: new ParamsBuilder().addChannel({
         name: "canal",
@@ -466,7 +466,7 @@ const data = {
     .addCommand(
       createMemberAccessCommand({
         name: "permit",
-        description: "Da acceso a un usuario en un canal",
+        description: "Autoriza el acceso de un usuario a un canal",
         allow: true,
         publicText: (member, channel) => `${member} ahora tiene acceso a ${channel}`,
         color: GREEN,
@@ -477,7 +477,7 @@ const data = {
     .addCommand(
       createMemberAccessCommand({
         name: "deny",
-        description: "Quita el acceso a un usuario en un canal",
+        description: "Revoca el acceso de un usuario a un canal",
         allow: false,
         publicText: (member, channel) => `${member} ya no tiene acceso a ${channel}`,
         color: RED,
@@ -488,7 +488,7 @@ const data = {
     .addCommand(
       createEveryoneOverwriteCommand({
         name: "hide",
-        description: "Oculta un canal a @everyone",
+        description: "Oculta un canal para @everyone",
         paramDesc: "Canal a ocultar (opcional, por defecto el actual)",
         overwrite: { ViewChannel: false },
         publicText: (channel) => `${channel} fue ocultado`,
@@ -502,12 +502,12 @@ const data = {
 const recapCommand = {
   data: new CommandBuilder({
     name: "recap",
-    description: "Resume los últimos mensajes del canal",
+    description: "Resumen con IA de los mensajes recientes del canal",
     cooldown: { seconds: 10, bucket: "USER" },
   }),
   params: new ParamsBuilder().addString({
     name: "cantidad",
-    description: "Mensajes a resumir (10-100, por defecto 50)",
+    description: "Cantidad de mensajes (10-100, por defecto 50)",
     required: false,
   }),
   plugins: [Plugins.hasBotPerms("ViewChannel", "ReadMessageHistory")],
@@ -566,7 +566,7 @@ const recapCommand = {
 const snipeCommand = {
   data: new CommandBuilder({
     name: "snipe",
-    description: "Muestra el último mensaje borrado recientemente en este canal",
+    description: "Recupera el último mensaje eliminado en el canal",
   }),
   params: new ParamsBuilder(),
   async code(ctx) {

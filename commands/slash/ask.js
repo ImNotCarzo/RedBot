@@ -15,7 +15,7 @@ const log = new Logger("CMD_ASK", process.env.LOG_LEVEL);
 const data = {
   data: new CommandBuilder({
     name: "ask",
-    description: "Hazle una pregunta a la IA",
+    description: "Consulta o conversa con la IA",
     aliases: ["ia", "ai"],
     as_prefix: true,
     as_slash: true,
@@ -24,7 +24,7 @@ const data = {
   }),
   params: new ParamsBuilder().addString({
     name: "pregunta",
-    description: "¿Qué quieres preguntar?",
+    description: "Pregunta o mensaje para la IA",
     required: true,
   }),
 

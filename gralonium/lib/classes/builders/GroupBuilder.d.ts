@@ -1,4 +1,5 @@
 import type { ApplicationIntegrationType, InteractionContextType } from "discord.js";
+import type { LocalizationMap } from "./CommandBuilder.js";
 import { Command, Types } from "../Loader.js";
 
 type GroupBuilderOptions = {
@@ -14,6 +15,10 @@ type GroupBuilderOptions = {
   guards?: Array<(ctx: any) => boolean | Promise<boolean>>;
   integrationTypes?: Array<ApplicationIntegrationType | number>;
   contexts?: Array<InteractionContextType | number>;
+  nameLocalizations?: LocalizationMap;
+  name_localizations?: LocalizationMap;
+  descriptionLocalizations?: LocalizationMap;
+  description_localizations?: LocalizationMap;
 };
 
 export declare class GroupBuilder {
@@ -30,6 +35,8 @@ export declare class GroupBuilder {
   guards: Array<(ctx: any) => boolean | Promise<boolean>>;
   integrationTypes?: Array<ApplicationIntegrationType | number>;
   contexts?: Array<InteractionContextType | number>;
+  nameLocalizations?: LocalizationMap;
+  descriptionLocalizations?: LocalizationMap;
   constructor(ops?: GroupBuilderOptions);
   setName(name: string): GroupBuilder;
   setDescription(description: string): GroupBuilder;
@@ -41,12 +48,16 @@ export declare class GroupBuilder {
   allowSlash(allow: boolean): GroupBuilder;
   setIntegrationTypes(...types: Array<ApplicationIntegrationType | number | Array<ApplicationIntegrationType | number>>): GroupBuilder;
   setContexts(...contexts: Array<InteractionContextType | number | Array<InteractionContextType | number>>): GroupBuilder;
+  setNameLocalizations(locales?: LocalizationMap | null): GroupBuilder;
+  setDescriptionLocalizations(locales?: LocalizationMap | null): GroupBuilder;
   toJSON(): {
     name: string;
     description: string;
     options: any[];
     default_member_permissions: string | null | undefined;
     dm_permission: boolean | undefined;
+    name_localizations?: LocalizationMap;
+    description_localizations?: LocalizationMap;
     integration_types?: Array<ApplicationIntegrationType | number>;
     contexts?: Array<InteractionContextType | number>;
   };

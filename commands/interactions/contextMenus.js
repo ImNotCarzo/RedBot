@@ -1,4 +1,4 @@
-const { ApplicationCommandType, ApplicationIntegrationType, ContextMenuCommandBuilder, InteractionContextType, PermissionFlagsBits } = require("discord.js");
+const { ApplicationIntegrationType, InteractionContextType, PermissionFlagsBits } = require("discord.js");
 const { InteractionBuilder, Interactions } = require("gralonium");
 const {
   handleTranslateContext,
@@ -21,7 +21,7 @@ const USER_AND_GUILD_INTEGRATIONS = [
 const CONTEXT_MENU_SPECS = [
   {
     name: "Traducir",
-    type: ApplicationCommandType.Message,
+    enName: "Translate",
     interactionType: Interactions.MessageContextMenu,
     integrationTypes: USER_AND_GUILD_INTEGRATIONS,
     contexts: USER_AND_GUILD_CONTEXTS,
@@ -29,7 +29,7 @@ const CONTEXT_MENU_SPECS = [
   },
   {
     name: "Extraer texto (OCR)",
-    type: ApplicationCommandType.Message,
+    enName: "Extract text (OCR)",
     interactionType: Interactions.MessageContextMenu,
     integrationTypes: USER_AND_GUILD_INTEGRATIONS,
     contexts: USER_AND_GUILD_CONTEXTS,
@@ -37,7 +37,7 @@ const CONTEXT_MENU_SPECS = [
   },
   {
     name: "Resumir mensaje",
-    type: ApplicationCommandType.Message,
+    enName: "Summarize message",
     interactionType: Interactions.MessageContextMenu,
     integrationTypes: USER_AND_GUILD_INTEGRATIONS,
     contexts: USER_AND_GUILD_CONTEXTS,
@@ -45,7 +45,7 @@ const CONTEXT_MENU_SPECS = [
   },
   {
     name: "Recordar después",
-    type: ApplicationCommandType.Message,
+    enName: "Remind me later",
     interactionType: Interactions.MessageContextMenu,
     integrationTypes: USER_AND_GUILD_INTEGRATIONS,
     contexts: USER_AND_GUILD_CONTEXTS,
@@ -53,7 +53,7 @@ const CONTEXT_MENU_SPECS = [
   },
   {
     name: "Expediente Mod",
-    type: ApplicationCommandType.User,
+    enName: "Mod Dossier",
     interactionType: Interactions.UserContextMenu,
     integrationTypes: [ApplicationIntegrationType.GuildInstall],
     contexts: [InteractionContextType.Guild],
@@ -62,29 +62,29 @@ const CONTEXT_MENU_SPECS = [
   },
 ];
 
-function buildContextMenuPayloads() {
-  return CONTEXT_MENU_SPECS.map((spec) => {
-    const builder = new ContextMenuCommandBuilder()
-      .setName(spec.name)
-      .setType(spec.type)
-      .setIntegrationTypes(...spec.integrationTypes)
-      .setContexts(...spec.contexts);
+const contextMenuModules = CONTEXT_MENU_SPECS.map((spec) => ({
+  data: new InteractionBuilder({
+    name: spec.name,
+    type: spec.interactionType,
+    description: `Menú contextual: ${spec.name}`,
+    integrationTypes: spec.integrationTypes,
+    contexts: spec.contexts,
+    ...(spec.defaultMemberPermissions !== undefined
+      ? { defaultMemberPermissions: spec.defaultMemberPermissions }
+      : {}),
+    nameLocalizations: {
+      "en-US": spec.enName,
+      "en-GB": spec.enName,
+    },
+  }),
+  code: async (bot, interaction) => spec.run(bot, interaction),
+}));
 
-    if (spec.defaultMemberPermissions !== undefined) {
-      builder.setDefaultMemberPermissions(spec.defaultMemberPermissions);
-    }
-    return builder.toJSON();
-  });
+function buildContextMenuPayloads() {
+  return contextMenuModules.map((entry) => entry.data.toCommandJSON()).filter(Boolean);
 }
 
 module.exports = {
-  data: CONTEXT_MENU_SPECS.map((spec) => ({
-    data: new InteractionBuilder({
-      name: spec.name,
-      type: spec.interactionType,
-      description: `Menú contextual: ${spec.name}`,
-    }),
-    code: async (bot, interaction) => spec.run(bot, interaction),
-  })),
+  data: contextMenuModules,
   buildContextMenuPayloads,
 };

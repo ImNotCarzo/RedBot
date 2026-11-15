@@ -133,7 +133,7 @@ class Utils {
     return paramsBuilder.params.map((param) => ({ ...param, value: undefined }));
   }
 
-  static async transform(input, param, ctx, seeable = true) {
+  static async transform(input, param, ctx, seeable = true, attachmentIndex = 0) {
     if (!input && seeable) {
       return { break: false, value: null };
     }
@@ -149,27 +149,38 @@ class Utils {
 
     if (param.type === DJS.ApplicationCommandOptionType.String) {
       const value = String(input ?? "");
+      const maxLength = typeof param.max_length === "number" ? param.max_length : param.maxLength;
+      const minLength = typeof param.min_length === "number" ? param.min_length : param.minLength;
 
-      if (typeof param.max_length === "number" && value.length > param.max_length) {
+      if (typeof maxLength === "number" && value.length > maxLength) {
         throw new Errors.InvalidParam(ctx, `${param.name} exceeds max length.`, { param });
       }
 
-      if (typeof param.min_length === "number" && value.length < param.min_length) {
+      if (typeof minLength === "number" && value.length < minLength) {
         throw new Errors.InvalidParam(ctx, `${param.name} is under min length.`, { param });
       }
 
       return { break: false, value };
     }
 
-    if (param.type === DJS.ApplicationCommandOptionType.Number) {
+    if (param.type === DJS.ApplicationCommandOptionType.Integer || param.type === DJS.ApplicationCommandOptionType.Number) {
       const value = Number(input);
-      if (Number.isNaN(value)) throw new Errors.InvalidParamNumber(ctx, param);
+      if (String(input ?? "").trim() === "" || Number.isNaN(value)) {
+        throw new Errors.InvalidParamNumber(ctx, param);
+      }
 
-      if (typeof param.max_value === "number" && value > param.max_value) {
+      if (param.type === DJS.ApplicationCommandOptionType.Integer && !Number.isInteger(value)) {
+        throw new Errors.InvalidParamNumber(ctx, param);
+      }
+
+      const maxValue = typeof param.max_value === "number" ? param.max_value : param.maxValue;
+      const minValue = typeof param.min_value === "number" ? param.min_value : param.minValue;
+
+      if (typeof maxValue === "number" && value > maxValue) {
         throw new Errors.InvalidParam(ctx, `${param.name} exceeds max value.`, { param });
       }
 
-      if (typeof param.min_value === "number" && value < param.min_value) {
+      if (typeof minValue === "number" && value < minValue) {
         throw new Errors.InvalidParam(ctx, `${param.name} is under min value.`, { param });
       }
 
@@ -188,12 +199,33 @@ class Utils {
       throw new Errors.InvalidParamMember(ctx, param);
     }
 
+    if (param.type === DJS.ApplicationCommandOptionType.Mentionable) {
+      const rawInput = String(input ?? "").trim();
+      if (/^<@&\d+>$/.test(rawInput) && ctx.guild) {
+        const role = await Utils.getRole(rawInput, { guild: ctx.guild, force: true });
+        if (role) return { break: false, value: role };
+      }
+
+      const memberOrUser = ctx.guild
+        ? await Utils.getMember(rawInput, { guild: ctx.guild, force: true })
+        : await Utils.getUser(rawInput, ctx.bot);
+      if (memberOrUser) return { break: false, value: memberOrUser };
+
+      if (ctx.guild) {
+        const role = await Utils.getRole(rawInput, { guild: ctx.guild, force: true });
+        if (role) return { break: false, value: role };
+      }
+
+      throw new Errors.InvalidParam(ctx, `${param.name} must resolve to a valid user or role.`, { param });
+    }
+
     if (param.type === DJS.ApplicationCommandOptionType.Channel) {
       const channel = await Utils.getChannel(String(input), { guild: ctx.guild, force: true });
       if (!channel) throw new Errors.InvalidParamChannel(ctx, param);
 
-      if (param.channel_types?.length && !param.channel_types.includes(channel.type)) {
-        throw new Errors.InvalidChannelType(ctx, param, channel.type, param.channel_types);
+      const channelTypes = param.channel_types ?? param.channelTypes;
+      if (channelTypes?.length && !channelTypes.includes(channel.type)) {
+        throw new Errors.InvalidChannelType(ctx, param, channel.type, channelTypes);
       }
 
       return { break: false, value: channel };
@@ -206,7 +238,18 @@ class Utils {
     }
 
     if (param.type === DJS.ApplicationCommandOptionType.Attachment) {
-      const attachment = ctx.message?.attachments?.first();
+      const attachments = ctx.message?.attachments;
+      const list = attachments
+        ? typeof attachments.values === "function"
+          ? [...attachments.values()]
+          : Array.isArray(attachments)
+          ? attachments
+          : []
+        : [];
+      const attachment =
+        list[attachmentIndex] ??
+        (attachmentIndex === 0 && typeof attachments?.first === "function" ? attachments.first() : null) ??
+        null;
       if (!attachment && param.required) throw new Errors.InvalidParamAttachment(ctx, param);
       return { break: false, value: attachment };
     }
@@ -223,12 +266,14 @@ class Utils {
     }
 
     let argIndex = 0;
+    let attachmentIndex = 0;
 
     for (let paramIndex = 0; paramIndex < params.length; paramIndex += 1) {
       const param = params[paramIndex];
 
       if (param.type === DJS.ApplicationCommandOptionType.Attachment) {
-        const transformed = await Utils.transform("", param, ctx, false);
+        const transformed = await Utils.transform("", param, ctx, false, attachmentIndex);
+        attachmentIndex += 1;
         param.value = transformed.value;
         continue;
       }
@@ -277,12 +322,16 @@ class Utils {
     switch (param.type) {
       case DJS.ApplicationCommandOptionType.String:
         return interaction.options.getString(name, required);
+      case DJS.ApplicationCommandOptionType.Integer:
+        return interaction.options.getInteger(name, required);
       case DJS.ApplicationCommandOptionType.Number:
         return interaction.options.getNumber(name, required);
       case DJS.ApplicationCommandOptionType.Boolean:
         return interaction.options.getBoolean(name, required);
       case DJS.ApplicationCommandOptionType.User:
         return interaction.options.getMember(name) ?? interaction.options.getUser(name, required);
+      case DJS.ApplicationCommandOptionType.Mentionable:
+        return interaction.options.getMentionable(name, required);
       case DJS.ApplicationCommandOptionType.Channel:
         return interaction.options.getChannel(name, required);
       case DJS.ApplicationCommandOptionType.Role:
@@ -391,11 +440,12 @@ class Utils {
     const bucket = cooldown.bucket || Cooldowns_js_1.Bucket.User;
     const source = Utils.#resolveCooldownSource(ctx, bucket);
     const cooldownMs = cooldown.seconds * 1000;
+    const commandKey = Cooldowns_js_1.Cooldowns.resolveKey(command, ctx.parent);
 
-    const active = await ctx.bot.cooldowns.check(command.data.name, source, cooldownMs, bucket);
+    const active = await ctx.bot.cooldowns.check(commandKey, source, cooldownMs, bucket);
     if (active) throw new Errors.CommandInCooldown(ctx, active.left);
 
-    await ctx.bot.cooldowns.setCooldownSource(command.data.name, source, bucket, cooldownMs);
+    await ctx.bot.cooldowns.setCooldownSource(commandKey, source, bucket, cooldownMs);
   }
 
   static #validateContextRestrictions(ctx) {
@@ -471,7 +521,17 @@ class Utils {
     if (!canProceed) return;
 
     await Utils.#resolveCommandInput(ctx, command, options);
+
+    if (typeof ctx.bot?.ops?.beforeExecute === "function") {
+      const shouldContinue = await ctx.bot.ops.beforeExecute(ctx, command, options);
+      if (shouldContinue === false) return;
+    }
+
     await command.code(ctx);
+
+    if (typeof ctx.bot?.ops?.afterExecute === "function") {
+      await ctx.bot.ops.afterExecute(ctx, command, options);
+    }
   }
 
   static async #resolvePrefix(bot, ctx, message) {

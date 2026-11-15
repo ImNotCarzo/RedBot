@@ -10,7 +10,7 @@ export declare class Utils {
   static getChannel<T = DJS.Channel>(query: string, options: { guild: DJS.Guild; force?: boolean }): Promise<T | null>;
   static getRole(query: string, options: { guild: DJS.Guild; force?: boolean }): Promise<DJS.Role | null>;
   static getUser(query: string, bot: Gralonium): Promise<DJS.User | null>;
-  static transform(input: string, param: P.BaseParam, ctx: Context, seeable?: boolean): Promise<{ break: boolean; value: any }>;
+  static transform(input: string, param: P.BaseParam, ctx: Context, seeable?: boolean, attachmentIndex?: number): Promise<{ break: boolean; value: any }>;
   static executeCommand(
     ctx: Context,
     command: Command<Types.Normal>,

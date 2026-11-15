@@ -628,7 +628,7 @@ function createServerViewCommand(name, description) {
 const data = {
   data: new GroupBuilder({
     name: "server",
-    description: "Comandos de información del servidor",
+    description: "Información, recursos y configuración del servidor",
     guildOnly: true,
     as_prefix: false,
     as_slash: true,
@@ -636,7 +636,7 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "info",
-        description: "Muestra información del servidor",
+        description: "Información general y estadísticas del servidor",
       }),
       async code(ctx) {
         await ctx.defer();
@@ -750,13 +750,13 @@ const data = {
         }
       },
     })
-    .addCommand(createServerViewCommand("logo", "Muestra el logo del servidor"))
-    .addCommand(createServerViewCommand("banner", "Muestra el banner del servidor"))
-    .addCommand(createServerViewCommand("emojis", "Muestra todos los emojis del servidor"))
+    .addCommand(createServerViewCommand("logo", "Logo del servidor en alta resolución"))
+    .addCommand(createServerViewCommand("banner", "Banner del servidor en alta resolución"))
+    .addCommand(createServerViewCommand("emojis", "Lista de emojis del servidor"))
     .addCommand({
       data: new CommandBuilder({
         name: "roles",
-        description: "Lista los roles del servidor",
+        description: "Lista de roles del servidor",
       }),
       async code(ctx) {
         await ctx.defer();
@@ -786,13 +786,13 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "custombot",
-        description: "Personaliza el avatar, banner, apodo o biografía del bot en este servidor",
+        description: "Personaliza avatar, banner, apodo o bio del bot en el servidor",
       }),
       params: new ParamsBuilder()
-        .addAttachment({ name: "avatar", description: "Nuevo avatar del bot para este servidor", required: false })
-        .addAttachment({ name: "banner", description: "Nuevo banner del bot para este servidor", required: false })
-        .addString({ name: "apodo", description: "Nuevo apodo del bot en el servidor (máx. 32)", required: false, max_length: 32 })
-        .addString({ name: "biografia", description: "Nueva biografía del bot en el servidor (máx. 190)", required: false, max_length: 190 }),
+        .addAttachment({ name: "avatar", description: "Nuevo avatar para el bot en este servidor", required: false })
+        .addAttachment({ name: "banner", description: "Nuevo banner para el bot en este servidor", required: false })
+        .addString({ name: "apodo", description: "Nuevo apodo del bot (máx 32 caracteres)", required: false, max_length: 32 })
+        .addString({ name: "biografia", description: "Nueva biografía del bot (máx 190 caracteres)", required: false, max_length: 190 }),
       plugins: [Plugins.hasPerms("ManageGuild")],
 
       async code(ctx) {
@@ -834,11 +834,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "customreset",
-        description: "Restablece el perfil personalizado del bot en este servidor",
+        description: "Restaura el perfil original del bot en el servidor",
       }),
       params: new ParamsBuilder().addString({
         name: "campo",
-        description: "Campo a restablecer (por defecto todos)",
+        description: "Campo a restaurar (por defecto todos)",
         required: false,
         choices: [
           { name: "Todo", value: "todo" },

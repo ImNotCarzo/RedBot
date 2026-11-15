@@ -301,15 +301,15 @@ function buildExtendedFields(member, user) {
 const data = {
   data: new GroupBuilder({
     name: "user",
-    description: "Comandos de usuario",
+    description: "Información, avatar, banner y roles de usuario",
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
     ...USER_APP_CONFIG,
   })
     .addCommand({
-      data: new CommandBuilder({ name: "info", description: "Muestra información general de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
+      data: new CommandBuilder({ name: "info", description: "Información general de un usuario" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false }),
 
       async code(ctx) {
         await ctx.defer();
@@ -460,8 +460,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "avatar", description: "Muestra el avatar de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
+      data: new CommandBuilder({ name: "avatar", description: "Avatar de un usuario en alta resolución" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false }),
 
       async code(ctx) {
         await ctx.defer();
@@ -517,8 +517,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "banner", description: "Muestra el banner de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
+      data: new CommandBuilder({ name: "banner", description: "Banner de un usuario en alta resolución" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false }),
 
       async code(ctx) {
         await ctx.defer();
@@ -576,8 +576,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "roles", description: "Muestra los roles de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
+      data: new CommandBuilder({ name: "roles", description: "Lista de roles de un usuario" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false }),
 
       code(ctx) {
         return sendMemberListCommand(ctx, {
@@ -590,8 +590,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "permissions", description: "Muestra los permisos de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Menciona a alguien", required: false }),
+      data: new CommandBuilder({ name: "permissions", description: "Lista de permisos de un usuario" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false }),
 
       code(ctx) {
         return sendMemberListCommand(ctx, {
@@ -606,11 +606,11 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "random",
-        description: "Elige a un miembro del servidor al azar",
+        description: "Selecciona un miembro aleatorio del servidor",
       }),
       params: new ParamsBuilder().addRole({
         name: "rol",
-        description: "Filtrar entre miembros de un rol específico (opcional)",
+        description: "Filtrar por rol específico (opcional)",
         required: false,
       }),
 

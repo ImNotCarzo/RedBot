@@ -1162,10 +1162,288 @@ function installV2I18nHooks() {
   };
 }
 
+const COMMAND_DESCRIPTION_ES_TO_EN = {
+  // ask
+  "Consulta o conversa con la IA": "Ask or chat with the AI",
+  "Pregunta o mensaje para la IA": "Question or prompt for the AI",
+  // help
+  "Lista interactiva de comandos disponibles": "Interactive list of available commands",
+  // fun
+  "Comandos de entretenimiento, humor e IA": "Entertainment, humor, and AI commands",
+  "Genera una opinión sarcástica sobre un tema": "Generate a sarcastic opinion on a topic",
+  "Tema a opinar": "Topic to opine on",
+  "Genera una crítica directa e irónica sobre un tema": "Deliver a sharp, ironic critique of a topic",
+  "Tema a criticar": "Topic to critique",
+  "Genera una excusa creativa o absurda": "Generate a creative or absurd excuse",
+  "Situación o contexto (opcional)": "Situation or context (optional)",
+  "Genera una teoría conspirativa sobre un tema": "Generate a conspiracy theory about a topic",
+  "Tema de la teoría": "Topic for the theory",
+  "Genera un roast humorístico del perfil de un usuario": "Brutally roast a user's profile",
+  "Usuario objetivo (opcional)": "Target user (optional)",
+  "Selecciona una opción aleatoria de una lista": "Select a random option from a list",
+  "Opciones separadas por coma (,) o barra (|)": "Options separated by comma (,) or pipe (|)",
+  "Reacción rápida de risa irónica": "Quick ironic laugh reaction",
+  // user
+  "Información, avatar, banner y roles de usuario": "User information, avatar, banner, and roles",
+  "Información general de un usuario": "General information about a user",
+  "Usuario a consultar (opcional)": "Target user (optional)",
+  "Avatar de un usuario en alta resolución": "High-resolution user avatar",
+  "Banner de un usuario en alta resolución": "High-resolution user banner",
+  "Lista de roles de un usuario": "List of a user's roles",
+  "Lista de permisos de un usuario": "List of a user's permissions",
+  "Selecciona un miembro aleatorio del servidor": "Pick a random member from the server",
+  "Filtrar por rol específico (opcional)": "Filter by a specific role (optional)",
+  // server
+  "Información, recursos y configuración del servidor": "Server information, assets, and configuration",
+  "Información general y estadísticas del servidor": "General server information and statistics",
+  "Logo del servidor en alta resolución": "High-resolution server icon",
+  "Banner del servidor en alta resolución": "High-resolution server banner",
+  "Lista de emojis del servidor": "List of server emojis",
+  "Lista de roles del servidor": "List of server roles",
+  "Personaliza avatar, banner, apodo o bio del bot en el servidor": "Customize the bot's avatar, banner, nickname, or bio in this server",
+  "Nuevo avatar para el bot en este servidor": "New avatar for the bot in this server",
+  "Nuevo banner para el bot en este servidor": "New banner for the bot in this server",
+  "Nuevo apodo del bot (máx 32 caracteres)": "New bot nickname in this server (max 32 chars)",
+  "Nueva biografía del bot (máx 190 caracteres)": "New bot biography in this server (max 190 chars)",
+  "Restaura el perfil original del bot en el servidor": "Restore the bot's default profile in this server",
+  "Campo a restaurar (por defecto todos)": "Field to reset (defaults to all)",
+  "Panel interactivo de configuración del servidor": "Interactive server configuration panel",
+  // channel
+  "Gestión, control y utilidades de canales": "Channel management, control, and utilities",
+  "Información general y configuración de un canal": "General channel information and configuration",
+  "Canal a inspeccionar (opcional, por defecto el actual)": "Channel to inspect (optional, defaults to current)",
+  "Modifica el nombre de un canal": "Modify a channel's name",
+  "Canal a modificar": "Channel to modify",
+  "Nuevo nombre del canal": "New channel name",
+  "Restringe el envío de mensajes en un canal (lock)": "Restrict sending messages in a channel (lock)",
+  "Canal a restringir (opcional, por defecto el actual)": "Channel to lock (optional, defaults to current)",
+  "Restaura el envío de mensajes en un canal (unlock)": "Restore sending messages in a channel (unlock)",
+  "Canal a restaurar (opcional, por defecto el actual)": "Channel to unlock (optional, defaults to current)",
+  "Configura el slowmode de un canal (0 desactiva, máx 6h)": "Configure channel slowmode (0 disables, max 6h)",
+  "Duración (ej: 5s, 10m, 1h, 0 desactiva)": "Duration (e.g. 5s, 10m, 1h, 0 disables)",
+  "Canal objetivo (opcional, por defecto el actual)": "Target channel (optional, defaults to current)",
+  "Recrea y limpia completamente un canal (nuke)": "Recreate and completely wipe a channel (nuke)",
+  "Clona un canal con sus permisos y configuración": "Clone a channel with its permissions and settings",
+  "Canal a clonar (opcional, por defecto el actual)": "Channel to clone (optional, defaults to current)",
+  "Autoriza el acceso de un usuario a un canal": "Authorize a user's access to a channel",
+  "Usuario objetivo": "Target user",
+  "Revoca el acceso de un usuario a un canal": "Revoke a user's access to a channel",
+  "Oculta un canal para @everyone": "Hide a channel from @everyone",
+  "Canal a ocultar (opcional, por defecto el actual)": "Channel to hide (optional, defaults to current)",
+  "Resumen con IA de los mensajes recientes del canal": "AI summary of recent messages in the channel",
+  "Cantidad de mensajes (10-100, por defecto 50)": "Number of messages (10-100, defaults to 50)",
+  "Recupera el último mensaje eliminado en el canal": "Recover the most recently deleted message in the channel",
+  // role
+  "Información, asignación y gestión de roles": "Role information, assignment, and management",
+  "Información general de un rol": "General information about a role",
+  "Rol a inspeccionar": "Role to inspect",
+  "Icono de un rol en alta resolución": "High-resolution role icon",
+  "Color hexadecimal y vista previa de un rol": "Hex color and preview of a role",
+  "Lista de miembros con un rol específico": "List of members with a specific role",
+  "Rol a consultar": "Role to check",
+  "Asigna un rol a un usuario": "Assign a role to a user",
+  "Rol a gestionar": "Role to manage",
+  "Remueve un rol de un usuario": "Remove a role from a user",
+  "Modifica el nombre de un rol": "Modify a role's name",
+  "Rol a modificar": "Role to modify",
+  "Nuevo nombre del rol": "New role name",
+  "Alterna si un rol se muestra separado en la lista (hoist)": "Toggle whether a role displays separately (hoist)",
+  "Alterna si un rol es mencionable por todos": "Toggle whether a role is mentionable by everyone",
+  "Asigna un rol a todos los miembros del servidor": "Assign a role to all server members",
+  "Rol a asignar": "Role to assign",
+  "Incluir bots (opcional)": "Include bots (optional)",
+  "Remueve un rol de todos los miembros que lo tengan": "Remove a role from all members who have it",
+  "Rol a remover": "Role to remove",
+  "Incluir bots (por defecto no)": "Include bots (defaults to no)",
+  "Asigna o remueve un rol a todos los bots": "Assign or remove a role for all bots",
+  "Acción a ejecutar (añadir o remover)": "Action to execute (add or remove)",
+  "Asigna o remueve un rol a todos los humanos (sin bots)": "Assign or remove a role for all humans (excluding bots)",
+  "Configura o desactiva el rol automático al entrar (autorole)": "Configure or disable auto-role on join (autorole)",
+  "Rol automático al entrar (omitir para desactivar)": "Auto-role on join (omit to disable)",
+  "Ignorar bots (opcional)": "Ignore bots (optional)",
+  "Lista de permisos de un rol": "List of a role's permissions",
+  // mod
+  "Comandos de moderación, sanciones y logs": "Moderation commands, sanctions, and logs",
+  "Banea permanentemente a un usuario del servidor": "Permanently ban a user from the server",
+  "Usuario a banear": "User to ban",
+  "Motivo de la sanción (opcional)": "Reason for action (optional)",
+  "Días de mensajes a eliminar (0-7)": "Days of messages to delete (0-7)",
+  "Revoca el ban de un usuario por ID": "Revoke a user's ban by ID",
+  "ID del usuario": "User ID",
+  "Motivo del unban (opcional)": "Reason for unban (optional)",
+  "Banea y desbanea al instante para limpiar mensajes recientes": "Ban and unban immediately to purge recent messages",
+  "Usuario a aplicar softban": "User to softban",
+  "Días de mensajes a eliminar (1-7)": "Days of messages to delete (1-7)",
+  "Banea temporalmente a un usuario del servidor": "Temporarily ban a user from the server",
+  "Duración (ej: 1h, 30m, 2d)": "Duration (e.g. 1h, 30m, 2d)",
+  "Banea simultáneamente hasta 5 usuarios": "Ban up to 5 users at once",
+  "Usuario 1": "User 1",
+  "Usuario 2": "User 2",
+  "Usuario 3": "User 3",
+  "Usuario 4": "User 4",
+  "Usuario 5": "User 5",
+  "Expulsa a un usuario del servidor (kick)": "Kick a user from the server",
+  "Usuario a expulsar": "User to kick",
+  "Silencia temporalmente a un usuario (timeout)": "Temporarily timeout a user",
+  "Usuario a silenciar": "User to timeout",
+  "Duración (ej: 10m, 1h, 1d)": "Duration (e.g. 10m, 1h, 1d)",
+  "Remueve el silencio (timeout) de un usuario": "Remove a user's timeout",
+  "Usuario a restaurar": "User to untimeout",
+  "Motivo (opcional)": "Reason (optional)",
+  "Elimina múltiples mensajes recientes del canal": "Delete multiple recent messages in the channel",
+  "Cantidad de mensajes a eliminar (1-100)": "Number of messages to delete (1-100)",
+  "Filtrar por usuario (opcional)": "Filter by user (optional)",
+  "Registra una advertencia (warn) a un usuario": "Issue a warning to a user",
+  "Usuario a advertir": "User to warn",
+  "Motivo de la advertencia": "Reason for warning",
+  "Elimina una advertencia específica por ID": "Remove a specific warning by ID",
+  "ID de la advertencia": "Warning ID",
+  "Elimina todas las advertencias de un usuario": "Clear all warnings for a user",
+  "Historial de advertencias de un usuario": "View a user's warning history",
+  "Usuario a consultar": "User to check",
+  "Configura el canal de logs de moderación": "Configure the moderation logs channel",
+  "Canal de texto para logs": "Text channel for logs",
+  "Desactiva el canal de logs del servidor": "Disable the server logs channel",
+  // util
+  "Utilidades, herramientas multimedia e IA": "Utilities, media tools, and AI",
+  "Latencia actual del bot y conexión API": "Current bot latency and API connection",
+  "Información técnica y estadísticas del bot": "Technical information and bot statistics",
+  "Enlaces de invitación y servidor de soporte": "Invite links and support server",
+  "Configura o consulta el prefix del servidor": "Configure or check the server prefix",
+  "Nuevo prefix (omitir para ver el actual)": "New prefix (omit to view current)",
+  "Reinicia tu memoria de conversación con la IA": "Reset your AI conversation history",
+  "Activa tu estado AFK (ausente) en el servidor": "Set your AFK (away) status in the server",
+  "Motivo de ausencia (opcional)": "AFK reason (optional)",
+  "Amplía un emoji personalizado o estándar en alta resolución": "Enlarge a custom or standard emoji in high resolution",
+  "Emoji personalizado o estándar a ampliar": "Custom or standard emoji to enlarge",
+  "Traduce texto a otro idioma": "Translate text to another language",
+  "Texto a traducir": "Text to translate",
+  "Idioma destino (ej: es, en, fr, de)": "Target language (e.g. es, en, fr, de)",
+  "Descarga un video desde un enlace (TikTok, X, Instagram, Reddit)": "Download a video from a link (TikTok, X, Instagram, Reddit)",
+  "URL o enlace del video": "Video URL or link",
+  "Analiza y describe el contenido de una imagen con IA": "Analyze and describe an image with AI",
+  "Imagen a analizar (jpg, png, gif, webp)": "Image to analyze (jpg, png, gif, webp)",
+  "Transcribe un archivo de audio o video a texto": "Transcribe an audio or video file to text",
+  "Audio o video a transcribir (mp3, wav, ogg, webm, mp4, mov — máx 25MB)": "Audio or video to transcribe (mp3, wav, ogg, webm, mp4, mov — max 25MB)",
+  "Envía un anuncio por DM a los miembros del servidor": "Send a DM announcement to server members",
+  "Título del anuncio": "Announcement title",
+  "Contenido del mensaje": "Message content",
+  "Filtrar solo miembros con este rol": "Filter only members with this role",
+  "Excluir miembros con este rol": "Exclude members with this role",
+  "Excluir un usuario específico": "Exclude a specific user",
+  "Imagen opcional para el anuncio": "Optional image for the announcement",
+  "Genera un resumen conciso de un texto largo con IA": "Generate a concise AI summary of long text",
+  "Texto a resumir": "Text to summarize",
+  "Crea una encuesta interactiva en el canal": "Create an interactive poll in the channel",
+  "Pregunta de la encuesta": "Poll question",
+  "Opciones separadas por / (de 2 a 10)": "Options separated by / (2 to 10)",
+  "Duración en horas (1-768, por defecto 24)": "Duration in hours (1-768, defaults to 24)",
+  "Permitir múltiples respuestas (opcional)": "Allow multiple answers (optional)",
+  "Programa un recordatorio personal": "Schedule a personal reminder",
+  "Tiempo de espera (ej: 30m, 2h, 1d)": "Wait time (e.g. 30m, 2h, 1d)",
+  "Nota o mensaje del recordatorio": "Reminder note or message",
+  "Extrae el texto visible de una imagen (OCR)": "Extract visible text from an image (OCR)",
+  "Imagen con texto (jpg, png, gif, webp)": "Image with text (jpg, png, gif, webp)",
+  "Lista o cancela tus recordatorios activos": "List or cancel your active reminders",
+  "Configura o consulta el idioma del bot en el servidor": "Configure or check the bot language in the server",
+  "Idioma del servidor (es / en)": "Server language (es / en)",
+};
+
+const CHOICE_NAME_ES_TO_EN = {
+  "Todo": "All",
+  "Avatar": "Avatar",
+  "Banner": "Banner",
+  "Biografía": "Biography",
+  "Apodo": "Nickname",
+  "Añadir": "Add",
+  "Quitar": "Remove",
+  "Sí": "Yes",
+  "No": "No",
+  "Español (es)": "Spanish (es)",
+  "English (en)": "English (en)",
+};
+
+const CONTEXT_MENU_NAME_ES_TO_EN = {
+  "Traducir": "Translate",
+  "Extraer texto (OCR)": "Extract text (OCR)",
+  "Resumir mensaje": "Summarize message",
+  "Recordar después": "Remind me later",
+  "Expediente Mod": "Mod Dossier",
+};
+
+function buildEnLocaleMap(enText, maxLen, existing = null) {
+  const clipped = String(enText).slice(0, maxLen);
+  return {
+    "en-US": clipped,
+    "en-GB": clipped,
+    ...(existing && typeof existing === "object" ? existing : {}),
+  };
+}
+
+function localizeCommandNode(node) {
+  if (!node || typeof node !== "object") return node;
+
+  if (typeof node.description === "string" && node.description.trim()) {
+    const mappedDesc =
+      COMMAND_DESCRIPTION_ES_TO_EN[node.description] ?? translateText(node.description, "en");
+    if (mappedDesc && typeof mappedDesc === "string") {
+      node.description_localizations = buildEnLocaleMap(
+        mappedDesc,
+        100,
+        node.description_localizations
+      );
+    }
+  }
+
+  if (Array.isArray(node.choices)) {
+    for (const choice of node.choices) {
+      if (!choice || typeof choice.name !== "string") continue;
+      const mappedChoice =
+        CHOICE_NAME_ES_TO_EN[choice.name] ?? translateText(choice.name, "en");
+      if (mappedChoice && typeof mappedChoice === "string") {
+        choice.name_localizations = buildEnLocaleMap(
+          mappedChoice,
+          100,
+          choice.name_localizations
+        );
+      }
+    }
+  }
+
+  if (Array.isArray(node.options)) {
+    for (const option of node.options) {
+      localizeCommandNode(option);
+    }
+  }
+
+  return node;
+}
+
+function localizeCommand(cmdJson) {
+  if (!cmdJson || typeof cmdJson !== "object") return cmdJson;
+
+  if ((cmdJson.type === 2 || cmdJson.type === 3) && typeof cmdJson.name === "string") {
+    const mappedName =
+      CONTEXT_MENU_NAME_ES_TO_EN[cmdJson.name] ?? translateText(cmdJson.name, "en");
+    if (mappedName && typeof mappedName === "string") {
+      cmdJson.name_localizations = buildEnLocaleMap(
+        mappedName,
+        32,
+        cmdJson.name_localizations
+      );
+    }
+  }
+
+  return localizeCommandNode(cmdJson);
+}
+
 installV2I18nHooks();
 
 module.exports = {
   STRINGS,
+  COMMAND_DESCRIPTION_ES_TO_EN,
+  CHOICE_NAME_ES_TO_EN,
+  CONTEXT_MENU_NAME_ES_TO_EN,
   normalizeLang,
   detectLocaleLang,
   t,
@@ -1178,4 +1456,5 @@ module.exports = {
   translatePayload,
   wrapInteractionForLang,
   installV2I18nHooks,
+  localizeCommand,
 };

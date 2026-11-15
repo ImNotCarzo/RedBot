@@ -51,17 +51,17 @@ const userValue = (user, fallbackId = null) => {
 const data = {
   data: new GroupBuilder({
     name: "mod",
-    description: "Comandos de moderación",
+    description: "Comandos de moderación, sanciones y logs",
     guildOnly: true,
     as_prefix: false,
     as_slash: true,
   })
     .addCommand({
-      data: new CommandBuilder({ name: "ban", description: "Banea a un usuario del servidor" }),
+      data: new CommandBuilder({ name: "ban", description: "Banea permanentemente a un usuario del servidor" }),
       params: new ParamsBuilder()
         .addMember({ name: "usuario", description: "Usuario a banear", required: true })
-        .addString({ name: "razon", description: "Razón del ban", required: false })
-        .addString({ name: "dias", description: "Días de mensajes a borrar (0-7)", required: false }),
+        .addString({ name: "razon", description: "Motivo de la sanción (opcional)", required: false })
+        .addString({ name: "dias", description: "Días de mensajes a eliminar (0-7)", required: false }),
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
@@ -113,10 +113,10 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "unban", description: "Desbanea a un usuario por ID" }),
+      data: new CommandBuilder({ name: "unban", description: "Revoca el ban de un usuario por ID" }),
       params: new ParamsBuilder()
         .addString({ name: "id", description: "ID del usuario", required: true })
-        .addString({ name: "razon", description: "Razón del desbaneo", required: false }),
+        .addString({ name: "razon", description: "Motivo del unban (opcional)", required: false }),
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
@@ -165,11 +165,11 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "softban", description: "Banea y desbanea al instante para borrar mensajes recientes" }),
+      data: new CommandBuilder({ name: "softban", description: "Banea y desbanea al instante para limpiar mensajes recientes" }),
       params: new ParamsBuilder()
-        .addMember({ name: "usuario", description: "Usuario a softbanear", required: true })
-        .addString({ name: "razon", description: "Razón", required: false })
-        .addString({ name: "dias", description: "Días de mensajes a borrar (1-7)", required: false }),
+        .addMember({ name: "usuario", description: "Usuario a aplicar softban", required: true })
+        .addString({ name: "razon", description: "Motivo de la sanción (opcional)", required: false })
+        .addString({ name: "dias", description: "Días de mensajes a eliminar (1-7)", required: false }),
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
@@ -222,11 +222,11 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "tempban", description: "Banea a un usuario por un tiempo determinado" }),
+      data: new CommandBuilder({ name: "tempban", description: "Banea temporalmente a un usuario del servidor" }),
       params: new ParamsBuilder()
         .addMember({ name: "usuario", description: "Usuario a banear", required: true })
         .addString({ name: "duracion", description: "Duración (ej: 1h, 30m, 2d)", required: true })
-        .addString({ name: "razon", description: "Razón", required: false }),
+        .addString({ name: "razon", description: "Motivo de la sanción (opcional)", required: false }),
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
@@ -295,14 +295,14 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "massban", description: "Banea hasta 5 usuarios seleccionados" }),
+      data: new CommandBuilder({ name: "massban", description: "Banea simultáneamente hasta 5 usuarios" }),
       params: new ParamsBuilder()
         .addMember({ name: "usuario1", description: "Usuario 1", required: true })
         .addMember({ name: "usuario2", description: "Usuario 2", required: false })
         .addMember({ name: "usuario3", description: "Usuario 3", required: false })
         .addMember({ name: "usuario4", description: "Usuario 4", required: false })
         .addMember({ name: "usuario5", description: "Usuario 5", required: false })
-        .addString({ name: "razon", description: "Razón", required: false }),
+        .addString({ name: "razon", description: "Motivo de la sanción (opcional)", required: false }),
       plugins: [Plugins.hasPerms("BanMembers"), Plugins.hasBotPerms("BanMembers")],
 
       async code(ctx) {
@@ -373,10 +373,10 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "kick", description: "Expulsa a un usuario del servidor" }),
+      data: new CommandBuilder({ name: "kick", description: "Expulsa a un usuario del servidor (kick)" }),
       params: new ParamsBuilder()
         .addMember({ name: "usuario", description: "Usuario a expulsar", required: true })
-        .addString({ name: "razon", description: "Razón", required: false }),
+        .addString({ name: "razon", description: "Motivo de la sanción (opcional)", required: false }),
       plugins: [Plugins.hasPerms("KickMembers"), Plugins.hasBotPerms("KickMembers")],
 
       async code(ctx) {
@@ -424,11 +424,11 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "mute", description: "Silencia a un usuario con timeout" }),
+      data: new CommandBuilder({ name: "mute", description: "Silencia temporalmente a un usuario (timeout)" }),
       params: new ParamsBuilder()
         .addMember({ name: "usuario", description: "Usuario a silenciar", required: true })
         .addString({ name: "duracion", description: "Duración (ej: 10m, 1h, 1d)", required: true })
-        .addString({ name: "razon", description: "Razón", required: false }),
+        .addString({ name: "razon", description: "Motivo de la sanción (opcional)", required: false }),
       plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
       async code(ctx) {
@@ -492,10 +492,10 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "unmute", description: "Quita el timeout a un usuario" }),
+      data: new CommandBuilder({ name: "unmute", description: "Remueve el silencio (timeout) de un usuario" }),
       params: new ParamsBuilder()
-        .addMember({ name: "usuario", description: "Usuario a desmutear", required: true })
-        .addString({ name: "razon", description: "Razón", required: false }),
+        .addMember({ name: "usuario", description: "Usuario a restaurar", required: true })
+        .addString({ name: "razon", description: "Motivo (opcional)", required: false }),
       plugins: [Plugins.hasPerms("ModerateMembers"), Plugins.hasBotPerms("ModerateMembers")],
 
       async code(ctx) {
@@ -544,9 +544,9 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "purge", description: "Elimina mensajes del canal" }),
+      data: new CommandBuilder({ name: "purge", description: "Elimina múltiples mensajes recientes del canal" }),
       params: new ParamsBuilder()
-        .addString({ name: "cantidad", description: "Mensajes a borrar (1-100)", required: true })
+        .addString({ name: "cantidad", description: "Cantidad de mensajes a eliminar (1-100)", required: true })
         .addMember({ name: "usuario", description: "Filtrar por usuario (opcional)", required: false }),
       plugins: [Plugins.hasPerms("ManageMessages"), Plugins.hasBotPerms("ManageMessages")],
 
@@ -616,10 +616,10 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "warn", description: "Advierte a un usuario" }),
+      data: new CommandBuilder({ name: "warn", description: "Registra una advertencia (warn) a un usuario" }),
       params: new ParamsBuilder()
         .addMember({ name: "usuario", description: "Usuario a advertir", required: true })
-        .addString({ name: "razon", description: "Razón", required: true }),
+        .addString({ name: "razon", description: "Motivo de la advertencia", required: true }),
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
@@ -703,7 +703,7 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "removewarn", description: "Elimina una advertencia por ID" }),
+      data: new CommandBuilder({ name: "removewarn", description: "Elimina una advertencia específica por ID" }),
       params: new ParamsBuilder().addString({ name: "id", description: "ID de la advertencia", required: true }),
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
@@ -745,8 +745,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "clearwarns", description: "Borra todas las advertencias de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario", required: true }),
+      data: new CommandBuilder({ name: "clearwarns", description: "Elimina todas las advertencias de un usuario" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario objetivo", required: true }),
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
@@ -785,8 +785,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "warnings", description: "Ver advertencias de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario", required: true }),
+      data: new CommandBuilder({ name: "warnings", description: "Historial de advertencias de un usuario" }),
+      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar", required: true }),
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
       async code(ctx) {
@@ -839,10 +839,10 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "setlogs", description: "Establece el canal de logs para RedBot" }),
+      data: new CommandBuilder({ name: "setlogs", description: "Configura el canal de logs de moderación" }),
       params: new ParamsBuilder().addChannel({
         name: "canal",
-        description: "Canal de texto para los logs",
+        description: "Canal de texto para logs",
         required: true,
         channel_types: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
       }),
@@ -873,7 +873,7 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "removelogs", description: "Desactiva los logs de RedBot en el servidor" }),
+      data: new CommandBuilder({ name: "removelogs", description: "Desactiva el canal de logs del servidor" }),
       params: new ParamsBuilder(),
       plugins: [Plugins.hasPerms("ManageGuild")],
 

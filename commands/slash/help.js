@@ -162,7 +162,7 @@ const formatSelectLabel = (cmd) =>
 const data = {
   data: new CommandBuilder({
     name: "help",
-    description: "Muestra la lista de comandos disponibles",
+    description: "Lista interactiva de comandos disponibles",
     as_prefix: true,
     as_slash: true,
     ...USER_APP_CONFIG,

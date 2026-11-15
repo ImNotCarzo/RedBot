@@ -1,6 +1,10 @@
 import type { ApplicationIntegrationType, InteractionContextType } from "discord.js";
 
+export type LocalizationMap = Record<string, string>;
+
 export declare function validateDefaultMemberPermissions(permissions: unknown): string | null | undefined;
+export declare function normalizeNameLocalizations(map?: LocalizationMap | null): LocalizationMap | undefined;
+export declare function normalizeDescriptionLocalizations(map?: LocalizationMap | null): LocalizationMap | undefined;
 
 export interface CommandDataBuilder {
   name: string;
@@ -18,6 +22,10 @@ export interface CommandDataBuilder {
   cooldown?: { seconds: number; bucket?: string };
   integrationTypes?: Array<ApplicationIntegrationType | number>;
   contexts?: Array<InteractionContextType | number>;
+  nameLocalizations?: LocalizationMap;
+  name_localizations?: LocalizationMap;
+  descriptionLocalizations?: LocalizationMap;
+  description_localizations?: LocalizationMap;
 }
 
 export declare class CommandBuilder {
@@ -36,6 +44,8 @@ export declare class CommandBuilder {
   cooldown?: { seconds: number; bucket?: string };
   integrationTypes?: Array<ApplicationIntegrationType | number>;
   contexts?: Array<InteractionContextType | number>;
+  nameLocalizations?: LocalizationMap;
+  descriptionLocalizations?: LocalizationMap;
   constructor(options?: CommandDataBuilder);
   setName(name: string): CommandBuilder;
   setDescription(description: string): CommandBuilder;
@@ -49,11 +59,15 @@ export declare class CommandBuilder {
   setCooldown(seconds: number, bucket?: string): CommandBuilder;
   setIntegrationTypes(...types: Array<ApplicationIntegrationType | number | Array<ApplicationIntegrationType | number>>): CommandBuilder;
   setContexts(...contexts: Array<InteractionContextType | number | Array<InteractionContextType | number>>): CommandBuilder;
+  setNameLocalizations(locales?: LocalizationMap | null): CommandBuilder;
+  setDescriptionLocalizations(locales?: LocalizationMap | null): CommandBuilder;
   toJSON(): {
     name: string;
     description: string;
     default_member_permissions: string | null | undefined;
     dm_permission: boolean | undefined;
+    name_localizations?: LocalizationMap;
+    description_localizations?: LocalizationMap;
     integration_types?: Array<ApplicationIntegrationType | number>;
     contexts?: Array<InteractionContextType | number>;
   };

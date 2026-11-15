@@ -52,7 +52,7 @@ class Gralonium extends discord_js_1.Client {
   }
 
   async sync(guildIDs) {
-    await this.loader.sync(guildIDs);
+    return this.loader.sync(guildIDs);
   }
 
   #debug(message) {

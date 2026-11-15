@@ -227,8 +227,8 @@ function createMemberRoleCommand({ name, description, isAdd }) {
   return {
     data: new CommandBuilder({ name, description, guildOnly: true }),
     params: new ParamsBuilder()
-      .addMember({ name: "usuario", description: "Usuario", required: true })
-      .addRole({ name: "rol", description: "Rol", required: true }),
+      .addMember({ name: "usuario", description: "Usuario objetivo", required: true })
+      .addRole({ name: "rol", description: "Rol a gestionar", required: true }),
     plugins: MANAGE_ROLES_PLUGINS,
     async code(ctx) {
       await ctx.defer();
@@ -287,7 +287,7 @@ function createMemberRoleCommand({ name, description, isAdd }) {
 function createRoleToggleCommand({ name, description, prop, setter, label, logTitle, errorMsg }) {
   return {
     data: new CommandBuilder({ name, description, guildOnly: true }),
-    params: new ParamsBuilder().addRole({ name: "rol", description: "Rol", required: true }),
+    params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a modificar", required: true }),
     plugins: MANAGE_ROLES_PLUGINS,
     async code(ctx) {
       await ctx.defer();
@@ -342,7 +342,7 @@ function createTargetBulkRoleCommand({ name, description, isBots, targetNoun, ti
       .addRole({ name: "rol", description: "Rol a gestionar", required: true })
       .addString({
         name: "accion",
-        description: "¿Añadir o quitar?",
+        description: "Acción a ejecutar (añadir o remover)",
         required: true,
         choices: [
           { name: "Añadir", value: "add" },
@@ -376,13 +376,13 @@ function createTargetBulkRoleCommand({ name, description, isBots, targetNoun, ti
 const data = {
   data: new GroupBuilder({
     name: "role",
-    description: "Comandos relacionados con roles",
+    description: "Información, asignación y gestión de roles",
     guildOnly: true,
     as_prefix: false,
     as_slash: true,
   })
     .addCommand({
-      data: new CommandBuilder({ name: "info", description: "Muestra información de un rol" }),
+      data: new CommandBuilder({ name: "info", description: "Información general de un rol" }),
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
       async code(ctx) {
@@ -512,7 +512,7 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "icon", description: "Muestra el icono de un rol" }),
+      data: new CommandBuilder({ name: "icon", description: "Icono de un rol en alta resolución" }),
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
       async code(ctx) {
@@ -527,7 +527,7 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "color", description: "Muestra el color de un rol" }),
+      data: new CommandBuilder({ name: "color", description: "Color hexadecimal y vista previa de un rol" }),
       params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
 
       async code(ctx) {
@@ -542,8 +542,8 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "users", description: "Lista usuarios con un rol" }),
-      params: new ParamsBuilder().addRole({ name: "rol", description: "Rol", required: true }),
+      data: new CommandBuilder({ name: "users", description: "Lista de miembros con un rol específico" }),
+      params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a consultar", required: true }),
 
       async code(ctx) {
         await ctx.defer();
@@ -579,17 +579,17 @@ const data = {
         await paginator.send(ctx);
       },
     })
-    .addCommand(createMemberRoleCommand({ name: "add", description: "Añade un rol a un usuario", isAdd: true }))
-    .addCommand(createMemberRoleCommand({ name: "remove", description: "Quita un rol a un usuario", isAdd: false }))
+    .addCommand(createMemberRoleCommand({ name: "add", description: "Asigna un rol a un usuario", isAdd: true }))
+    .addCommand(createMemberRoleCommand({ name: "remove", description: "Remueve un rol de un usuario", isAdd: false }))
     .addCommand({
       data: new CommandBuilder({
         name: "rename",
-        description: "Renombra un rol",
+        description: "Modifica el nombre de un rol",
         guildOnly: true,
       }),
       params: new ParamsBuilder()
-        .addRole({ name: "rol", description: "Rol a renombrar", required: true })
-        .addString({ name: "nombre", description: "Nombre nuevo", required: true }),
+        .addRole({ name: "rol", description: "Rol a modificar", required: true })
+        .addString({ name: "nombre", description: "Nuevo nombre del rol", required: true }),
       plugins: MANAGE_ROLES_PLUGINS,
 
       async code(ctx) {
@@ -639,7 +639,7 @@ const data = {
     .addCommand(
       createRoleToggleCommand({
         name: "hoist",
-        description: "Activa o desactiva si un rol se muestra separado en la lista",
+        description: "Alterna si un rol se muestra separado en la lista (hoist)",
         prop: "hoist",
         setter: "setHoist",
         label: "Hoist",
@@ -650,7 +650,7 @@ const data = {
     .addCommand(
       createRoleToggleCommand({
         name: "mentionable",
-        description: "Activa o desactiva si un rol es mencionable por todos",
+        description: "Alterna si un rol es mencionable por todos",
         prop: "mentionable",
         setter: "setMentionable",
         label: "Mencionable",
@@ -661,14 +661,14 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "all",
-        description: "Añade un rol a todos los miembros del servidor",
+        description: "Asigna un rol a todos los miembros del servidor",
         guildOnly: true,
       }),
       params: new ParamsBuilder()
-        .addRole({ name: "rol", description: "Rol a añadir", required: true })
+        .addRole({ name: "rol", description: "Rol a asignar", required: true })
         .addString({
           name: "incluir_bots",
-          description: "¿Incluir bots?",
+          description: "Incluir bots (opcional)",
           required: false,
           choices: [
             { name: "Sí", value: "true" },
@@ -701,14 +701,14 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "removeall",
-        description: "Quita un rol a todos los miembros que lo tengan",
+        description: "Remueve un rol de todos los miembros que lo tengan",
         guildOnly: true,
       }),
       params: new ParamsBuilder()
-        .addRole({ name: "rol", description: "Rol a quitar", required: true })
+        .addRole({ name: "rol", description: "Rol a remover", required: true })
         .addString({
           name: "incluir_bots",
-          description: "¿Incluir bots? (por defecto no)",
+          description: "Incluir bots (por defecto no)",
           required: false,
           choices: [
             { name: "Sí", value: "true" },
@@ -741,7 +741,7 @@ const data = {
     .addCommand(
       createTargetBulkRoleCommand({
         name: "bots",
-        description: "Añade o quita un rol a todos los bots del servidor",
+        description: "Asigna o remueve un rol a todos los bots",
         isBots: true,
         targetNoun: "bots",
         title: "Role bots",
@@ -750,7 +750,7 @@ const data = {
     .addCommand(
       createTargetBulkRoleCommand({
         name: "humans",
-        description: "Añade o quita un rol a todos los usuarios (sin bots)",
+        description: "Asigna o remueve un rol a todos los humanos (sin bots)",
         isBots: false,
         targetNoun: "usuarios",
         title: "Role humans",
@@ -759,18 +759,18 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "join",
-        description: "Configura o desactiva el rol automático al entrar al servidor",
+        description: "Configura o desactiva el rol automático al entrar (autorole)",
         guildOnly: true,
       }),
       params: new ParamsBuilder()
         .addRole({
           name: "rol",
-          description: "Rol a asignar al entrar (omitir para desactivar)",
+          description: "Rol automático al entrar (omitir para desactivar)",
           required: false,
         })
         .addString({
           name: "ignorar_bots",
-          description: "¿Ignorar bots?",
+          description: "Ignorar bots (opcional)",
           required: false,
           choices: [{ name: "Sí", value: "true" }],
         }),
@@ -839,12 +839,12 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "permissions",
-        description: "Muestra los permisos de un rol",
+        description: "Lista de permisos de un rol",
         guildOnly: true,
       }),
       params: new ParamsBuilder().addRole({
         name: "rol",
-        description: "Selecciona un rol",
+        description: "Rol a consultar",
         required: true,
       }),
 

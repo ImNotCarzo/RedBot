@@ -9,7 +9,7 @@ import {
   MessageFlags,
   SeparatorSpacingSize,
 } from "discord.js";
-import { ComponentsV2Builder } from "../lib/main.js";
+import { ComponentsV2Builder, GraloniumUtils } from "../lib/main.js";
 
 describe("ComponentsV2Builder", () => {
   it("preserves 0.3.0 backwards-compatible API", () => {
@@ -217,5 +217,25 @@ describe("ComponentsV2Builder", () => {
       warning: "Irreversible",
     });
     expect(JSON.stringify(confirmObj.toJSON())).toContain("> Irreversible");
+  });
+
+  it("uses Secondary as the default button style and allows global override via setDefaultButtonStyle", () => {
+    expect(ComponentsV2Builder.getDefaultButtonStyle()).toBe(ButtonStyle.Secondary);
+
+    const defaultBtn = new ComponentsV2Builder().addButton({ label: "Default", customId: "def" }).toJSON()[0].components[0].components[0];
+    expect(defaultBtn.style).toBe(ButtonStyle.Secondary);
+
+    try {
+      ComponentsV2Builder.setDefaultButtonStyle("primary");
+      expect(ComponentsV2Builder.getDefaultButtonStyle()).toBe(ButtonStyle.Primary);
+
+      const primaryBtn = new ComponentsV2Builder().addButton({ label: "Primary", customId: "prim" }).toJSON()[0].components[0].components[0];
+      expect(primaryBtn.style).toBe(ButtonStyle.Primary);
+    } finally {
+      ComponentsV2Builder.setDefaultButtonStyle(ButtonStyle.Secondary);
+    }
+
+    expect(ComponentsV2Builder.getDefaultButtonStyle()).toBe(ButtonStyle.Secondary);
+    expect(GraloniumUtils.Utils).toBeDefined();
   });
 });

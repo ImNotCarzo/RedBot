@@ -3,7 +3,7 @@ const { hydrateAiSessions } = require("../src/ai");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/moderation");
 const { restoreReminders } = require("../src/reminders");
 const { Logger, sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
-const { setId, COMMANDS_TO_UPDATE } = require("../src/config");
+const { setId } = require("../src/config");
 
 const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
 
@@ -53,46 +53,19 @@ async function syncSlashAndContexts(client) {
   const token = process.env.TOKEN;
   const clientId = process.env.CLIENT_ID;
 
-  await runReadyStep("Sincronización de comandos slash", () => client.sync());
-  log.info("Comandos slash sincronizados");
+  await runReadyStep("Sincronización de comandos (slash y menús contextuales)", () => client.sync());
+  log.info("Comandos slash y menús contextuales sincronizados");
 
   const rest = new REST().setToken(token);
-  const { buildContextMenuPayloads } = require("../commands/interactions/contextMenus");
-  for (const payload of buildContextMenuPayloads()) {
-    await runReadyStep(`Sincronización menú contextual: ${payload.name}`, () =>
-      rest.post(Routes.applicationCommands(clientId), { body: payload })
-    );
-  }
-  log.info("Menús contextuales sincronizados");
-
   const commands = await runReadyStep("Lectura de comandos de aplicación", () =>
     rest.get(Routes.applicationCommands(clientId))
   );
 
   for (const cmd of commands) {
     setId(cmd.name, cmd.id);
-    if (!COMMANDS_TO_UPDATE.includes(cmd.name)) continue;
-
-    const hasIntegrationTypes = cmd.integration_types?.includes(0) && cmd.integration_types?.includes(1);
-    const hasContexts = cmd.contexts?.includes(0) && cmd.contexts?.includes(1) && cmd.contexts?.includes(2);
-    if (hasIntegrationTypes && hasContexts) continue;
-
-    try {
-      await runReadyStep(`Patch de contextos para ${cmd.name}`, () =>
-        rest.patch(Routes.applicationCommand(clientId, cmd.id), {
-          body: {
-            integration_types: [0, 1],
-            contexts: [0, 1, 2],
-          },
-        })
-      );
-      log.info(`Contextos actualizados: ${cmd.name}`);
-    } catch (patchErr) {
-      log.error(`Error al actualizar contextos de ${cmd.name}`, { err: patchErr.message });
-    }
   }
 
-  log.info("Todos los contextos actualizados");
+  log.info("IDs de comandos actualizados");
 }
 
 function startPresenceRotation(client) {

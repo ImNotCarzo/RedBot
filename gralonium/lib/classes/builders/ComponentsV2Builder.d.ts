@@ -19,6 +19,7 @@ import {
   ThumbnailBuilder,
 } from "discord.js";
 import type { DisableComponentsOptions, EmojiInput, ParsedEmoji } from "./components/helpers";
+import type { ButtonStyleInput } from "./components/StyleMapper";
 import type { V2CardOptions, V2ConfirmOptions, V2ImageViewOptions, V2ListOptions } from "./components/templates";
 import { V2Text, type V2FieldRow } from "./components/text";
 
@@ -223,6 +224,8 @@ export declare class ComponentsV2Builder {
   static readonly text: typeof V2Text;
   static clipText(text: string, maxLen?: number, fallback?: string): string;
   static resolveColor(color?: ColorResolvable, fallback?: ColorResolvable): number | null;
+  static setDefaultButtonStyle(style?: ButtonStyleInput | null): ButtonStyle;
+  static getDefaultButtonStyle(): ButtonStyle;
   static parseEmoji(emoji?: EmojiInput): ParsedEmoji | null;
   static isValidMediaUrl(url?: string | null): boolean;
   static isValidLinkUrl(url?: string | null): boolean;

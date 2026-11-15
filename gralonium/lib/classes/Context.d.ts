@@ -55,6 +55,8 @@ export declare class Context {
   get channel(): DJS.TextBasedChannel | null;
   get member(): DJS.GuildMember | DJS.APIInteractionGuildMember | null;
   get guild(): DJS.Guild | null;
+  get locale(): DJS.Locale | string | null;
+  get guildLocale(): DJS.Locale | string | null;
   defer(options?: ContextDeferOptions): Promise<DJS.Message<boolean> | DJS.InteractionResponse<boolean> | null>;
   send(payload: ContextPayload, options?: ContextSendOptions): Promise<DJS.Message<boolean>>;
   reply(payload: ContextPayload, options?: ContextSendOptions): Promise<DJS.Message<boolean>>;

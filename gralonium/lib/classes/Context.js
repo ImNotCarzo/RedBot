@@ -71,6 +71,14 @@ class Context {
     return this.data.guild || null;
   }
 
+  get locale() {
+    return this.data?.locale ?? null;
+  }
+
+  get guildLocale() {
+    return this.data?.guildLocale ?? this.guild?.preferredLocale ?? null;
+  }
+
   static #isRateLimitError(error) {
     if (!error) return false;
     if (error?.code === 429) return true;
@@ -364,12 +372,28 @@ class Context {
     const lowered = param.toLowerCase();
 
     if (this.params?.length) {
-      return this.params.find((entry) => entry.name.toLowerCase() === lowered)?.value ?? null;
+      const match = this.params.find((entry) => entry?.name?.toLowerCase() === lowered);
+      if (match) return match.value ?? null;
     }
 
     if (this.data instanceof DJS.Message) return null;
 
-    const option = this.data.options?.data?.find((entry) => entry.name.toLowerCase() === lowered);
+    const findOption = (entries) => {
+      if (!Array.isArray(entries)) return null;
+      for (const entry of entries) {
+        if ((entry?.type === 1 || entry?.type === 2) && Array.isArray(entry.options)) {
+          const nested = findOption(entry.options);
+          if (nested) return nested;
+          continue;
+        }
+        if (typeof entry?.name === "string" && entry.name.toLowerCase() === lowered) {
+          return entry;
+        }
+      }
+      return null;
+    };
+
+    const option = findOption(this.data.options?.data) ?? this.data.options?.get?.(param) ?? null;
     if (!option) return null;
 
     return option.attachment ?? option.member ?? option.channel ?? option.role ?? option.user ?? option.value ?? null;

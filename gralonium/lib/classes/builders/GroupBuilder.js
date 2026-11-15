@@ -22,6 +22,8 @@ class GroupBuilder {
   guards;
   integrationTypes;
   contexts;
+  nameLocalizations;
+  descriptionLocalizations;
 
   constructor(options) {
     this.commands = [];
@@ -37,6 +39,12 @@ class GroupBuilder {
     this.guards = options?.guards ?? [];
     this.integrationTypes = options?.integrationTypes;
     this.contexts = options?.contexts;
+    this.nameLocalizations = (0, CommandBuilder_js_1.normalizeNameLocalizations)(
+      options?.nameLocalizations ?? options?.name_localizations
+    );
+    this.descriptionLocalizations = (0, CommandBuilder_js_1.normalizeDescriptionLocalizations)(
+      options?.descriptionLocalizations ?? options?.description_localizations
+    );
   }
 
   setName(name) {
@@ -89,15 +97,27 @@ class GroupBuilder {
     return this;
   }
 
+  setNameLocalizations(locales) {
+    this.nameLocalizations = (0, CommandBuilder_js_1.normalizeNameLocalizations)(locales);
+    return this;
+  }
+
+  setDescriptionLocalizations(locales) {
+    this.descriptionLocalizations = (0, CommandBuilder_js_1.normalizeDescriptionLocalizations)(locales);
+    return this;
+  }
+
   toJSON() {
     return {
       name: this.name,
-      description: this.description,
+      description: String(this.description ?? "...").slice(0, 100),
       options: [],
       default_member_permissions: this.defaultMemberPermissions
         ? (0, CommandBuilder_js_1.validateDefaultMemberPermissions)(this.defaultMemberPermissions)
         : undefined,
       dm_permission: typeof this.guildOnly === "boolean" ? !this.guildOnly : undefined,
+      ...(this.nameLocalizations ? { name_localizations: this.nameLocalizations } : {}),
+      ...(this.descriptionLocalizations ? { description_localizations: this.descriptionLocalizations } : {}),
       ...(this.integrationTypes !== undefined ? { integration_types: this.integrationTypes } : {}),
       ...(this.contexts !== undefined ? { contexts: this.contexts } : {}),
     };

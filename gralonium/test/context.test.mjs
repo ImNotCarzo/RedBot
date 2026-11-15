@@ -170,4 +170,50 @@ describe("Context", () => {
     expect(sent.flags & MessageFlags.Ephemeral).toBe(MessageFlags.Ephemeral);
     expect(sent.flags & MessageFlags.IsComponentsV2).toBe(MessageFlags.IsComponentsV2);
   });
+
+  it("exposes locale / guildLocale and recursively resolves nested subcommand options and falsy params in ctx.get()", () => {
+    const bot = createFakeBot();
+
+    const { msg: guildMsg } = createFakeMessage({
+      guild: { preferredLocale: "es-419" },
+    });
+    const prefixGuildCtx = new Context(bot, guildMsg);
+    expect(prefixGuildCtx.locale).toBeNull();
+    expect(prefixGuildCtx.guildLocale).toBe("es-419");
+
+    const nestedInteraction = createFakeInteraction({
+      locale: "es-ES",
+      guildLocale: "en-US",
+      options: {
+        data: [
+          {
+            name: "role",
+            type: 2,
+            options: [
+              {
+                name: "role",
+                type: 1,
+                options: [
+                  { name: "role", type: 8, role: { id: "r_1", name: "Mod" } },
+                  { name: "silent", type: 5, value: false },
+                  { name: "amount", type: 4, value: 0 },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const slashCtx = new Context(bot, nestedInteraction);
+    slashCtx.params = [{ name: "flag", value: false }, { name: "zero", value: 0 }, { name: "empty", value: "" }];
+
+    expect(slashCtx.locale).toBe("es-ES");
+    expect(slashCtx.guildLocale).toBe("en-US");
+    expect(slashCtx.get("flag")).toBe(false);
+    expect(slashCtx.get("zero")).toBe(0);
+    expect(slashCtx.get("empty")).toBe("");
+    expect(slashCtx.get("role")).toEqual({ id: "r_1", name: "Mod" });
+    expect(slashCtx.get("silent")).toBe(false);
+    expect(slashCtx.get("amount")).toBe(0);
+  });
 });

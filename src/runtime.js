@@ -4,7 +4,7 @@ const { EmbedBuilder } = require("discord.js");
 const { Gralonium, ComponentsV2Builder, V2Text, V2Paginator } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
-const { getCurrentLang } = require("./i18n");
+const { getCurrentLang, localizeCommand } = require("./i18n");
 
 const LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
 
@@ -154,6 +154,7 @@ function createBot() {
 
   const bot = new Gralonium({
     ...botOptions,
+    localizeCommand,
     prefix: async (ctx) => {
       const message = ctx.data;
       if (!message?.content || message?.author?.bot) return null;
