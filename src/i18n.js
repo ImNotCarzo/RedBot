@@ -704,6 +704,14 @@ const EXACT_ES_TO_EN = {
   "Genera una teoría conspirativa sobre cualquier cosa": "Generate a conspiracy theory about anything",
   "Critica despiadadamente a un usuario": "Mercilessly roast a user",
   "Ríete de algo así bien jaja": "Laugh at something lol",
+  "IA": "AI",
+  "Hazle una pregunta o envíale una imagen a la IA": "Ask a question or send an image to the AI",
+  "Cambia o muestra el idioma del servidor o personal": "Change or view the server or personal language",
+  "Este mensaje no contiene un audio o video válido": "This message does not contain a valid audio or video file",
+  "Sanciones / Warns": "Cases / Warns",
+  "Historial reciente": "Recent history",
+  "Sin sanciones registradas": "No sanctions recorded",
+  "No se pudo obtener el historial de sanciones": "Could not load sanction history",
 };
 
 const LANG_NAME_ES_TO_EN = {
@@ -735,6 +743,7 @@ const PATTERN_ES_TO_EN = [
   [/^Historial de avatar \((.+)\)$/, (_, name) => `Avatar history (${name})`],
   [/^Historial de banner \((.+)\)$/, (_, name) => `Banner history (${name})`],
   [/^Historial de logo \((.+)\)$/, (_, name) => `Icon history (${name})`],
+  [/^Historial de (.+)$/, (_, name) => `History for ${name}`],
   [/^Advertencias de (.+)$/, (_, name) => `Warnings for ${name}`],
   [/^Usuarios con (.+) \((\d+\/\d+)\)$/, (_, name, page) => `Users with ${name} (${page})`],
   [/^(\d+) usuarios en total$/, (_, n) => `${n} total users`],
@@ -770,7 +779,10 @@ const PATTERN_ES_TO_EN = [
   [/^Biografia: (.+)$/, (_, v) => `Bio: ${v === "Por Defecto" ? "Default" : v}`],
   [/^\[Ver insignia\]\((.+)\)$/, (_, u) => `[View badge](${u})`],
   [/^\[Ver decoración\]\((.+)\)(.*)$/, (_, u, rest) => `[View decoration](${u})${rest.replace(/\[Tienda\]\(/g, "[Shop](")}`],
+  [/^• \*\*\[([^\]]+)\] `([^`]+)`\*\* \((<t:[^>]+>)\): (.*)$/, (_, type, id, ts, reason) => `• **[${type}] \`${id}\`** (${ts}): ${reason === "Sin razón" ? "No reason" : reason}`],
   [/^• \*\*`([^`]+)`\*\* \((<t:[^>]+>)\): (.*)$/, (_, id, ts, reason) => `• **\`${id}\`** (${ts}): ${reason === "Sin razón" ? "No reason" : reason}`],
+  [/^(\d+) warns$/, (_, n) => `${n} warns`],
+  [/^(\d+) \((\d+) warns\)$/, (_, total, w) => `${total} (${w} warns)`],
   [/^(<@!?[^>]+>) ya tiene el rol (<@&\d+>)$/, (_, m, r) => `${m} already has the role ${r}`],
   [/^(<@!?[^>]+>) no tiene el rol (<@&\d+>)$/, (_, m, r) => `${m} does not have the role ${r}`],
   [/^No hay miembros con el rol (<@&\d+>)$/, (_, r) => `No members found with the role ${r}`],
@@ -806,6 +818,7 @@ const PATTERN_ES_TO_EN = [
   [/^No encontré la advertencia con ID `([^`]+)`$/, (_, id) => `Could not find warning with ID \`${id}\``],
   [/^Advertencia `([^`]+)` de \*\*(.+)\*\* eliminada$/, (_, id, u) => `Warning \`${id}\` removed from **${u}**`],
   [/^(.+) no tiene advertencias$/, (_, u) => `${u} has no warnings`],
+  [/^(.+) no tiene sanciones registradas$/, (_, u) => `${u} has no recorded sanctions`],
   [/^Se eliminaron \*\*(\d+)\*\* advertencias? de \*\*(.+)\*\*$/, (_, n, u) => `Cleared **${n}** warning${n === "1" ? "" : "s"} from **${u}**`],
   [/^Ya tienes (\d+) recordatorios pendientes, espera a que alguno se cumpla$/, (_, n) =>
     `You already have ${n} pending reminders, wait for one to trigger`],
@@ -1163,9 +1176,11 @@ function installV2I18nHooks() {
 }
 
 const COMMAND_DESCRIPTION_ES_TO_EN = {
-  // ask
+  // ai
+  "Comandos de inteligencia artificial, visión y humor": "Artificial intelligence, vision, and humor commands",
   "Consulta o conversa con la IA": "Ask or chat with the AI",
   "Pregunta o mensaje para la IA": "Question or prompt for the AI",
+  "Imagen opcional para analizar junto a tu pregunta": "Optional image to analyze along with your question",
   // help
   "Lista interactiva de comandos disponibles": "Interactive list of available commands",
   // fun
@@ -1299,12 +1314,14 @@ const COMMAND_DESCRIPTION_ES_TO_EN = {
   "Elimina una advertencia específica por ID": "Remove a specific warning by ID",
   "ID de la advertencia": "Warning ID",
   "Elimina todas las advertencias de un usuario": "Clear all warnings for a user",
+  "Historial de sanciones y advertencias de un usuario": "User sanctions and warning history",
   "Historial de advertencias de un usuario": "View a user's warning history",
   "Usuario a consultar": "User to check",
   "Configura el canal de logs de moderación": "Configure the moderation logs channel",
   "Canal de texto para logs": "Text channel for logs",
   "Desactiva el canal de logs del servidor": "Disable the server logs channel",
   // util
+  "Utilidades y herramientas multimedia": "Utilities and multimedia tools",
   "Utilidades, herramientas multimedia e IA": "Utilities, media tools, and AI",
   "Latencia actual del bot y conexión API": "Current bot latency and API connection",
   "Información técnica y estadísticas del bot": "Technical information and bot statistics",
@@ -1345,6 +1362,8 @@ const COMMAND_DESCRIPTION_ES_TO_EN = {
   "Extrae el texto visible de una imagen (OCR)": "Extract visible text from an image (OCR)",
   "Imagen con texto (jpg, png, gif, webp)": "Image with text (jpg, png, gif, webp)",
   "Lista o cancela tus recordatorios activos": "List or cancel your active reminders",
+  "Configura o consulta el idioma del servidor o tu idioma personal": "Configure or check the server or personal language",
+  "Idioma del servidor o personal (es / en)": "Server or personal language (es / en)",
   "Configura o consulta el idioma del bot en el servidor": "Configure or check the bot language in the server",
   "Idioma del servidor (es / en)": "Server language (es / en)",
 };
@@ -1366,6 +1385,7 @@ const CHOICE_NAME_ES_TO_EN = {
 const CONTEXT_MENU_NAME_ES_TO_EN = {
   "Traducir": "Translate",
   "Extraer texto (OCR)": "Extract text (OCR)",
+  "Transcribir audio": "Transcribe audio",
   "Resumir mensaje": "Summarize message",
   "Recordar después": "Remind me later",
   "Expediente Mod": "Mod Dossier",

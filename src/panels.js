@@ -9,7 +9,7 @@ const {
 const { ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { JoinRole, Log } = require("./database");
 const { GREEN, RED } = require("./config");
-const { getPrefix, setPrefix, setLogChannel, clearLogChannel, logAction, getLang, setLang, getWarnPolicy, setWarnPolicy } = require("./guild");
+const { getPrefix, setPrefix, setLogChannel, clearLogChannel, logAction, getLang, setLang, getWarnPolicy, setWarnPolicy, getAiContext, setAiContext } = require("./guild");
 const { t } = require("./i18n");
 const { formatDuration } = require("./moderation");
 
@@ -22,6 +22,7 @@ function buildSetupCard({
   joinRoleDoc,
   lang = "es",
   warnPolicy = { warnThreshold: 0, warnMuteMs: 10 * 60_000 },
+  aiContext = "",
   view,
   isEnded,
   hasCustomBot = false,
@@ -36,6 +37,10 @@ function buildSetupCard({
         duration: formatDuration(warnPolicy.warnMuteMs || 10 * 60_000),
       })
     : t(lang, "setup.warn_auto_off");
+
+  const aiCtxValue = aiContext
+    ? V2Text.clip(aiContext, 80)
+    : (lang === "en" ? "Not configured" : "Sin definir");
 
   const builder = new ComponentsV2Builder({ color: RED })
     .addSection(
@@ -52,6 +57,7 @@ function buildSetupCard({
       ["Rol automático", joinValue],
       [t(lang, "setup.lang_label"), lang === "en" ? "English (`en`)" : "Español (`es`)"],
       [t(lang, "setup.warn_auto_label"), warnValue],
+      [lang === "en" ? "AI Context" : "Contexto IA", aiCtxValue],
     ]);
 
   if (!isEnded && view) {
@@ -95,6 +101,7 @@ function buildSetupCard({
       .addButtonsRow([
         { customId: view.id("lang"), label: t(lang, "setup.btn_lang", { lang: lang.toUpperCase() }), style: "danger" },
         { customId: view.id("warnauto"), label: t(lang, "setup.btn_warn_auto"), style: "secondary" },
+        { customId: view.id("aicontext"), label: lang === "en" ? "AI Context" : "Contexto IA", style: "secondary" },
       ]);
   }
 
@@ -120,16 +127,41 @@ function buildPrefixModal(customId, currentPrefix) {
     );
 }
 
+function buildAiContextModal(customId, currentContext, lang = "es") {
+  const input = new TextInputBuilder()
+    .setCustomId("aicontext")
+    .setStyle(TextInputStyle.Paragraph)
+    .setMinLength(0)
+    .setMaxLength(1000)
+    .setRequired(false)
+    .setPlaceholder(
+      lang === "en"
+        ? "Server rules, FAQ, community theme... (leave empty to clear)"
+        : "Reglas del servidor, FAQ, temática... (déjalo vacío para limpiar)"
+    );
+  if (currentContext) input.setValue(currentContext.slice(0, 1000));
+
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(lang === "en" ? "Server AI Context" : "Contexto IA del servidor")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel(lang === "en" ? "Extra context for /ai ask" : "Contexto adicional para /ai ask")
+        .setTextInputComponent(input)
+    );
+}
+
 async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
   const guild = ctx.guild;
   const author = ctx.user;
 
-  const [prefix, logDoc, joinRoleDoc, lang, warnPolicy] = await Promise.all([
+  const [prefix, logDoc, joinRoleDoc, lang, warnPolicy, aiContext] = await Promise.all([
     getPrefix(guild.id),
     Log.findOne({ guildId: guild.id }).lean(),
     JoinRole.findOne({ guildId: guild.id }).lean(),
     getLang(guild.id),
     getWarnPolicy(guild.id),
+    getAiContext(guild.id),
   ]);
 
   const view = new V2View({
@@ -144,6 +176,7 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
       joinRoleDoc: joinRoleDoc ? { roleId: joinRoleDoc.roleId, ignoreBots: Boolean(joinRoleDoc.ignoreBots) } : null,
       lang,
       warnPolicy,
+      aiContext,
     },
     render: ({ state, view: activeView, isEnded }) =>
       buildSetupCard({
@@ -153,6 +186,7 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
         joinRoleDoc: state.joinRoleDoc,
         lang: state.lang,
         warnPolicy: state.warnPolicy,
+        aiContext: state.aiContext,
         view: activeView,
         isEnded,
         hasCustomBot: typeof onOpenCustomBot === "function",
@@ -165,6 +199,7 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
         joinRoleDoc: state.joinRoleDoc,
         lang: state.lang,
         warnPolicy: state.warnPolicy,
+        aiContext: state.aiContext,
         isEnded: true,
       }),
     actions: {
@@ -273,6 +308,28 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
           warnMuteMs: state.warnPolicy?.warnMuteMs || 10 * 60_000,
         });
         setState({ warnPolicy: saved });
+      },
+      aicontext: async ({ interaction, state, view: activeView }) => {
+        const modalId = activeView.id("aictxmodal", Date.now().toString(36));
+        await interaction.showModal(buildAiContextModal(modalId, state.aiContext, state.lang));
+
+        const submitted = await interaction
+          .awaitModalSubmit({
+            time: 3 * 60_000,
+            filter: (i) => i.customId === modalId && i.user.id === author.id,
+          })
+          .catch(() => null);
+        if (!submitted) return false;
+
+        const nextContext = submitted.fields.getTextInputValue("aicontext")?.trim() ?? "";
+        const saved = await setAiContext(guild.id, nextContext);
+        await submitted.deferUpdate().catch(() => {});
+        activeView.setState({ aiContext: saved });
+        const nextPayload = activeView.toPayload();
+        if (activeView.message?.editable) {
+          await activeView.message.edit(nextPayload).catch(() => {});
+        }
+        return false;
       },
       custombot: async ({ interaction, view: activeView }) => {
         if (typeof onOpenCustomBot !== "function") return false;

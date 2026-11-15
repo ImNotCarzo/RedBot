@@ -67,26 +67,35 @@ async function maybeSendReleaseNotice(ctx) {
 
 const PREFIXED_TO_SLASH_MAP = {
   afk: "util/afk",
+  ask: "ai/ask",
+  askreset: "ai/askreset",
   avatar: "user/avatar",
   botinfo: "util/botinfo",
   channelinfo: "channel/info",
-  choose: "fun/choose",
+  choose: "util/choose",
   clone: "channel/clone",
   color: "role/color",
+  critica: "ai/critica",
   custombot: "server/custombot",
   customreset: "server/customreset",
+  describe: "ai/describe",
   dmall: "util/dm",
   download: "util/download",
   emojis: "server/emojis",
+  excusa: "ai/excusa",
   jumbo: "util/jumbo",
   logo: "server/logo",
-  ocr: "util/ocr",
+  lol: "util/lol",
+  ocr: "ai/ocr",
+  opinion: "ai/opinion",
   poll: "util/poll",
   randomuser: "user/random",
   recap: "channel/recap",
   remind: "util/remind",
   reminders: "util/reminders",
   rename: "channel/rename",
+  resume: "ai/resume",
+  roast: "ai/roast",
   role: "role/info",
   roleadd: "role/add",
   roleall: "role/all",
@@ -107,6 +116,8 @@ const PREFIXED_TO_SLASH_MAP = {
   setlang: "util/setlang",
   setup: "server/setup",
   snipe: "channel/snipe",
+  teoria: "ai/teoria",
+  transcribe: "ai/transcribe",
   ubanner: "user/banner",
   unlock: "channel/unlock",
   user: "user/info",
@@ -214,7 +225,7 @@ const USER_LOOKUP_COMMANDS = new Set([
   "user/banner",
   "user/roles",
   "user/permissions",
-  "fun/roast",
+  "ai/roast",
 ]);
 
 const TRANSLATE_REPLY_LANGS = new Set([
@@ -348,13 +359,15 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
           } else {
             value = args.splice(0).join(" ");
           }
-        } else if (isLast || slashName === "resume") {
+        } else if (isLast || slashName === "resume" || slashName === "ask") {
           value = args.splice(0).join(" ");
         } else {
           value = args.shift();
         }
       } else if (def.required && getMessageText(replyMsg)) {
         value = getMessageText(replyMsg);
+      } else if (def.required && slashName === "ask" && attachments.length) {
+        value = "Analiza esta imagen.";
       } else if (def.required && slashName === "download") {
         const replyAtt = getFirstAttachment(replyMsg);
         if (replyAtt?.url) value = replyAtt.url;
@@ -408,14 +421,12 @@ function wrapSlashCommand(cmd) {
   if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
 
   cmd.code = async function (ctx, ...args) {
-    const { runWithLang, detectLocaleLang } = require("./i18n");
-    const { getLang } = require("./guild");
+    const { runWithLang } = require("./i18n");
+    const { resolveContextLang } = require("./guild");
     const guildId = ctx?.guild?.id ?? ctx?.interaction?.guildId ?? null;
-    const lang = guildId
-      ? await getLang(guildId)
-      : ctx?.interaction?.locale
-        ? detectLocaleLang(ctx.interaction.locale)
-        : "es";
+    const userId = ctx?.user?.id ?? ctx?.author?.id ?? ctx?.interaction?.user?.id ?? null;
+    const locale = ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale ?? null;
+    const lang = await resolveContextLang({ guildId, userId, locale });
     return runWithLang(lang, async () => {
       const langCtx = wrapCtxForLang(ctx, lang);
       const result = await originalCode.call(this, langCtx, ...args);
@@ -515,8 +526,11 @@ function wrapSingleCommand(command, file, log) {
         }
 
         const { runWithLang } = require("./i18n");
-        const { getLang } = require("./guild");
-        const lang = ctx?.guild?.id ? await getLang(ctx.guild.id) : "es";
+        const { resolveContextLang } = require("./guild");
+        const lang = await resolveContextLang({
+          guildId: ctx?.guild?.id ?? null,
+          userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
+        });
         wrapCtxForLang(ctx, lang);
         const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey);
         if (parsedValues.notFound) return ctx.send(lang === "en" ? "Could not find that user" : "No encontré a ese usuario");
@@ -549,8 +563,11 @@ function wrapSingleCommand(command, file, log) {
 
     try {
       const { runWithLang, getCurrentLang } = require("./i18n");
-      const { getLang } = require("./guild");
-      const lang = ctx?.guild?.id ? await getLang(ctx.guild.id) : "es";
+      const { resolveContextLang } = require("./guild");
+      const lang = await resolveContextLang({
+        guildId: ctx?.guild?.id ?? null,
+        userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
+      });
       wrapCtxForLang(ctx, lang);
       return await runWithLang(lang, async () => {
         const result = await originalCode.call(this, ctx, ...args);
@@ -559,7 +576,10 @@ function wrapSingleCommand(command, file, log) {
       });
     } catch (err) {
       log?.error(`[${command?.data?.name ?? file}]`, { err: err.message });
-      const errLang = ctx?.guild?.id ? await require("./guild").getLang(ctx.guild.id).catch(() => "es") : getCurrentLang();
+      const errLang = await require("./guild").resolveContextLang({
+        guildId: ctx?.guild?.id ?? null,
+        userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
+      }).catch(() => getCurrentLang());
       return ctx.send(errLang === "en" ? "An error occurred while running the command" : "Ocurrió un error ejecutando el comando");
     }
   };

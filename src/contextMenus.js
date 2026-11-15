@@ -12,11 +12,19 @@ const {
   TextInputStyle,
 } = require("discord.js");
 const { ComponentsV2Builder, V2Text } = require("gralonium");
-const { generateText, generateVision } = require("./ai");
+const { generateText, generateVision, transcribeMedia } = require("./ai");
 const { getMessageText } = require("./adapter");
 const { GREEN, RED, YELLOW } = require("./config");
-const { logAction } = require("./guild");
-const { addWarn, applyWarnEscalation, generateId, listWarnsForUser, parseDuration } = require("./moderation");
+const { logAction, resolveContextLang } = require("./guild");
+const {
+  addModCase,
+  addWarn,
+  applyWarnEscalation,
+  formatDuration,
+  generateId,
+  listUnifiedHistoryForUser,
+  parseDuration,
+} = require("./moderation");
 const { createReminder } = require("./reminders");
 const { Logger } = require("./runtime");
 
@@ -65,6 +73,34 @@ function extractContextImage(message) {
     const embedImg = src?.embeds?.[0]?.image?.url ?? src?.embeds?.[0]?.thumbnail?.url;
     if (embedImg) {
       return { url: embedImg, name: "imagen", contentType: "image/png", size: 0 };
+    }
+  }
+  return null;
+}
+
+function extractContextMedia(message) {
+  const sources = [
+    message,
+    ...(message?.messageSnapshots?.values ? [...message.messageSnapshots.values()] : []),
+  ];
+
+  for (const src of sources) {
+    const atts = [...(src?.attachments?.values?.() ?? [])];
+    for (const att of atts) {
+      const ct = att?.contentType ?? "";
+      const name = att?.name ?? "";
+      if (
+        ct.startsWith("audio/") ||
+        ct.startsWith("video/") ||
+        /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i.test(name)
+      ) {
+        return {
+          url: att.url,
+          name: att.name ?? (ct.startsWith("video/") ? "video.mp4" : "voice-message.ogg"),
+          contentType: ct,
+          size: att.size ?? 0,
+        };
+      }
     }
   }
   return null;
@@ -189,6 +225,40 @@ async function handleResumeContext(interaction) {
   });
 }
 
+async function handleTranscribeContext(interaction) {
+  await runEphemeralTask(interaction, "[ctx transcribe]", async () => {
+    const media = extractContextMedia(interaction.targetMessage);
+    if (!media) {
+      return replyEphemeral(interaction, "Este mensaje no contiene un audio o video válido");
+    }
+
+    const res = await transcribeMedia(media);
+    if (res.error === "unsupported") {
+      return replyEphemeral(interaction, "Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac, mov");
+    }
+    if (res.error === "too_large") {
+      return replyEphemeral(interaction, "El archivo no puede superar los 25MB");
+    }
+    if (!res.text) {
+      return replyEphemeral(interaction, "No se detectó voz inteligible en el archivo");
+    }
+
+    const { getCurrentLang } = require("./i18n");
+    const card = new ComponentsV2Builder({ color: RED })
+      .addText(`${V2Text.heading("Transcripción", 3)}\n${V2Text.subtext(V2Text.clip(media.name, 80))}`)
+      .addSeparator("small")
+      .addSmartText(res.text, {
+        maxLength: 3600,
+        overflow: "file",
+        filename: getCurrentLang() === "en" ? "transcription.txt" : "transcripcion.txt",
+        preview: false,
+        overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
+      });
+
+    await replyEphemeral(interaction, card);
+  });
+}
+
 async function handleRemindContext(client, interaction) {
   const targetMsg = interaction.targetMessage;
   const preview = V2Text.clip(getMessageText(targetMsg) || "(Mensaje sin texto)", 140);
@@ -290,7 +360,21 @@ async function handleRemindContext(client, interaction) {
   await replyEphemeral(submitted, card);
 }
 
-function buildDossierPayload({ targetUser, member, warns, modMember, guild, ids }) {
+const CASE_TYPE_LABELS = {
+  warn: "Warn",
+  mute: "Mute",
+  auto_mute: "Auto-Mute",
+  unmute: "Unmute",
+  kick: "Kick",
+  ban: "Ban",
+  tempban: "Tempban",
+  softban: "Softban",
+  unban: "Unban",
+};
+
+function buildDossierPayload({ targetUser, member, cases = [], warns = null, modMember, guild, ids }) {
+  const history = Array.isArray(warns) && !cases.length ? warns : cases;
+  const warnsCount = history.filter((c) => !c.type || c.type === "warn").length;
   const createdTs = Math.floor(targetUser.createdTimestamp / 1000);
   const joinedTs = member?.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
   const isMuted = Boolean(member?.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now());
@@ -300,12 +384,15 @@ function buildDossierPayload({ targetUser, member, warns, modMember, guild, ids 
     targetUser.id !== guild.ownerId &&
     (modMember.id === guild.ownerId || (member && (member.roles?.highest?.position ?? 0) < (modMember.roles?.highest?.position ?? 0)));
 
-  const recentWarns = warns.slice(0, 3).map((w) => {
-    const ts = Math.floor(new Date(w.createdAt).getTime() / 1000);
-    return `• **\`${w.warnId}\`** (<t:${ts}:d>): ${V2Text.clip(w.reason, 120, "Sin razón")}`;
+  const recentCases = history.slice(0, 4).map((c) => {
+    const ts = Math.floor(new Date(c.createdAt).getTime() / 1000);
+    const idCode = c.caseId ?? c.warnId ?? "N/A";
+    const typeLabel = c.type ? (CASE_TYPE_LABELS[c.type] ?? c.type) : "Warn";
+    const durSuffix = c.durationMs ? ` ${formatDuration(c.durationMs)}` : "";
+    return `• **[${typeLabel}${durSuffix}] \`${idCode}\`** (<t:${ts}:d>): ${V2Text.clip(c.reason, 110, "Sin razón")}`;
   });
 
-  const builder = new ComponentsV2Builder({ color: warns.length ? YELLOW : RED })
+  const builder = new ComponentsV2Builder({ color: history.length ? YELLOW : RED })
     .addSection(
       [
         V2Text.heading(`Expediente: ${V2Text.clip(targetUser.tag ?? targetUser.username, 100)}`, 3),
@@ -313,14 +400,14 @@ function buildDossierPayload({ targetUser, member, warns, modMember, guild, ids 
           ["ID", V2Text.code(targetUser.id)],
           ["Cuenta creada", `<t:${createdTs}:R>`],
           ["Ingreso", joinedTs ? `<t:${joinedTs}:R>` : "Fuera del servidor"],
-          ["Warns totales", V2Text.code(warns.length)],
+          ["Sanciones / Warns", `${V2Text.code(history.length)} (${V2Text.code(warnsCount)} warns)`],
           isMuted ? ["Mute activo", `Hasta <t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R>`] : null,
         ]),
       ],
       { thumbnail: targetUser.displayAvatarURL({ size: 256 }), fallbackToText: true }
     )
     .addSeparator("small")
-    .addText(`**Últimas advertencias**\n${recentWarns.length ? recentWarns.join("\n") : "Sin advertencias registradas"}`);
+    .addText(`**Historial reciente**\n${recentCases.length ? recentCases.join("\n") : "Sin sanciones registradas"}`);
 
   if (canTarget && member && ids) {
     builder.addSpacer("small").addComponent(
@@ -357,7 +444,7 @@ async function handleModDossierContext(interaction) {
       guild.members?.cache?.get?.(targetUser.id) ??
       (await guild.members?.fetch?.(targetUser.id).catch(() => null));
 
-    const warns = await listWarnsForUser({ guildId: guild.id, userId: targetUser.id });
+    const cases = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
     const session = Date.now().toString(36);
     const ids = {
       warn: `modctx:warn:${session}`,
@@ -365,7 +452,7 @@ async function handleModDossierContext(interaction) {
       kick: `modctx:kick:${session}`,
     };
 
-    const payload = buildDossierPayload({ targetUser, member, warns, modMember: interaction.member, guild, ids });
+    const payload = buildDossierPayload({ targetUser, member, cases, modMember: interaction.member, guild, ids });
     const msg = await interaction.editReply(payload);
 
     if (!msg || typeof msg.createMessageComponentCollector !== "function") return;
@@ -390,6 +477,14 @@ async function handleModDossierContext(interaction) {
             return btn.reply({ content: "No puedo silenciar a este usuario (jerarquía)", flags: MessageFlags.Ephemeral }).catch(() => {});
           }
           await member.timeout(10 * 60_000, `Mute rápido desde expediente por ${interaction.user.tag}`);
+          await addModCase({
+            guildId: guild.id,
+            userId: targetUser.id,
+            moderatorId: interaction.user.id,
+            type: "mute",
+            reason: "Mute rápido desde expediente",
+            durationMs: 10 * 60_000,
+          });
           await logAction(guild, {
             title: "Usuario silenciado (Expediente)",
             color: YELLOW,
@@ -399,8 +494,8 @@ async function handleModDossierContext(interaction) {
               { name: "Duración", value: "10m", inline: true },
             ],
           });
-          const refreshed = await listWarnsForUser({ guildId: guild.id, userId: targetUser.id });
-          await btn.update(buildDossierPayload({ targetUser, member, warns: refreshed, modMember: interaction.member, guild, ids }));
+          const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
+          await btn.update(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids }));
           return;
         }
 
@@ -441,6 +536,13 @@ async function handleModDossierContext(interaction) {
             return sub.reply({ content: "No puedo expulsar a este usuario (jerarquía o permisos)", flags: MessageFlags.Ephemeral }).catch(() => {});
           }
           await member.kick(`${interaction.user.tag}: ${reason}`);
+          await addModCase({
+            guildId: guild.id,
+            userId: targetUser.id,
+            moderatorId: interaction.user.id,
+            type: "kick",
+            reason,
+          });
           await logAction(guild, {
             title: "Usuario expulsado (Expediente)",
             color: RED,
@@ -475,8 +577,8 @@ async function handleModDossierContext(interaction) {
             { name: "Razón", value: reason, inline: false },
           ],
         });
-        const refreshed = await listWarnsForUser({ guildId: guild.id, userId: targetUser.id });
-        await sub.update(buildDossierPayload({ targetUser, member, warns: refreshed, modMember: interaction.member, guild, ids })).catch(async () => {
+        const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
+        await sub.update(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids })).catch(async () => {
           await sub.reply({ content: `Advertencia \`${warnId}\` aplicada (total: \`${total}\`).`, flags: MessageFlags.Ephemeral }).catch(() => {});
         });
       } catch (btnErr) {
@@ -496,13 +598,12 @@ async function handleModDossierContext(interaction) {
 function withContextLang(handler) {
   return async function (...args) {
     const interaction = args.length >= 2 ? args[1] : args[0];
-    const { runWithLang, wrapInteractionForLang, detectLocaleLang } = require("./i18n");
-    const { getLang } = require("./guild");
-    const lang = interaction?.guildId
-      ? await getLang(interaction.guildId).catch(() => "es")
-      : interaction?.locale
-        ? detectLocaleLang(interaction.locale)
-        : "es";
+    const { runWithLang, wrapInteractionForLang } = require("./i18n");
+    const lang = await resolveContextLang({
+      guildId: interaction?.guildId ?? null,
+      userId: interaction?.user?.id ?? null,
+      locale: interaction?.locale ?? interaction?.guildLocale ?? null,
+    }).catch(() => "es");
     wrapInteractionForLang(interaction, lang);
     return runWithLang(lang, () => handler(...args));
   };
@@ -511,6 +612,7 @@ function withContextLang(handler) {
 module.exports = {
   handleTranslateContext: withContextLang(handleTranslateContext),
   handleOcrContext: withContextLang(handleOcrContext),
+  handleTranscribeContext: withContextLang(handleTranscribeContext),
   handleResumeContext: withContextLang(handleResumeContext),
   handleRemindContext: withContextLang(handleRemindContext),
   handleModDossierContext: withContextLang(handleModDossierContext),

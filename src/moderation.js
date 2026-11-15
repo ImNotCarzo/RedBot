@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 const { YELLOW } = require("./config");
-const { Warn, TempBan } = require("./database");
+const { Warn, TempBan, ModCase } = require("./database");
 const { getLang, getWarnPolicy, logAction } = require("./guild");
 const { t } = require("./i18n");
 const { Logger } = require("./runtime");
@@ -41,6 +41,78 @@ function formatDuration(ms) {
   return `${Math.floor(h / 24)}d`;
 }
 
+async function addModCase({ guildId, userId, moderatorId, type, reason = "Sin razón", durationMs = null, caseId = null }) {
+  if (!guildId || !userId || !moderatorId || !type) return null;
+  if (ModCase?.db?.readyState !== 1) return null;
+  const normalizedReason = (typeof reason === "string" ? reason.trim() : "") || "Sin razón";
+  const resolvedCaseId = String(caseId || generateId()).trim().toUpperCase();
+  try {
+    return await ModCase.create({
+      guildId,
+      userId,
+      moderator: moderatorId,
+      type,
+      reason: normalizedReason.slice(0, 500),
+      durationMs: Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null,
+      caseId: resolvedCaseId,
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return ModCase.create({
+        guildId,
+        userId,
+        moderator: moderatorId,
+        type,
+        reason: normalizedReason.slice(0, 500),
+        durationMs: Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null,
+        caseId: generateId(7),
+      }).catch(() => null);
+    }
+    log.warn("No se pudo guardar ModCase", { guildId, userId, type, err: err?.message ?? String(err) });
+    return null;
+  }
+}
+
+async function listModCasesForUser({ guildId, userId }) {
+  if (!guildId || !userId || ModCase?.db?.readyState !== 1) return [];
+  const q = ModCase.find({ guildId, userId }).sort({ createdAt: -1 });
+  return typeof q?.lean === "function" ? q.lean() : q;
+}
+
+async function listUnifiedHistoryForUser({ guildId, userId }) {
+  const fetchWarns = async () => {
+    if (Warn?.db?.readyState !== 1) return [];
+    const q = Warn.find({ guildId, userId }).sort({ createdAt: -1 });
+    return typeof q?.lean === "function" ? q.lean() : q;
+  };
+  const [cases, warns] = await Promise.all([
+    listModCasesForUser({ guildId, userId }).catch(() => []),
+    fetchWarns().catch(() => []),
+  ]);
+
+  const seenWarnIds = new Set(
+    cases.filter((c) => c.type === "warn" && c.caseId).map((c) => String(c.caseId).toUpperCase())
+  );
+
+  const legacyWarns = warns
+    .filter((w) => !seenWarnIds.has(String(w.warnId ?? "").toUpperCase()))
+    .map((w) => ({
+      guildId: w.guildId,
+      userId: w.userId,
+      moderator: w.moderator,
+      type: "warn",
+      reason: w.reason,
+      durationMs: null,
+      caseId: w.warnId,
+      createdAt: w.createdAt,
+      legacyWarn: true,
+    }));
+
+  return [...cases, ...legacyWarns].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
 async function addWarn({ guildId, userId, moderatorId, reason, warnId }) {
   const normalizedWarnId = String(warnId).trim().toUpperCase();
   const normalizedReason = (typeof reason === "string" ? reason.trim() : "") || "Sin razón";
@@ -51,6 +123,15 @@ async function addWarn({ guildId, userId, moderatorId, reason, warnId }) {
     moderator: moderatorId,
     reason: normalizedReason,
     warnId: normalizedWarnId,
+  });
+
+  await addModCase({
+    guildId,
+    userId,
+    moderatorId,
+    type: "warn",
+    reason: normalizedReason,
+    caseId: normalizedWarnId,
   });
 
   const total = await Warn.countDocuments({ guildId, userId });
@@ -183,6 +264,15 @@ async function applyWarnEscalation(guild, member, totalWarns) {
     return null;
   }
 
+  await addModCase({
+    guildId: guild.id,
+    userId: member.id,
+    moderatorId: guild.client?.user?.id ?? "auto",
+    type: "auto_mute",
+    reason,
+    durationMs: muteMs,
+  });
+
   await logAction(guild, {
     title: lang === "en" ? "Auto-Mute Applied" : "Auto-mute aplicado",
     color: YELLOW,
@@ -201,6 +291,9 @@ module.exports = {
   generateId,
   parseDuration,
   formatDuration,
+  addModCase,
+  listModCasesForUser,
+  listUnifiedHistoryForUser,
   addWarn,
   applyWarnEscalation,
   removeWarnById,

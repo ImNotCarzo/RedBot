@@ -6,35 +6,34 @@ const {
   V2View,
 } = require("gralonium");
 const { getId, RED, USER_APP_CONFIG } = require("../../src/config");
-const { getPrefix } = require("../../src/guild");
+const { getPrefix, resolveContextLang } = require("../../src/guild");
 const { Logger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../../src/runtime");
 const log = new Logger("CMD_HELP", process.env.LOG_LEVEL);
 
 const IDS = {
-  ask:     () => getId("ask"),
+  ai:      () => getId("ai"),
   util:    () => getId("util"),
   user:    () => getId("user"),
   mod:     () => getId("mod"),
   server:  () => getId("server"),
   role:    () => getId("role"),
   channel: () => getId("channel"),
-  fun:     () => getId("fun"),
 };
 
 // ─────────────────────────────────────────────
 //  CATEGORÍAS
 // ─────────────────────────────────────────────
 
-const CATEGORIES = ["utilidad", "usuario", "moderacion", "servidor", "roles", "canal", "diversion"];
+const CATEGORIES = ["ai", "utilidad", "usuario", "moderacion", "servidor", "roles", "canal"];
 
 const CATEGORY_LABELS = {
+  ai:         "IA",
   utilidad:   "Utilidad",
   usuario:    "Usuario",
   moderacion: "Moderación",
   servidor:   "Servidor",
   roles:      "Roles",
   canal:      "Canal",
-  diversion:  "Fun",
 };
 
 // ─────────────────────────────────────────────
@@ -42,21 +41,31 @@ const CATEGORY_LABELS = {
 // ─────────────────────────────────────────────
 
 const getBaseCommands = () => ({
+  ai: {
+    ask:        { short: "ask",        slash: "ai ask",        id: IDS.ai(), usage: ".ask <pregunta>",            aliases: ["ai", "ia"],          description: "Hazle una pregunta o envíale una imagen a la IA." },
+    askreset:   { short: "askreset",   slash: "ai askreset",   id: IDS.ai(), usage: ".askreset",                  aliases: ["aireset", "reset"],  description: "Limpia tu historial de conversación con la IA." },
+    transcribe: { short: "transcribe", slash: "ai transcribe", id: IDS.ai(), usage: ".transcribe <url | adjunto>",aliases: ["transcribir"],       description: "Transcribe un audio o video a texto." },
+    describe:   { short: "describe",   slash: "ai describe",   id: IDS.ai(), usage: ".describe <url | adjunto>",  aliases: ["describir"],         description: "Describe el contenido de una imagen." },
+    resume:     { short: "resume",     slash: "ai resume",     id: IDS.ai(), usage: ".resume <texto>",            aliases: ["resumir", "summarize"], description: "Resume un texto largo de 100 caracteres o más." },
+    ocr:        { short: "ocr",        slash: "ai ocr",        id: IDS.ai(), usage: ".ocr <url | adjunto>",       aliases: ["leer", "extraer"],   description: "Extrae el texto de una imagen." },
+    opinion:    { short: "opinion",    slash: "ai opinion",    id: IDS.ai(), usage: ".opinion <tema>",            aliases: ["op", "opina"],       description: "Pide mi opinión sin filtro sobre algo." },
+    critica:    { short: "critica",    slash: "ai critica",    id: IDS.ai(), usage: ".critica <tema>",            aliases: ["criticar"],          description: "Te doy una crítica despiadada de algo." },
+    excusa:     { short: "excusa",     slash: "ai excusa",     id: IDS.ai(), usage: ".excusa [situacion]",        aliases: ["coartada"],          description: "Genera una excusa ridícula pero creativa." },
+    teoria:     { short: "teoria",     slash: "ai teoria",     id: IDS.ai(), usage: ".teoria <tema>",             aliases: ["conspira"],          description: "Una teoría conspirativa sobre cualquier cosa." },
+    roast:      { short: "roast",      slash: "ai roast",      id: IDS.ai(), usage: ".roast [@usuario]",          aliases: ["burn"],              description: "Critica despiadadamente a un usuario." },
+  },
   utilidad: {
-    ask:       { short: "ask",       slash: "ask",            id: IDS.ask(),  usage: ".ask <pregunta>",            aliases: ["ai", "ia"],                    description: "Hazle una pregunta a la IA." },
     afk:       { short: "afk",       slash: "util afk",       id: IDS.util(), usage: ".afk [razón]",               aliases: ["ausente"],                     description: "Establece tu estado como ausente (AFK)." },
     jumbo:     { short: "jumbo",     slash: "util jumbo",     id: IDS.util(), usage: ".jumbo <emoji>",             aliases: ["emojijumbo", "bigemoji"],      description: "Muestra un emoji en tamaño grande." },
-    ping:      { short: "ping",      slash: "util ping",      id: IDS.util(), usage: ".ping",                      aliases: [],                               description: "Muestra la latencia actual del bot." },
-    botinfo:   { short: "botinfo",   slash: "util botinfo",   id: IDS.util(), usage: ".botinfo",                   aliases: ["bot", "info"],                  description: "Muestra información general del bot." },
-    invite:    { short: "invite",    slash: "util invite",    id: IDS.util(), usage: ".invite",                    aliases: ["inv"],                           description: "Envía la invitación del bot y el servidor de soporte." },
-    setprefix: { short: "setprefix", slash: "util setprefix", id: IDS.util(), usage: ".setprefix <nuevo>",         aliases: ["prefix"],                       description: "Cambia o muestra el prefijo del bot en este servidor." },
-    askreset:  { short: "askreset",  slash: "util askreset",  id: IDS.util(), usage: ".askreset",                  aliases: ["aireset", "reset"],             description: "Limpia tu historial de conversación con la IA." },
-    translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",aliases: ["traducir", "trans"],            description: "Traduce texto a otro idioma." },
-    download:  { short: "download",  slash: "util download",  id: IDS.util(), usage: ".download <url>",            aliases: ["dl", "video", "bajar"],       description: "Descarga un video desde un enlace." },
-    describe:  { short: "describe",  slash: "util describe",  id: IDS.util(), usage: ".describe <url | adjunto>",  aliases: ["describir"],                    description: "Describe el contenido de una imagen." },
-    transcribe:{ short: "transcribe",slash: "util transcribe",id: IDS.util(), usage: ".transcribe <url | adjunto>",aliases: ["transcribir"],                  description: "Transcribe un audio o video a texto." },
-    resumir:   { short: "resume",   slash: "util resume",   id: IDS.util(), usage: ".resume <texto>",           aliases: ["resumir", "summarize"],          description: "Resume un texto largo de 100 caracteres o más." },
-    dm:        { short: "dmall",    slash: "util dm",       id: IDS.util(), usage: ".dmall <mensaje>",          aliases: ["dm"],                            description: "Envía un mensaje privado a miembros del servidor." },
+    ping:      { short: "ping",      slash: "util ping",      id: IDS.util(), usage: ".ping",                      aliases: [],                              description: "Muestra la latencia actual del bot." },
+    botinfo:   { short: "botinfo",   slash: "util botinfo",   id: IDS.util(), usage: ".botinfo",                   aliases: ["bot", "info"],                 description: "Muestra información general del bot." },
+    invite:    { short: "invite",    slash: "util invite",    id: IDS.util(), usage: ".invite",                    aliases: ["inv"],                         description: "Envía la invitación del bot y el servidor de soporte." },
+    setprefix: { short: "setprefix", slash: "util setprefix", id: IDS.util(), usage: ".setprefix <nuevo>",         aliases: ["prefix"],                      description: "Cambia o muestra el prefijo del bot en este servidor." },
+    translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",aliases: ["traducir", "trans"],           description: "Traduce texto a otro idioma." },
+    download:  { short: "download",  slash: "util download",  id: IDS.util(), usage: ".download <url>",            aliases: ["dl", "video", "bajar"],        description: "Descarga un video desde un enlace." },
+    dm:        { short: "dmall",     slash: "util dm",        id: IDS.util(), usage: ".dmall <mensaje>",           aliases: ["dm"],                          description: "Envía un mensaje privado a miembros del servidor." },
+    choose:    { short: "choose",    slash: "util choose",    id: IDS.util(), usage: ".choose <op1, op2, ...>",    aliases: ["elegir", "escoger", "pick"],   description: "Elige una opción al azar entre varias." },
+    lol:       { short: "lol",       slash: "util lol",       id: IDS.util(), usage: ".lol",                       aliases: [],                              description: "Ríete de algo así bien jaja." },
   },
   usuario: {
     info:        { short: "user",       slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",      aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
@@ -123,28 +132,14 @@ const getBaseCommands = () => ({
     hide:     { short: "hide",   slash: "channel hide",     id: IDS.channel(), usage: ".hide [#canal]",             aliases: ["ocultar", "esconder"],     description: "Oculta un canal a @everyone." },
     snipe:    { short: "snipe",  slash: "channel snipe",    id: IDS.channel(), usage: ".snipe",                     aliases: ["borrado"],                 description: "Muestra el último mensaje borrado recientemente en el canal." },
   },
-  diversion: {
-    choose:  { short: "choose",  slash: "fun choose",  id: IDS.fun(), usage: ".choose <op1, op2, ...>", aliases: ["elegir", "escoger", "pick"], description: "Elige una opción al azar entre varias." },
-    opinion: { short: "opinion", slash: "fun opinion", id: IDS.fun(), usage: ".opinion <tema>",         aliases: ["op", "opina"],               description: "Pide mi opinión sin filtro sobre algo." },
-    critica: { short: "critica", slash: "fun critica", id: IDS.fun(), usage: ".critica <tema>",         aliases: ["criticar"],                  description: "Te doy una crítica despiadada de algo." },
-    excusa:  { short: "excusa",  slash: "fun excusa",  id: IDS.fun(), usage: ".excusa [situacion]",     aliases: ["coartada"],                  description: "Genera una excusa ridícula pero creativa." },
-    teoria:  { short: "teoria",  slash: "fun teoria",  id: IDS.fun(), usage: ".teoria <tema>",          aliases: ["conspira"],                  description: "Una teoría conspirativa sobre cualquier cosa." },
-    roast:   { short: "roast",   slash: "fun roast",   id: IDS.fun(), usage: ".roast [@usuario]",       aliases: ["burn"],                      description: "Critica despiadadamente a un usuario." },
-    lol:     { short: "lol",     slash: "fun lol",     id: IDS.fun(), usage: ".lol",                    aliases: [],                            description: "Ríete de algo así bien jaja." },
-  },
 });
-
-// ─────────────────────────────────────────────
-//  HELPERS
-// ─────────────────────────────────────────────
 
 const getCommands = () => {
   const commands = getBaseCommands();
   commands.utilidad.poll      = { short: "poll",      slash: "util poll",      id: IDS.util(),    usage: ".poll <pregunta> / <op1> / <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
   commands.utilidad.remind    = { short: "remind",    slash: "util remind",    id: IDS.util(),    usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." };
   commands.utilidad.reminders = { short: "reminders", slash: "util reminders", id: IDS.util(),    usage: ".reminders",                       aliases: ["recordatorios", "myreminders"],         description: "Lista o cancela tus recordatorios activos." };
-  commands.utilidad.ocr       = { short: "ocr",       slash: "util ocr",       id: IDS.util(),    usage: ".ocr <url | adjunto>",             aliases: ["leer", "extraer"],                      description: "Extrae el texto de una imagen." };
-  commands.utilidad.setlang   = { short: "setlang",   slash: "util setlang",   id: IDS.util(),    usage: ".setlang [es|en]",                 aliases: ["lang", "idioma"],                       description: "Cambia o muestra el idioma del servidor." };
+  commands.utilidad.setlang   = { short: "setlang",   slash: "util setlang",   id: IDS.util(),    usage: ".setlang [es|en]",                 aliases: ["lang", "idioma"],                       description: "Cambia o muestra el idioma del servidor o personal." };
   commands.canal.recap        = { short: "recap",     slash: "channel recap",  id: IDS.channel(), usage: ".recap [cantidad]",                aliases: ["resumen", "tldr"],                      description: "Resume los últimos mensajes del canal." };
   return commands;
 };

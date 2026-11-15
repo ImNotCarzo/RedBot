@@ -204,6 +204,7 @@ const DEFINITIONS = [
   { name: "uroles", description: "Muestra los roles de un usuario", aliases: ["userroles", "ur"] },
   { name: "randomuser", description: "Elige a un miembro del servidor al azar", aliases: ["urandom", "userrandom", "ruser"] },
   { name: "afk", description: "Establece tu estado como ausente (AFK)", aliases: ["ausente"] },
+  { name: "ask", description: "Consulta o conversa con la IA", aliases: ["ia", "ai"], authorName: "Comando Ask", descriptionText: "**Usos:**\nHazle una pregunta a la IA (puedes adjuntar una imagen opcional)\n\n**Aliases:**\n`ia`, `ai`\n\n```js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan```" },
   { name: "askreset", description: "Limpia tu historial de conversación con la IA", aliases: ["reset", "aireset"] },
   { name: "botinfo", description: "Información general del bot", aliases: ["bot", "info"] },
   { name: "download", description: "Descarga un video desde un enlace", aliases: ["dl", "video", "bajar"], authorName: "Comando Download", descriptionText: "**Usos:**\nDescarga un video desde un enlace (TikTok, X, Instagram, Reddit, etc.)\n\n**Aliases:**\n`dl`, `video`, `bajar`\n\n```js\n.download <url>\nEjemplo: .download https://www.tiktok.com/@user/video/123```" },

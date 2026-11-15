@@ -9,11 +9,10 @@ const {
   V2Text,
   V2View,
 } = require("gralonium");
-const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN, YELLOW, USER_APP_CONFIG } = require("../../src/config");
-const { getPrefix, setPrefix, setAfk, sendLog, getLang, setLang } = require("../../src/guild");
-const { detectLocaleLang, normalizeLang, t } = require("../../src/i18n");
+const { getPrefix, setPrefix, setAfk, sendLog, getLang, setLang, setUserLang, resolveContextLang } = require("../../src/guild");
+const { normalizeLang, t } = require("../../src/i18n");
 const {
   Logger,
   THINKING_TEXT,
@@ -27,7 +26,6 @@ const {
   buildDmAllLogEmbed,
 } = require("../../src/runtime");
 const { version: botVersion } = require("../../package.json");
-const { fetchPublic, readBodyLimited } = require("../../src/security");
 const { createReminder, listUserReminders, cancelReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
 
@@ -37,20 +35,6 @@ try {
 } catch {}
 
 const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
-
-const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
-
-function validateImageAttachment(ctx, attachment) {
-  if (!attachment) return ctx.ephemeral("Debes adjuntar una imagen");
-  if (!VALID_IMAGE_TYPES.some((t) => attachment.contentType?.startsWith(t))) {
-    return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
-  }
-  if (attachment.size > MAX_IMAGE_SIZE_BYTES) {
-    return ctx.ephemeral("La imagen no puede superar los 8MB");
-  }
-  return null;
-}
 
 const TRANSLATE_LANG_NAMES = {
   auto: "Automático",
@@ -88,21 +72,6 @@ const formatUptime = (ms) => {
   if (m) parts.push(`${m}m`);
   if (!parts.length || s) parts.push(`${s}s`);
   return parts.join(" ");
-};
-
-const formatBytes = (bytes) => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return null;
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const formatAttachmentMeta = (attachment, fallbackName) => {
-  const parts = [V2Text.clip(attachment?.name ?? fallbackName, 80)];
-  if (attachment?.width && attachment?.height) parts.push(`${attachment.width}×${attachment.height}`);
-  const size = formatBytes(attachment?.size);
-  if (size) parts.push(size);
-  return parts.join(" · ");
 };
 
 const formatLanguage = (langCode) => {
@@ -177,7 +146,7 @@ function buildJumboCard({ title, subtitle, imageUrl }) {
 const data = {
   data: new GroupBuilder({
     name: "util",
-    description: "Utilidades, herramientas multimedia e IA",
+    description: "Utilidades y herramientas multimedia",
     guildOnly: false,
     as_prefix: false,
     as_slash: true,
@@ -358,33 +327,6 @@ const data = {
         );
       } catch (err) {
         log.error("[util setprefix]", { err: err?.message ?? String(err) });
-        handleCommandError(ctx, err);
-      }
-    },
-  })
-
-  // ── ASKRESET ──────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "askreset",
-      description: "Reinicia tu memoria de conversación con la IA",
-      aliases: ["reset"],
-    }),
-    params: new ParamsBuilder(),
-
-    async code(ctx) {
-      try {
-        const userId = ctx.user?.id;
-        deleteConversacion(userId);
-        await ctx.send(
-          buildCompactCard({
-            title: "Historial reiniciado",
-            body: "Se limpió tu conversación con la IA.",
-            color: GREEN,
-          })
-        );
-      } catch (err) {
-        log.error("[util askreset]", { err: err?.message ?? String(err) });
         handleCommandError(ctx, err);
       }
     },
@@ -616,140 +558,6 @@ const data = {
     },
   })
 
-  // ── DESCRIBE ──────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "describe",
-      description: "Analiza y describe el contenido de una imagen con IA",
-      cooldown: { seconds: 8, bucket: "USER" },
-    }),
-    params: new ParamsBuilder()
-      .addAttachment({
-        name: "imagen",
-        description: "Imagen a analizar (jpg, png, gif, webp)",
-        required: true,
-      }),
-
-    async code(ctx) {
-      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
-      const attachment = ctx.get("imagen");
-      const invalid = validateImageAttachment(ctx, attachment);
-      if (invalid) return invalid;
-
-      try {
-        const prompt = require("../../src/i18n").getCurrentLang() === "en"
-          ? "Describe in detail what is in this image. Be specific: colors, objects, people, visible text, setting, style. Respond in English. Maximum 3 paragraphs."
-          : "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
-        const texto = await generateVision(prompt, attachment.url);
-
-        const meta = formatAttachmentMeta(attachment, "imagen");
-        const builder = new ComponentsV2Builder({ color: RED })
-          .addSection(
-            [`${V2Text.heading("Descripción de imagen", 3)}\n${V2Text.subtext(meta)}`],
-            { thumbnail: attachment.url, fallbackToText: true }
-          )
-          .addSeparator("small")
-          .addSmartText(texto ?? "No pude generar una descripción", { overflow: "clip" });
-
-        await ctx.send(builder);
-      } catch (err) {
-        log.error("[util describe]", { err: err?.message ?? String(err) });
-        handleCommandError(ctx, err);
-      }
-    },
-  })
-
-  // ── TRANSCRIBE ────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "transcribe",
-      description: "Transcribe un archivo de audio o video a texto",
-      cooldown: { seconds: 10, bucket: "USER" },
-    }),
-    params: new ParamsBuilder()
-      .addAttachment({
-        name: "archivo",
-        description: "Audio o video a transcribir (mp3, wav, ogg, webm, mp4, mov — máx 25MB)",
-        required: true,
-      }),
-
-    async code(ctx) {
-      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
-      const attachment = ctx.get("archivo");
-      if (!attachment) {
-        return ctx.ephemeral("Debes adjuntar un audio o video");
-      }
-
-      const VALID_EXT = /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i;
-
-      if (!VALID_EXT.test(attachment.name ?? "")) {
-        return ctx.ephemeral("Formato no soportado. Usa: mp3, wav, ogg, webm, mp4, m4a, flac, mov");
-      }
-
-      const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
-      if (attachment.size > MAX_MEDIA_BYTES) {
-        return ctx.ephemeral("El archivo no puede superar los 25MB");
-      }
-
-      const isMov = /\.mov$/i.test(attachment.name ?? "") || attachment.contentType === "video/quicktime";
-
-      try {
-        const fileRes = await fetchPublic(attachment.url, {}, 15_000);
-        if (!fileRes.ok) throw new Error(`No se pudo descargar archivo (${fileRes.status})`);
-        const body = await readBodyLimited(fileRes, MAX_MEDIA_BYTES);
-        if (body.tooLarge) {
-          return ctx.ephemeral("El archivo no puede superar los 25MB");
-        }
-        const buffer = body.buffer;
-
-        let texto = null;
-
-        if (isMov) {
-          texto = await generateTranscription(buffer, attachment.contentType || "video/quicktime");
-        } else {
-          try {
-            const { default: Groq } = require("groq-sdk");
-            const groq = new Groq({ apiKey: process.env.GROQ });
-            const blob = new Blob([buffer], { type: attachment.contentType || "audio/mpeg" });
-            const file = new File([blob], attachment.name ?? "audio.mp3", { type: blob.type });
-
-            const result = await groq.audio.transcriptions.create({
-              file,
-              model: "whisper-large-v3",
-              response_format: "text",
-            });
-            texto = result?.trim() || null;
-          } catch (groqErr) {
-            log.warn("[util transcribe] Falló Groq Whisper; usando Gemini como fallback", {
-              err: groqErr?.message ?? String(groqErr),
-            });
-            texto = await generateTranscription(buffer, attachment.contentType || "audio/mpeg");
-          }
-        }
-
-        if (!texto) return ctx.ephemeral("No se detectó voz inteligible en el archivo");
-
-        const meta = formatAttachmentMeta(attachment, "audio");
-        const subtitle = texto.length > 3600 ? `${meta} · ${num(texto.length)} caracteres` : meta;
-        const builder = new ComponentsV2Builder({ color: RED })
-          .addText(`${V2Text.heading("Transcripción", 3)}\n${V2Text.subtext(subtitle)}`)
-          .addSeparator("small")
-          .addSmartText(texto, {
-            maxLength: 3600,
-            overflow: "file",
-            filename: require("../../src/i18n").getCurrentLang() === "en" ? "transcription.txt" : "transcripcion.txt",
-            preview: false,
-            overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
-          });
-
-        await ctx.send(builder);
-      } catch (err) {
-        log.error("[util transcribe]", { err: err?.message ?? String(err) });
-        handleCommandError(ctx, err);
-      }
-    },
-  })
-
   // ── DMALL ─────────────────────────────────────
   .addCommand({
     data: new CommandBuilder({
@@ -877,52 +685,6 @@ const data = {
           color: enviados === 0 && fallidos > 0 ? YELLOW : GREEN,
         })
       ).catch(() => null);
-    },
-  })
-
-  // ── RESUME ────────────────────────────────────
-  .addCommand({
-    data: new CommandBuilder({
-      name: "resume",
-      description: "Genera un resumen conciso de un texto largo con IA",
-      aliases: ["resumir", "summarize"],
-      cooldown: { seconds: 6, bucket: "USER" },
-    }),
-    params: new ParamsBuilder()
-      .addString({
-        name: "texto",
-        description: "Texto a resumir",
-        required: true,
-      }),
-
-    async code(ctx) {
-      await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
-      const texto = ctx.get("texto");
-
-      if (texto.length < 100) {
-        return ctx.ephemeral("El texto es demasiado corto para resumir");
-      }
-
-      try {
-        const resumen = await generateText(
-          require("../../src/i18n").getCurrentLang() === "en"
-            ? `Summarize the following text. Only provide the summary, with no introductory phrases or extra commentary. Stay objective and faithful to the original content, without opinions or interpretations. Respond in English.\n\n${texto.slice(0, 8000)}`
-            : `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
-        );
-
-        const header = resumen
-          ? `${V2Text.heading("Resumen", 3)}\n${V2Text.subtext(`${num(texto.length)} → ${num(resumen.length)} caracteres`)}`
-          : V2Text.heading("Resumen", 3);
-        const builder = new ComponentsV2Builder({ color: RED })
-          .addText(header)
-          .addSeparator("small")
-          .addSmartText(resumen || "No pude generar un resumen", { overflow: "clip" });
-
-        await ctx.send(builder);
-      } catch (err) {
-        log.error("[util resume]", { err: err?.message ?? String(err) });
-        handleCommandError(ctx, err);
-      }
     },
   }),
 };
@@ -1058,55 +820,74 @@ const remindCommand = {
   },
 };
 
-const ocrCommand = {
+const chooseCommand = {
   data: new CommandBuilder({
-    name: "ocr",
-    description: "Extrae el texto visible de una imagen (OCR)",
-    cooldown: { seconds: 8, bucket: "USER" },
+    name: "choose",
+    description: "Selecciona una opción aleatoria de una lista",
+    aliases: ["elegir", "escoger", "pick"],
   }),
-  params: new ParamsBuilder().addAttachment({
-    name: "imagen",
-    description: "Imagen con texto (jpg, png, gif, webp)",
+  params: new ParamsBuilder().addString({
+    name: "opciones",
+    description: "Opciones separadas por coma (,) o barra (|)",
     required: true,
   }),
-
   async code(ctx) {
-    await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
-    const attachment = ctx.get("imagen");
-    const invalid = validateImageAttachment(ctx, attachment);
-    if (invalid) return invalid;
-
+    await ctx.defer();
     try {
-      const prompt =
-        "Extrae todo el texto visible en esta imagen tal como aparece, respetando los saltos de línea. " +
-        "No traduzcas, no describas la imagen y no agregues comentarios. Si no hay texto legible responde únicamente: SIN_TEXTO";
-      const texto = await generateVision(prompt, attachment.url);
-
-      if (!texto || texto.includes("SIN_TEXTO")) {
-        return ctx.ephemeral("No se detectó texto legible en la imagen");
+      const lang = await resolveContextLang({
+        guildId: ctx.guild?.id ?? null,
+        userId: ctx.user?.id ?? null,
+        locale: ctx.interaction?.locale ?? ctx.interaction?.guildLocale ?? null,
+      });
+      const isEn = lang === "en";
+      const raw = (ctx.get("opciones") ?? "").trim();
+      let items = [];
+      if (raw.includes("|")) {
+        items = raw.split("|");
+      } else if (raw.includes(",")) {
+        items = raw.split(",");
+      } else if (/\s+(?:o|or)\s+/i.test(raw)) {
+        items = raw.split(/\s+(?:o|or)\s+/i);
+      } else {
+        items = raw.split(/\s+/);
       }
 
-      const meta = formatAttachmentMeta(attachment, "imagen");
-      const subtitle = texto.length > 3600 ? `${meta} · ${num(texto.length)} caracteres` : meta;
-      const builder = new ComponentsV2Builder({ color: RED })
-        .addSection(
-          [`${V2Text.heading("Texto extraído", 3)}\n${V2Text.subtext(subtitle)}`],
-          { thumbnail: attachment.url, fallbackToText: true }
-        )
-        .addSeparator("small")
-        .addSmartText(texto, {
-          maxLength: 3600,
-          overflow: "file",
-          filename: require("../../src/i18n").getCurrentLang() === "en" ? "text.txt" : "texto.txt",
-          preview: false,
-          overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
-        });
+      items = items.map((s) => s.trim()).filter(Boolean);
+      if (items.length < 2) {
+        return ctx.ephemeral(
+          isEn
+            ? "Give me at least 2 options to pick from (separate with `,` or `|`)"
+            : "Debes darme al menos 2 opciones para elegir (sepáralas con `,` o `|`)"
+        );
+      }
 
-      await ctx.send(builder);
+      const eleccion = items[Math.floor(Math.random() * items.length)];
+      const card = ComponentsV2Builder.card({
+        title: isEn ? "Decision made" : "Decisión tomada",
+        fields: [
+          [isEn ? "Options" : "Opciones", items.map((i) => V2Text.code(i)).join(", ")],
+          [isEn ? "Choice" : "Elección", `**${eleccion}**`],
+        ],
+        fieldsSeparator: false,
+        color: RED,
+      });
+
+      await ctx.send(card);
     } catch (err) {
-      log.error("[util ocr]", { err: err?.message ?? String(err) });
+      log.error("[util choose]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);
     }
+  },
+};
+
+const lolCommand = {
+  data: new CommandBuilder({
+    name: "lol",
+    description: "Reacción rápida de risa irónica",
+  }),
+  params: new ParamsBuilder(),
+  async code(ctx) {
+    await ctx.send("😂🖕");
   },
 };
 
@@ -1120,9 +901,11 @@ const remindersCommand = {
 
   async code(ctx) {
     try {
-      const lang = ctx.guild?.id
-        ? await getLang(ctx.guild.id)
-        : detectLocaleLang(ctx.interaction?.locale ?? ctx.interaction?.guildLocale);
+      const lang = await resolveContextLang({
+        guildId: ctx.guild?.id ?? null,
+        userId: ctx.user?.id ?? null,
+        locale: ctx.interaction?.locale ?? ctx.interaction?.guildLocale ?? null,
+      });
       const userId = ctx.user?.id;
       const items = await listUserReminders(userId);
 
@@ -1205,38 +988,52 @@ const remindersCommand = {
   },
 };
 
+const requireManageGuild = Plugins.hasPerms("ManageGuild");
+
 const setlangCommand = {
   data: new CommandBuilder({
     name: "setlang",
-    description: "Configura o consulta el idioma del bot en el servidor",
+    description: "Configura o consulta el idioma del servidor o tu idioma personal",
     aliases: ["lang", "idioma"],
   }),
   params: new ParamsBuilder().addString({
     name: "idioma",
-    description: "Idioma del servidor (es / en)",
+    description: "Idioma del servidor o personal (es / en)",
     required: false,
     choices: [
       { name: "Español (es)", value: "es" },
       { name: "English (en)", value: "en" },
     ],
   }),
-  plugins: [Plugins.hasPerms("ManageGuild")],
+  plugins: [
+    (ctx) => {
+      if (!ctx?.guild) return true;
+      return requireManageGuild(ctx);
+    },
+  ],
 
   async code(ctx) {
     try {
-      if (!ctx.guild) return noGuildReply(ctx);
+      const isGuild = Boolean(ctx.guild);
+      const currentLang = await resolveContextLang({
+        guildId: ctx.guild?.id ?? null,
+        userId: ctx.user?.id ?? null,
+        locale: ctx.interaction?.locale ?? ctx.interaction?.guildLocale ?? null,
+      });
 
-      const currentLang = await getLang(ctx.guild.id);
       const rawArg = (ctx.get("idioma") ?? ctx.args?.[0] ?? "").trim().toLowerCase();
-      const guildIcon = ctx.guild.iconURL({ size: 256 });
+      const subtitle = isGuild ? ctx.guild.name : (ctx.user?.username ?? "DM");
+      const thumb = isGuild
+        ? ctx.guild.iconURL({ size: 256 })
+        : ctx.user?.displayAvatarURL?.({ size: 256 }) ?? null;
 
       if (!rawArg) {
         return ctx.send(
           buildCompactCard({
             title: currentLang === "en" ? "Current language" : "Idioma actual",
-            subtitle: ctx.guild.name,
+            subtitle,
             body: V2Text.fields([[t(currentLang, "setup.lang_label"), currentLang === "en" ? "English (`en`)" : "Español (`es`)"]]),
-            thumbnailUrl: guildIcon,
+            thumbnailUrl: thumb,
             color: RED,
           })
         );
@@ -1250,13 +1047,23 @@ const setlangCommand = {
         );
       }
 
-      const nextLang = await setLang(ctx.guild.id, normalizeLang(rawArg));
+      const normalized = normalizeLang(rawArg);
+      const nextLang = isGuild
+        ? await setLang(ctx.guild.id, normalized)
+        : await setUserLang(ctx.user.id, normalized);
+
+      const updatedMsg = isGuild
+        ? t(nextLang, "lang.updated")
+        : (nextLang === "en"
+            ? "Your personal language was changed to **English** (`en`) for DMs and User Apps."
+            : "Tu idioma personal fue cambiado a **Español** (`es`) para DMs y User Apps.");
+
       await ctx.send(
         buildCompactCard({
           title: nextLang === "en" ? "Language updated" : "Idioma actualizado",
-          subtitle: ctx.guild.name,
-          body: t(nextLang, "lang.updated"),
-          thumbnailUrl: guildIcon,
+          subtitle,
+          body: updatedMsg,
+          thumbnailUrl: thumb,
           color: GREEN,
         })
       );
@@ -1270,8 +1077,9 @@ const setlangCommand = {
 data.data
   .addCommand(pollCommand)
   .addCommand(remindCommand)
-  .addCommand(ocrCommand)
   .addCommand(remindersCommand)
+  .addCommand(chooseCommand)
+  .addCommand(lolCommand)
   .addCommand(setlangCommand);
 
 module.exports = { data };

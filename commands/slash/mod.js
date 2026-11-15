@@ -9,15 +9,28 @@ const {
   generateId,
   parseDuration,
   formatDuration,
+  addModCase,
   addWarn,
   applyWarnEscalation,
   removeWarnById,
   clearWarnsForUser,
-  listWarnsForUser,
+  listUnifiedHistoryForUser,
   upsertTempBan,
   scheduleTempUnban,
   cancelTempBan,
 } = require("../../src/moderation");
+
+const CASE_TYPE_LABELS = {
+  warn: "Warn",
+  mute: "Mute",
+  auto_mute: "Auto-Mute",
+  unmute: "Unmute",
+  kick: "Kick",
+  ban: "Ban",
+  tempban: "Tempban",
+  softban: "Softban",
+  unban: "Unban",
+};
 const { logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
 
 function notifyUser(user, { description, color = RED, fields = null }) {
@@ -82,6 +95,7 @@ const data = {
 
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `${tag}: ${reason}` });
           await cancelTempBan(ctx.guild.id, member.id);
+          await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "ban", reason });
 
           await ctx.send(
             buildActionCard({
@@ -136,6 +150,7 @@ const data = {
 
           await ctx.guild.members.unban(userId, `${tag}: ${reason}`);
           await cancelTempBan(ctx.guild.id, userId);
+          await addModCase({ guildId: ctx.guild.id, userId, moderatorId: ctx.user?.id, type: "unban", reason });
 
           await ctx.send(
             buildActionCard({
@@ -190,6 +205,7 @@ const data = {
 
           await member.ban({ deleteMessageSeconds: days * 86400, reason: `[SOFTBAN] ${tag}: ${reason}` });
           await ctx.guild.members.unban(member.id, `[SOFTBAN] ${tag}`);
+          await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "softban", reason });
 
           await ctx.send(
             buildActionCard({
@@ -263,6 +279,7 @@ const data = {
 
           await upsertTempBan({ guildId: ctx.guild.id, userId: member.id, unbanAt });
           scheduleTempUnban(ctx.guild.client, ctx.guild.id, member.id, unbanAt);
+          await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "tempban", reason, durationMs: duration });
 
           await ctx.send(
             buildActionCard({
@@ -333,6 +350,7 @@ const data = {
 
             await ctx.guild.members.ban(member, { reason: `[MASSBAN] ${tag}: ${reason}` });
             await cancelTempBan(ctx.guild.id, member.id);
+            await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "ban", reason });
             banned.push(member);
           } catch {
             failed.push(member);
@@ -395,6 +413,7 @@ const data = {
           });
 
           await member.kick(`${tag}: ${reason}`);
+          await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "kick", reason });
 
           await ctx.send(
             buildActionCard({
@@ -452,6 +471,7 @@ const data = {
 
         try {
           await member.timeout(duration, `${tag}: ${reason}`);
+          await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "mute", reason, durationMs: duration });
 
           const tiempo = formatDuration(duration);
           const expireTs = Math.floor((Date.now() + duration) / 1000);
@@ -510,6 +530,7 @@ const data = {
 
         try {
           await member.timeout(null, `${tag}: ${reason}`);
+          await addModCase({ guildId: ctx.guild.id, userId: member.id, moderatorId: ctx.user?.id, type: "unmute", reason });
 
           await ctx.send(
             buildActionCard({
@@ -785,7 +806,7 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "warnings", description: "Historial de advertencias de un usuario" }),
+      data: new CommandBuilder({ name: "warnings", description: "Historial de sanciones y advertencias de un usuario" }),
       params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar", required: true }),
       plugins: [Plugins.hasPerms("ModerateMembers")],
 
@@ -795,31 +816,33 @@ const data = {
         const authorId = ctx.user?.id;
 
         try {
-          const warns = await listWarnsForUser({ guildId: ctx.guild.id, userId: member.id });
-          if (!warns.length) {
-            return ctx.ephemeral(`${member.user.tag} no tiene advertencias`);
+          const cases = await listUnifiedHistoryForUser({ guildId: ctx.guild.id, userId: member.id });
+          if (!cases.length) {
+            return ctx.ephemeral(`${member.user.tag} no tiene sanciones registradas`);
           }
 
           const paginator = createListPaginator({
-            items: warns,
+            items: cases,
             perPage: 5,
             ownerId: authorId,
-            render: ({ items: pageWarns, pageIndex, totalPages, controls }) => {
+            render: ({ items: pageCases, pageIndex, totalPages, controls }) => {
               const builder = new ComponentsV2Builder({ color: YELLOW }).addSection(
                 [
-                  V2Text.heading(`Advertencias de ${V2Text.clip(member.user.tag, 100)}`, 3),
-                  V2Text.subtext(`Página ${pageIndex + 1}/${totalPages} · ${warns.length} en total`),
+                  V2Text.heading(`Historial de ${V2Text.clip(member.user.tag, 100)}`, 3),
+                  V2Text.subtext(`Página ${pageIndex + 1}/${totalPages} · ${cases.length} en total`),
                 ],
                 { thumbnail: member.user.displayAvatarURL({ size: 256 }) }
               );
 
-              for (const w of pageWarns) {
-                const ts = Math.floor(w.createdAt.getTime() / 1000);
-                const reason = V2Text.clip(w.reason, 500, "Sin razón");
+              for (const c of pageCases) {
+                const ts = Math.floor(new Date(c.createdAt).getTime() / 1000);
+                const reason = V2Text.clip(c.reason, 500, "Sin razón");
+                const typeLabel = CASE_TYPE_LABELS[c.type] ?? c.type;
+                const durSuffix = c.durationMs ? ` (${formatDuration(c.durationMs)})` : "";
                 builder.addSeparator("small").addText(
-                  `**\`${w.warnId}\`** — <t:${ts}:d>\n${V2Text.fields([
+                  `**[${typeLabel}${durSuffix}] \`${c.caseId}\`** — <t:${ts}:d>\n${V2Text.fields([
                     ["Razón", reason],
-                    ["Mod", `<@${w.moderator}>`],
+                    ["Mod", `<@${c.moderator}>`],
                   ])}`
                 );
               }
@@ -834,7 +857,7 @@ const data = {
 
           await paginator.send(ctx);
         } catch (err) {
-          return failWith(ctx, err, "No se pudieron obtener las advertencias");
+          return failWith(ctx, err, "No se pudo obtener el historial de sanciones");
         }
       },
     })

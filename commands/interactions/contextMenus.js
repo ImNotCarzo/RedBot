@@ -3,6 +3,7 @@ const { InteractionBuilder, Interactions } = require("gralonium");
 const {
   handleTranslateContext,
   handleOcrContext,
+  handleTranscribeContext,
   handleResumeContext,
   handleRemindContext,
   handleModDossierContext,
@@ -34,6 +35,14 @@ const CONTEXT_MENU_SPECS = [
     integrationTypes: USER_AND_GUILD_INTEGRATIONS,
     contexts: USER_AND_GUILD_CONTEXTS,
     run: (_bot, interaction) => handleOcrContext(interaction),
+  },
+  {
+    name: "Transcribir audio",
+    enName: "Transcribe audio",
+    interactionType: Interactions.MessageContextMenu,
+    integrationTypes: USER_AND_GUILD_INTEGRATIONS,
+    contexts: USER_AND_GUILD_CONTEXTS,
+    run: (_bot, interaction) => handleTranscribeContext(interaction),
   },
   {
     name: "Resumir mensaje",

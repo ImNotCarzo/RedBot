@@ -107,23 +107,34 @@ async function generateWithFallback(params, customChain = null) {
           triedModels.add(nextModel);
           requestParams.model = nextModel;
 
-          if (nextModel.startsWith("gemma") && requestParams.config?.systemInstruction) {
-            const sysInst = requestParams.config.systemInstruction;
-            delete requestParams.config.systemInstruction;
-            if (Array.isArray(requestParams.contents) && requestParams.contents.length > 0) {
-              const userTurn = requestParams.contents.find((c) => c.role === "user") || requestParams.contents[0];
-              if (userTurn?.parts) {
-                const textPart = userTurn.parts.find((p) => typeof p.text === "string");
-                if (textPart) {
-                  textPart.text = `[Instrucciones]: ${sysInst}\n\n${textPart.text}`;
-                } else {
-                  userTurn.parts.unshift({ text: `[Instrucciones]: ${sysInst}` });
+          if (nextModel.startsWith("gemma")) {
+            if (requestParams.config?.tools) {
+              delete requestParams.config.tools;
+            }
+            if (requestParams.config?.systemInstruction) {
+              const sysInst = requestParams.config.systemInstruction;
+              delete requestParams.config.systemInstruction;
+              if (Array.isArray(requestParams.contents) && requestParams.contents.length > 0) {
+                const userTurn = requestParams.contents.find((c) => c.role === "user") || requestParams.contents[0];
+                if (userTurn?.parts) {
+                  const textPart = userTurn.parts.find((p) => typeof p.text === "string");
+                  if (textPart) {
+                    textPart.text = `[Instrucciones]: ${sysInst}\n\n${textPart.text}`;
+                  } else {
+                    userTurn.parts.unshift({ text: `[Instrucciones]: ${sysInst}` });
+                  }
                 }
               }
             }
           }
           continue;
         }
+      }
+
+      if (status === 400 && requestParams.config?.tools && attempt < maxAttempts) {
+        delete requestParams.config.tools;
+        log.warn("Herramienta googleSearch rechazada con 400; reintentando sin tool", { model: requestParams.model });
+        continue;
       }
 
       if (attempt >= maxAttempts || !isRetriableAIError(err)) break;
@@ -261,7 +272,7 @@ async function performWebSearch(query) {
   return snippets;
 }
 
-async function generateChatReply(historial, { lang = "es" } = {}) {
+async function generateChatReply(historial, { lang = "es", imageUrl = null, serverContext = null, useSearch = null } = {}) {
   const resolvedLang = normalizeLang(lang);
   const normalizedHistory = toGeminiHistory(historial);
   const lastUserMsg = Array.isArray(historial)
@@ -274,7 +285,15 @@ async function generateChatReply(historial, { lang = "es" } = {}) {
     systemInstruction += "\n\nLANGUAGE OVERRIDE: This server uses English. Respond ONLY in natural, sarcastic, witty English with zero filler phrases (never say 'Sure!' or 'Of course!'). Keep answers concise and direct.";
   }
 
-  if (shouldSearchWeb(lastUserMsg)) {
+  const cleanServerContext = typeof serverContext === "string" ? serverContext.trim() : "";
+  if (cleanServerContext) {
+    systemInstruction += resolvedLang === "en"
+      ? `\n\n[Server context & FAQ]:\n${cleanServerContext.slice(0, 1000)}\nUse this context if relevant to the user's question.`
+      : `\n\n[Contexto e info del servidor]:\n${cleanServerContext.slice(0, 1000)}\nUsa este contexto si resulta relevante para la consulta del usuario.`;
+  }
+
+  const wantsSearch = useSearch !== null ? Boolean(useSearch) : shouldSearchWeb(lastUserMsg);
+  if (wantsSearch) {
     const searchQuery = extractSearchQuery(lastUserMsg) || lastUserMsg;
     const webSnippets = await performWebSearch(searchQuery);
     if (webSnippets.length > 0) {
@@ -292,13 +311,30 @@ async function generateChatReply(historial, { lang = "es" } = {}) {
     }
   }
 
+  if (imageUrl) {
+    const imagePart = typeof imageUrl === "string" ? await fetchImageAsInlineData(imageUrl) : imageUrl;
+    if (normalizedHistory.length > 0 && normalizedHistory[normalizedHistory.length - 1].role === "user") {
+      normalizedHistory[normalizedHistory.length - 1].parts.push(imagePart);
+    } else {
+      normalizedHistory.push({
+        role: "user",
+        parts: [{ text: resolvedLang === "en" ? "Analyze this image." : "Analiza esta imagen." }, imagePart],
+      });
+    }
+  }
+
+  const config = {
+    systemInstruction,
+    temperature: 0.9,
+  };
+  if (wantsSearch && !FALLBACK_CHAIN[0].startsWith("gemma")) {
+    config.tools = [{ googleSearch: {} }];
+  }
+
   const response = await generateWithFallback({
     model: FALLBACK_CHAIN[0],
     contents: normalizedHistory,
-    config: {
-      systemInstruction,
-      temperature: 0.9,
-    },
+    config,
   });
 
   return response.text?.trim() || (resolvedLang === "en" ? "I couldn't generate a response" : "No pude generar una respuesta");
@@ -510,12 +546,68 @@ Instrucciones estrictas:
   }
 }
 
+async function transcribeMedia(attachment, { maxBytes = 25 * 1024 * 1024 } = {}) {
+  const name = attachment?.name ?? "";
+  const contentType = attachment?.contentType ?? "";
+  const isAudioOrVideo =
+    /\.(mp3|mp4|wav|ogg|webm|m4a|flac|mov)$/i.test(name) ||
+    contentType.startsWith("audio/") ||
+    contentType.startsWith("video/");
+
+  if (!isAudioOrVideo) {
+    return { error: "unsupported" };
+  }
+  if ((attachment?.size ?? 0) > maxBytes) {
+    return { error: "too_large" };
+  }
+
+  const fileRes = await fetchPublic(attachment.url, {}, 15_000);
+  if (!fileRes.ok) throw new Error(`No se pudo descargar archivo (${fileRes.status})`);
+  const body = await readBodyLimited(fileRes, maxBytes);
+  if (body.tooLarge) {
+    return { error: "too_large" };
+  }
+
+  const buffer = body.buffer;
+  const cleanContentType = (contentType || fileRes.headers.get("content-type") || "audio/ogg").split(";")[0].trim();
+  const isMov = /\.mov$/i.test(name) || cleanContentType === "video/quicktime";
+
+  let text = null;
+  if (isMov) {
+    text = await generateTranscription(buffer, "video/quicktime");
+  } else {
+    try {
+      const { default: Groq } = require("groq-sdk");
+      const groq = new Groq({ apiKey: process.env.GROQ });
+      const resolvedMime = cleanContentType || "audio/ogg";
+      const fallbackName = name || (resolvedMime.includes("ogg") ? "voice-message.ogg" : "audio.mp3");
+      const blob = new Blob([buffer], { type: resolvedMime });
+      const file = new File([blob], fallbackName, { type: resolvedMime });
+
+      const result = await groq.audio.transcriptions.create({
+        file,
+        model: "whisper-large-v3",
+        response_format: "text",
+      });
+      text = result?.trim() || null;
+    } catch (groqErr) {
+      log.warn("[transcribeMedia] Falló Groq Whisper; usando Gemini como fallback", {
+        err: groqErr?.message ?? String(groqErr),
+      });
+      text = await generateTranscription(buffer, cleanContentType || "audio/mpeg");
+    }
+  }
+
+  return { text };
+}
+
 module.exports = {
   generateChatReply,
   generateText,
   generateVision,
   fetchImageAsInlineData,
   generateTranscription,
+  transcribeMedia,
   toGeminiHistory,
   setConversacion,
   getConversacion,

@@ -6,9 +6,32 @@ const guildSchema = new Schema({
   guildId:       { type: String, required: true, unique: true },
   prefix:        { type: String, default: ".", trim: true, minlength: 1, maxlength: 3 },
   lang:          { type: String, enum: ["es", "en", null], default: null },
+  aiContext:     { type: String, default: "", maxlength: 1000 },
   warnThreshold: { type: Number, default: 0, min: 0, max: 50 },
   warnMuteMs:    { type: Number, default: 10 * 60 * 1000 },
 }, { timestamps: true });
+
+const userConfigSchema = new Schema({
+  userId: { type: String, required: true, unique: true },
+  lang:   { type: String, enum: ["es", "en"], required: true },
+}, { timestamps: true });
+
+const modCaseSchema = new Schema({
+  guildId:    { type: String, required: true },
+  userId:     { type: String, required: true },
+  moderator:  { type: String, required: true },
+  type:       {
+    type: String,
+    required: true,
+    enum: ["warn", "mute", "unmute", "kick", "ban", "tempban", "softban", "unban", "auto_mute"],
+  },
+  reason:     { type: String, default: "Sin razón", maxlength: 500 },
+  durationMs: { type: Number, default: null },
+  caseId:     { type: String, required: true },
+  createdAt:  { type: Date, default: Date.now },
+});
+modCaseSchema.index({ guildId: 1, userId: 1, createdAt: -1 });
+modCaseSchema.index({ guildId: 1, caseId: 1 }, { unique: true });
 
 const joinRoleSchema = new Schema({
   guildId:    { type: String, required: true, unique: true },
@@ -85,10 +108,12 @@ const aiSessionSchema = new Schema({
 aiSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const GuildConfig   = models.GuildConfig   || model("GuildConfig", guildSchema);
+const UserConfig    = models.UserConfig    || model("UserConfig", userConfigSchema);
 const JoinRole      = models.JoinRole      || model("JoinRole", joinRoleSchema);
 const Log           = models.Log           || model("Log", logSchema);
 const TempBan       = models.TempBan       || model("TempBan", tempBanSchema);
 const Warn          = models.Warn          || model("Warn", warnSchema);
+const ModCase       = models.ModCase       || model("ModCase", modCaseSchema);
 const Afk           = models.Afk           || model("Afk", afkSchema);
 const Reminder      = models.Reminder      || model("Reminder", reminderSchema);
 const ReleaseNotice = models.ReleaseNotice || model("ReleaseNotice", releaseNoticeSchema);
@@ -130,10 +155,12 @@ module.exports = {
   connectDatabase,
   closeDatabase,
   GuildConfig,
+  UserConfig,
   JoinRole,
   Log,
   TempBan,
   Warn,
+  ModCase,
   Afk,
   Reminder,
   ReleaseNotice,

@@ -4,7 +4,7 @@ const {
   getConversacion,
   generateChatReply,
 } = require("../src/ai");
-const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk, getLang } = require("../src/guild");
+const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk, getLang, resolveContextLang, getAiContext } = require("../src/guild");
 const { getMessageText } = require("../src/adapter");
 const { Logger } = require("../src/runtime");
 const {
@@ -12,6 +12,19 @@ const {
   MAX_EMBED_DESCRIPTION,
   RED,
 } = require("../src/config");
+
+const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+
+function extractReplyImageUrl(message) {
+  const att = message?.attachments?.first?.();
+  if (!att) return null;
+  const ct = att.contentType ?? "";
+  const name = att.name ?? "";
+  const isImage = VALID_IMAGE_TYPES.some((t) => ct.startsWith(t)) || /\.(png|jpe?g|gif|webp)$/i.test(name);
+  if (!isImage || (att.size ?? 0) > MAX_IMAGE_SIZE_BYTES) return null;
+  return att.url ?? null;
+}
 
 const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
@@ -89,11 +102,12 @@ const event = {
 
       if (!message.reference?.messageId) return;
 
-      const pregunta = message.content?.trim();
-      if (!pregunta) return;
+      const rawPregunta = message.content?.trim() ?? "";
+      const imageUrl = extractReplyImageUrl(message);
+      if (!rawPregunta && !imageUrl) return;
 
       // Evitar conflicto si el usuario está ejecutando un comando con prefijo mientras hace reply
-      if (pregunta.startsWith(prefix)) return;
+      if (rawPregunta.startsWith(prefix)) return;
 
       const repliedMsg =
         message.channel.messages.cache.get(message.reference.messageId) ??
@@ -107,8 +121,13 @@ const event = {
 
       await message.channel.sendTyping().catch(() => {});
 
-      const lang = message.guildId ? await getLang(message.guildId) : "es";
+      const lang = await resolveContextLang({
+        guildId: message.guildId ?? null,
+        userId: message.author?.id ?? null,
+      });
       const isEn = lang === "en";
+      const pregunta = rawPregunta || (isEn ? "Analyze this image." : "Analiza esta imagen.");
+      const serverContext = message.guildId ? await getAiContext(message.guildId).catch(() => "") : "";
       const userData = getConversacion(message.author.id, message.guildId ?? "dm");
       let historial = Array.isArray(userData?.historial)
         ? [...userData.historial.slice(-MAX_HISTORIAL)]
@@ -131,9 +150,9 @@ const event = {
         }
       }
 
-      historial.push({ role: "user", content: pregunta });
+      historial.push({ role: "user", content: imageUrl ? `${pregunta} [imagen]` : pregunta });
 
-      const respuesta = await generateChatReply(historial, { lang });
+      const respuesta = await generateChatReply(historial, { lang, imageUrl, serverContext });
 
       historial.push({ role: "assistant", content: respuesta });
       const historialFinal = historial.length > MAX_HISTORIAL
@@ -168,7 +187,10 @@ const event = {
       setConversacion(message.author.id, historialFinal, botMsg.id, message.guildId ?? "dm");
     } catch (err) {
       log.error("messageCreate IA", { err: err?.message ?? String(err) });
-      const lang = message.guildId ? await getLang(message.guildId).catch(() => "es") : "es";
+      const lang = await resolveContextLang({
+        guildId: message.guildId ?? null,
+        userId: message.author?.id ?? null,
+      }).catch(() => "es");
       const isRateLimit = err?.status === 429 || (err?.message ?? "").includes("429");
       const errorMsg = lang === "en"
         ? (isRateLimit

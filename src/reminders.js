@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
 const { Reminder } = require("./database");
 const { RED } = require("./config");
 const { Logger } = require("./runtime");
@@ -41,24 +41,42 @@ function scheduleReminder(client, doc) {
   timers.set(id, timer);
 }
 
+function buildSnoozeRow(userId, lang = "es", disabled = false) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`rem_snooze:${userId}:15m`)
+      .setLabel(lang === "en" ? "Snooze +15 min" : "Posponer +15 min")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId(`rem_snooze:${userId}:1h`)
+      .setLabel(lang === "en" ? "Snooze +1 hour" : "Posponer +1 hora")
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled)
+  );
+}
+
 async function deliverReminder(client, doc) {
   const id = String(doc._id);
   try {
     const pending = await Reminder.exists({ _id: doc._id });
     if (!pending) return;
 
-    const lang = doc.guildId ? await require("./guild").getLang(doc.guildId).catch(() => "es") : "es";
+    const lang = await require("./guild")
+      .resolveContextLang({ guildId: doc.guildId ?? null, userId: doc.userId ?? null })
+      .catch(() => "es");
     const embed = new EmbedBuilder()
       .setTitle(lang === "en" ? "Reminder" : "Recordatorio")
       .setDescription(doc.text)
       .setColor(RED)
       .setTimestamp(doc.createdAt ? new Date(doc.createdAt) : new Date());
 
+    const components = [buildSnoozeRow(doc.userId, lang)];
     let sent = false;
 
     const user = await client.users.fetch(doc.userId).catch(() => null);
     if (user) {
-      sent = await user.send({ embeds: [embed] }).then(() => true).catch(() => false);
+      sent = await user.send({ embeds: [embed], components }).then(() => true).catch(() => false);
     }
 
     if (!sent && doc.channelId) {
@@ -68,6 +86,7 @@ async function deliverReminder(client, doc) {
           .send({
             content: `<@${doc.userId}>`,
             embeds: [embed],
+            components,
             allowedMentions: { users: [doc.userId] },
           })
           .then(() => true)
@@ -133,5 +152,7 @@ module.exports = {
   cancelReminder,
   restoreReminders,
   scheduleReminder,
+  deliverReminder,
+  buildSnoozeRow,
   MAX_PER_USER,
 };

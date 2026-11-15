@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
-const { GuildConfig, Log, Afk } = require("./database");
+const { GuildConfig, UserConfig, Log, Afk } = require("./database");
 const { Logger, parsePositiveInt, withTimeout } = require("./runtime");
 
 const log = new Logger("GUILD_SERVICE");
@@ -49,6 +49,8 @@ const { detectLocaleLang, normalizeLang } = require("./i18n");
 
 const prefixCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const langCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const userLangCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const aiContextCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const warnPolicyCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS);
 const afkCache = new TtlCache(AFK_CACHE_TTL_MS, AFK_CACHE_MAX);
@@ -90,6 +92,79 @@ async function setLang(guildId, lang) {
     } catch {}
   }
   return resolved;
+}
+
+async function getUserLang(userId) {
+  if (!userId) return null;
+  const cached = userLangCache.get(userId);
+  if (cached) return cached;
+  if (UserConfig.db?.readyState !== 1) return null;
+  try {
+    const doc = await UserConfig.findOne({ userId }).select("lang").lean();
+    if (doc?.lang === "es" || doc?.lang === "en") {
+      userLangCache.set(userId, doc.lang);
+      return doc.lang;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function setUserLang(userId, lang) {
+  const resolved = normalizeLang(lang);
+  if (!userId) return resolved;
+  userLangCache.set(userId, resolved);
+  if (UserConfig.db?.readyState === 1) {
+    try {
+      await UserConfig.findOneAndUpdate(
+        { userId },
+        { $set: { lang: resolved } },
+        { upsert: true, returnDocument: "after" }
+      );
+    } catch {}
+  }
+  return resolved;
+}
+
+async function resolveContextLang({ guildId = null, userId = null, locale = null } = {}) {
+  if (guildId) return getLang(guildId);
+  if (userId) {
+    const userLang = await getUserLang(userId);
+    if (userLang) return userLang;
+  }
+  return detectLocaleLang(locale);
+}
+
+async function getAiContext(guildId) {
+  if (!guildId) return "";
+  const cached = aiContextCache.get(guildId);
+  if (cached !== undefined) return cached;
+  if (GuildConfig.db?.readyState !== 1) return "";
+  try {
+    const doc = await GuildConfig.findOne({ guildId }).select("aiContext").lean();
+    const ctxText = typeof doc?.aiContext === "string" ? doc.aiContext.trim() : "";
+    aiContextCache.set(guildId, ctxText);
+    return ctxText;
+  } catch {
+    return "";
+  }
+}
+
+async function setAiContext(guildId, text) {
+  const clean = typeof text === "string" ? text.trim().slice(0, 1000) : "";
+  if (!guildId) return clean;
+  aiContextCache.set(guildId, clean);
+  if (GuildConfig.db?.readyState === 1) {
+    try {
+      await GuildConfig.findOneAndUpdate(
+        { guildId },
+        { $set: { aiContext: clean } },
+        { upsert: true, returnDocument: "after" }
+      );
+    } catch {}
+  }
+  return clean;
 }
 
 async function getWarnPolicy(guildId) {
@@ -274,6 +349,11 @@ module.exports = {
   detectDefaultGuildLang,
   getLang,
   setLang,
+  getUserLang,
+  setUserLang,
+  resolveContextLang,
+  getAiContext,
+  setAiContext,
   getWarnPolicy,
   setWarnPolicy,
   getAfk,
