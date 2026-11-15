@@ -2,7 +2,8 @@ const http = require("http");
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { ChannelType } = require("discord.js");
-const { Logger } = require("./runtime");
+const { applyOauthGuildLang } = require("./guild");
+const { INVITE_URL, Logger } = require("./runtime");
 const { version: PACKAGE_VERSION } = require("../package.json");
 
 let server = null;
@@ -11,9 +12,13 @@ let apiConfig = null;
 let log = null;
 
 const rateStore = new Map();
+const oauthStates = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 30;
 const MAX_RATE_ENTRIES = 5000;
+const OAUTH_STATE_TTL_MS = 10 * 60_000;
+const MAX_OAUTH_STATES = 2000;
+const PUBLIC_BROWSER_ROUTES = new Set(["/invite", "/api/invite", "/oauth/callback", "/api/oauth/callback"]);
 let ratePruneTimer = null;
 
 function checkRate(ip) {
@@ -77,6 +82,83 @@ function formatUptime(ms) {
   return parts.join(" ");
 }
 
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sendHtml(res, status, title, heading, message, extraHeaders = {}) {
+  const html = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#141518;color:#f2f3f5;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
+  .card{max-width:460px;width:100%;background:#1e1f24;border:1px solid #ff383d55;border-radius:14px;padding:28px;box-shadow:0 16px 40px #0008;text-align:center}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#ff383d22;color:#ff5a5e;font-size:12px;font-weight:700;letter-spacing:.4px;margin-bottom:12px}
+  h1{margin:0 0 10px;font-size:22px}
+  p{margin:0;color:#b5bac1;line-height:1.5;font-size:15px}
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge">REDBOT</div>
+    <h1>${escapeHtml(heading)}</h1>
+    <p>${escapeHtml(message)}</p>
+  </main>
+</body>
+</html>`;
+  res.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Length": Buffer.byteLength(html),
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    ...extraHeaders,
+  });
+  res.end(html);
+}
+
+function parseCookies(req) {
+  const header = req.headers?.cookie;
+  const out = {};
+  if (!header) return out;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim();
+    const val = part.slice(idx + 1).trim();
+    try {
+      out[key] = decodeURIComponent(val);
+    } catch {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+function safeEqualString(a, b) {
+  const bufA = Buffer.from(String(a || ""));
+  const bufB = Buffer.from(String(b || ""));
+  return bufA.length > 0 && bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+function getOAuthSettings() {
+  return {
+    clientId: botClient?.user?.id || apiConfig?.CLIENT_ID || process.env.CLIENT_ID || "",
+    clientSecret: apiConfig?.CLIENT_SECRET || process.env.CLIENT_SECRET || "",
+    redirectUri: apiConfig?.OAUTH_REDIRECT_URI || process.env.OAUTH_REDIRECT_URI || "https://redbot.me/api/oauth/callback",
+    successUrl: apiConfig?.OAUTH_SUCCESS_URL || process.env.OAUTH_SUCCESS_URL || "",
+    permissions: apiConfig?.INVITE_PERMISSIONS || process.env.INVITE_PERMISSIONS || "8",
+  };
+}
+
 function handleRoot() {
   return {
     name: "RedBot API",
@@ -86,6 +168,8 @@ function handleRoot() {
       { path: "/api/commands", description: "Catálogo completo de comandos" },
       { path: "/api/bot", description: "Perfil e identidad del bot" },
       { path: "/api/health", description: "Estado de salud del sistema" },
+      { path: "/api/invite", description: "Redirección OAuth2 con detección automática de idioma" },
+      { path: "/api/oauth/callback", description: "Callback OAuth2 de Discord para detectar idioma inicial" },
     ],
   };
 }
@@ -213,7 +297,7 @@ function handleBot() {
     createdTimestamp: user?.createdTimestamp ?? null,
     bot: true,
     verified: user?.flags?.has?.("VerifiedBot") ?? false,
-    invite: `https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=0&scope=bot`,
+    invite: INVITE_URL,
     support: "https://discord.gg/b8AKKaNWU6",
     website: "https://redbot.me",
     defaultPrefix: ".",
@@ -259,6 +343,217 @@ function handleHealth() {
   };
 }
 
+function issueOAuthState() {
+  const now = Date.now();
+  if (oauthStates.size >= MAX_OAUTH_STATES) {
+    for (const [key, exp] of oauthStates) {
+      if (exp <= now) oauthStates.delete(key);
+    }
+    while (oauthStates.size >= MAX_OAUTH_STATES) {
+      const oldest = oauthStates.keys().next().value;
+      if (oldest !== undefined) oauthStates.delete(oldest);
+      else break;
+    }
+  }
+  const state = crypto.randomBytes(24).toString("hex");
+  oauthStates.set(state, now + OAUTH_STATE_TTL_MS);
+  return state;
+}
+
+function consumeOAuthState(state) {
+  if (!state || typeof state !== "string") return false;
+  const exp = oauthStates.get(state);
+  if (!exp) return false;
+  oauthStates.delete(state);
+  return exp > Date.now();
+}
+
+function isSecureRequest(req, redirectUri) {
+  return Boolean(
+    req.socket?.encrypted ||
+    req.headers?.["x-forwarded-proto"] === "https" ||
+    String(redirectUri || "").startsWith("https://")
+  );
+}
+
+function handleInviteRedirect(req, res, urlObj) {
+  const { clientId, redirectUri, permissions } = getOAuthSettings();
+  if (!clientId) {
+    return sendHtml(res, 503, "RedBot Invite", "Configuración incompleta", "CLIENT_ID no está configurado.");
+  }
+
+  const state = issueOAuthState();
+  const params = new URLSearchParams({
+    client_id: clientId,
+    permissions: String(permissions || "8"),
+    integration_type: "0",
+    scope: "bot applications.commands identify",
+    response_type: "code",
+    redirect_uri: redirectUri,
+    state,
+  });
+
+  const guildId = urlObj.searchParams.get("guild_id");
+  if (guildId && /^\d{17,22}$/.test(guildId)) {
+    params.set("guild_id", guildId);
+  }
+
+  const secureAttr = isSecureRequest(req, redirectUri) ? "; Secure" : "";
+  res.writeHead(302, {
+    Location: `https://discord.com/oauth2/authorize?${params.toString()}`,
+    "Cache-Control": "no-store",
+    "Set-Cookie": `redbot_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600${secureAttr}`,
+  });
+  res.end();
+}
+
+async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri }) {
+  const tokenRes = await fetch("https://discord.com/api/v10/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+    }).toString(),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!tokenRes.ok) {
+    throw new Error(`Discord token exchange failed (${tokenRes.status})`);
+  }
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData?.access_token;
+  if (!accessToken) {
+    throw new Error("Discord token exchange missing access_token");
+  }
+
+  const userRes = await fetch("https://discord.com/api/v10/users/@me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!userRes.ok) {
+    throw new Error(`Discord user profile fetch failed (${userRes.status})`);
+  }
+  const userData = await userRes.json();
+  return {
+    userId: userData?.id ? String(userData.id) : null,
+    locale: userData?.locale ? String(userData.locale) : null,
+    tokenGuildId: tokenData?.guild?.id ? String(tokenData.guild.id) : null,
+  };
+}
+
+async function handleOAuthCallback(req, res, urlObj) {
+  const { clientId, clientSecret, redirectUri, successUrl } = getOAuthSettings();
+  const secureAttr = isSecureRequest(req, redirectUri) ? "; Secure" : "";
+  const clearCookie = `redbot_oauth_state=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureAttr}`;
+
+  const oauthError = urlObj.searchParams.get("error");
+  if (oauthError) {
+    return sendHtml(
+      res,
+      200,
+      "RedBot OAuth2",
+      "Autorización cancelada",
+      "No se completó la invitación de RedBot. Puedes cerrar esta pestaña e intentarlo de nuevo.",
+      { "Set-Cookie": clearCookie }
+    );
+  }
+
+  if (!clientId || !clientSecret) {
+    return sendHtml(
+      res,
+      503,
+      "RedBot OAuth2",
+      "OAuth2 no configurado",
+      "Falta configurar CLIENT_SECRET en el servidor del bot.",
+      { "Set-Cookie": clearCookie }
+    );
+  }
+
+  const code = urlObj.searchParams.get("code") || "";
+  if (!code || code.length > 512) {
+    return sendHtml(
+      res,
+      400,
+      "RedBot OAuth2",
+      "Código inválido",
+      "Falta el parámetro code de Discord.",
+      { "Set-Cookie": clearCookie }
+    );
+  }
+
+  const stateParam = urlObj.searchParams.get("state") || "";
+  const cookieState = parseCookies(req).redbot_oauth_state || "";
+  if (stateParam || cookieState) {
+    const cookieMatches = !cookieState || safeEqualString(stateParam, cookieState);
+    if (!cookieMatches || !consumeOAuthState(stateParam)) {
+      return sendHtml(
+        res,
+        403,
+        "RedBot OAuth2",
+        "Estado de seguridad inválido",
+        "La sesión de invitación expiró o no es válida. Vuelve a abrir redbot.me/invite.",
+        { "Set-Cookie": clearCookie }
+      );
+    }
+  }
+
+  try {
+    const { userId, locale, tokenGuildId } = await exchangeDiscordOAuth({
+      code,
+      clientId,
+      clientSecret,
+      redirectUri,
+    });
+
+    const queryGuildId = urlObj.searchParams.get("guild_id");
+    const guildId = (queryGuildId && /^\d{17,22}$/.test(queryGuildId))
+      ? queryGuildId
+      : (tokenGuildId && /^\d{17,22}$/.test(tokenGuildId) ? tokenGuildId : null);
+
+    const applied = await applyOauthGuildLang({ guildId, userId, locale });
+    log?.info("OAuth2 callback procesado", { guildId: guildId ?? null, lang: applied.lang });
+
+    if (successUrl && /^https?:\/\//i.test(successUrl)) {
+      const target = new URL(successUrl);
+      target.searchParams.set("lang", applied.lang);
+      if (guildId) target.searchParams.set("guild_id", guildId);
+      res.writeHead(302, {
+        Location: target.toString(),
+        "Cache-Control": "no-store",
+        "Set-Cookie": clearCookie,
+      });
+      return res.end();
+    }
+
+    const isEn = applied.lang === "en";
+    return sendHtml(
+      res,
+      200,
+      isEn ? "RedBot added" : "RedBot añadido",
+      isEn ? "RedBot has been added" : "RedBot ha sido añadido",
+      isEn
+        ? "Language automatically configured to English based on your Discord settings. You can close this tab."
+        : "Idioma configurado automáticamente en Español según tu configuración de Discord. Ya puedes cerrar esta pestaña.",
+      { "Set-Cookie": clearCookie }
+    );
+  } catch (err) {
+    log?.warn("Error en callback OAuth2", { err: err?.message ?? String(err) });
+    return sendHtml(
+      res,
+      502,
+      "RedBot OAuth2",
+      "No se pudo completar la verificación",
+      "Discord no respondió correctamente al validar la invitación. RedBot seguirá funcionando con su configuración por defecto.",
+      { "Set-Cookie": clearCookie }
+    );
+  }
+}
+
 const routes = new Map([
   ["/api", handleRoot],
   ["/api/stats", handleStats],
@@ -267,7 +562,7 @@ const routes = new Map([
   ["/api/health", handleHealth],
 ]);
 
-function handleRequest(req, res) {
+async function handleRequest(req, res) {
   setCors(res);
 
   if (req.method === "OPTIONS") {
@@ -292,24 +587,31 @@ function handleRequest(req, res) {
     return json(res, 429, { error: "Too many requests", retryAfter: 60 });
   }
 
-  if (!isAuthorized(req)) {
+  let urlObj;
+  try {
+    urlObj = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+  } catch {
+    urlObj = new URL("http://localhost/");
+  }
+  let pathname = urlObj.pathname.replace(/\/+$/, "") || "/api";
+  if (pathname === "/") pathname = "/api";
+
+  if (!PUBLIC_BROWSER_ROUTES.has(pathname) && !isAuthorized(req)) {
     return json(res, 401, { error: "Unauthorized" });
   }
 
-  let pathname;
-  try {
-    pathname = new URL(req.url, `http://${req.headers.host ?? "localhost"}`).pathname;
-  } catch {
-    pathname = req.url?.split("?")[0] ?? "/";
+  if (pathname === "/invite" || pathname === "/api/invite") {
+    return handleInviteRedirect(req, res, urlObj);
   }
-  pathname = pathname.replace(/\/+$/, "") || "/api";
-  if (pathname === "/") pathname = "/api";
+  if (pathname === "/oauth/callback" || pathname === "/api/oauth/callback") {
+    return handleOAuthCallback(req, res, urlObj);
+  }
 
   const handler = routes.get(pathname);
   if (!handler) {
     return json(res, 404, {
       error: "Endpoint not found",
-      endpoints: [...routes.keys()],
+      endpoints: [...routes.keys(), "/api/invite", "/api/oauth/callback"],
     });
   }
 
@@ -321,14 +623,23 @@ function handleRequest(req, res) {
   }
 }
 
+function setApiContext({ client = null, config = null, logger = null } = {}) {
+  botClient = client;
+  apiConfig = config;
+  log = logger ?? new Logger("API");
+}
+
 function startApi(client, config, logger) {
   return new Promise((resolve) => {
-    botClient = client;
-    apiConfig = config;
-    log = logger ?? new Logger("API");
+    setApiContext({ client, config, logger });
 
     const port = Number(config?.API_PORT) || 3000;
-    server = http.createServer(handleRequest);
+    server = http.createServer((req, res) => {
+      Promise.resolve(handleRequest(req, res)).catch((err) => {
+        log?.error("Error no controlado en API", { err: err?.message ?? String(err) });
+        if (!res.headersSent) json(res, 500, { error: "Internal server error" });
+      });
+    });
 
     server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
@@ -352,6 +663,9 @@ function startApi(client, config, logger) {
         for (const [ip, entry] of rateStore) {
           if (now - entry.start > RATE_WINDOW_MS * 2) rateStore.delete(ip);
         }
+        for (const [state, exp] of oauthStates) {
+          if (exp <= now) oauthStates.delete(state);
+        }
       }, 5 * 60_000);
       ratePruneTimer.unref();
 
@@ -367,6 +681,7 @@ function stopApi() {
       ratePruneTimer = null;
     }
     rateStore.clear();
+    oauthStates.clear();
 
     if (!server) return resolve();
 
@@ -379,4 +694,4 @@ function stopApi() {
   });
 }
 
-module.exports = { startApi, stopApi };
+module.exports = { startApi, stopApi, handleRequest, setApiContext };

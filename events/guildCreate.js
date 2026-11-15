@@ -1,8 +1,13 @@
-const { ChannelType, ComponentType, MessageFlags, PermissionFlagsBits } = require("discord.js");
+const { AuditLogEvent, ChannelType, ComponentType, MessageFlags, PermissionFlagsBits } = require("discord.js");
 const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { RED } = require("../src/config");
-const { GuildConfig } = require("../src/database");
-const { detectDefaultGuildLang, setLang } = require("../src/guild");
+const {
+  detectDefaultGuildLang,
+  getOauthGuildLang,
+  getUserLang,
+  registerWelcomeCard,
+  setLang,
+} = require("../src/guild");
 const { normalizeLang, t } = require("../src/i18n");
 const { Logger, sanitizeError } = require("../src/runtime");
 
@@ -53,19 +58,43 @@ function findWelcomeChannel(guild) {
   return guild.channels?.cache?.find((ch) => canSend(ch)) ?? null;
 }
 
+async function resolveInitialGuildLang(guild) {
+  const oauthLang = getOauthGuildLang(guild.id);
+  if (oauthLang) return { lang: oauthLang, source: "oauth" };
+
+  let inviterId = null;
+  try {
+    if (guild.members?.me?.permissions?.has?.(PermissionFlagsBits.ViewAuditLog) && typeof guild.fetchAuditLogs === "function") {
+      const logs = await guild.fetchAuditLogs({ type: AuditLogEvent.BotAdd, limit: 3 });
+      const botId = guild.client?.user?.id;
+      const entry = logs?.entries?.find((e) => !botId || e.target?.id === botId);
+      if (entry?.executorId) inviterId = entry.executorId;
+    }
+  } catch {}
+
+  for (const uid of [inviterId, guild.ownerId]) {
+    if (!uid) continue;
+    const userLang = await getUserLang(uid);
+    if (userLang) return { lang: userLang, source: "oauth" };
+  }
+
+  return { lang: detectDefaultGuildLang(guild), source: "auto" };
+}
+
 const event = {
   name: "guildCreate",
   once: false,
   async code(_bot, guild) {
     if (!guild?.id) return;
 
-    const initialLang = detectDefaultGuildLang(guild);
+    const { lang: initialLang, source } = await resolveInitialGuildLang(guild);
 
-    await setLang(guild.id, initialLang);
+    await setLang(guild.id, initialLang, { source });
     log.info("Bot añadido a servidor", {
       guildId: guild.id,
       preferredLocale: guild.preferredLocale ?? null,
       lang: initialLang,
+      source,
     });
 
     const channel = findWelcomeChannel(guild);
@@ -74,6 +103,15 @@ const event = {
     let currentLang = initialLang;
     try {
       const sent = await channel.send(buildWelcomeCard(currentLang, guild).toPayload());
+      if (sent?.edit) {
+        registerWelcomeCard(guild.id, {
+          message: sent,
+          guild,
+          lang: currentLang,
+          source,
+          render: (nextLang) => buildWelcomeCard(nextLang, guild).toPayload(),
+        });
+      }
       if (!sent?.createMessageComponentCollector) return;
 
       const collector = sent.createMessageComponentCollector({
@@ -92,7 +130,7 @@ const event = {
           }
 
           const nextLang = interaction.customId === "welcome_lang:en" ? "en" : "es";
-          currentLang = await setLang(guild.id, nextLang);
+          currentLang = await setLang(guild.id, nextLang, { source: "manual" });
           await interaction.update(buildWelcomeCard(currentLang, guild).toPayload()).catch(() => {});
         } catch (err) {
           log.warn("Error al cambiar idioma en welcome card", { err: sanitizeError(err) });

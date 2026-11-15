@@ -49,6 +49,9 @@ const { detectLocaleLang, normalizeLang } = require("./i18n");
 
 const prefixCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const langCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const langSourceCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const oauthGuildLangCache = new TtlCache(10 * 60_000, 1000);
+const recentWelcomeCache = new TtlCache(3 * 60_000, 500);
 const userLangCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const aiContextCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const warnPolicyCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
@@ -56,6 +59,7 @@ const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS);
 const afkCache = new TtlCache(AFK_CACHE_TTL_MS, AFK_CACHE_MAX);
 
 const DEFAULT_WARN_MUTE_MS = 10 * 60 * 1000;
+const VALID_LANG_SOURCES = new Set(["auto", "oauth", "manual"]);
 
 function detectDefaultGuildLang(guild) {
   return detectLocaleLang(guild?.preferredLocale);
@@ -67,10 +71,13 @@ async function getLang(guildId) {
   if (cached) return cached;
   if (GuildConfig.db?.readyState !== 1) return "es";
   try {
-    const doc = await GuildConfig.findOne({ guildId }).select("lang").lean();
+    const doc = await GuildConfig.findOne({ guildId }).select("lang langSource").lean();
     const lang = doc?.lang === "en" ? "en" : "es";
     if (doc?.lang === "es" || doc?.lang === "en") {
       langCache.set(guildId, lang);
+    }
+    if (VALID_LANG_SOURCES.has(doc?.langSource)) {
+      langSourceCache.set(guildId, doc.langSource);
     }
     return lang;
   } catch {
@@ -78,20 +85,87 @@ async function getLang(guildId) {
   }
 }
 
-async function setLang(guildId, lang) {
+async function getLangSource(guildId) {
+  if (!guildId) return "auto";
+  const cached = langSourceCache.get(guildId);
+  if (cached) return cached;
+  if (GuildConfig.db?.readyState !== 1) return "auto";
+  try {
+    const doc = await GuildConfig.findOne({ guildId }).select("langSource").lean();
+    const source = VALID_LANG_SOURCES.has(doc?.langSource) ? doc.langSource : "auto";
+    langSourceCache.set(guildId, source);
+    return source;
+  } catch {
+    return "auto";
+  }
+}
+
+async function setLang(guildId, lang, { source = "manual" } = {}) {
   const resolved = normalizeLang(lang);
+  const resolvedSource = VALID_LANG_SOURCES.has(source) ? source : "manual";
   if (!guildId) return resolved;
   langCache.set(guildId, resolved);
+  langSourceCache.set(guildId, resolvedSource);
+  const recent = recentWelcomeCache.get(guildId);
+  if (recent) {
+    recent.lang = resolved;
+    recent.source = resolvedSource;
+  }
   if (GuildConfig.db?.readyState === 1) {
     try {
       await GuildConfig.findOneAndUpdate(
         { guildId },
-        { $set: { lang: resolved } },
+        { $set: { lang: resolved, langSource: resolvedSource } },
         { upsert: true, returnDocument: "after" }
       );
     } catch {}
   }
   return resolved;
+}
+
+function getOauthGuildLang(guildId) {
+  if (!guildId) return null;
+  return oauthGuildLangCache.get(guildId) ?? null;
+}
+
+function registerWelcomeCard(guildId, entry) {
+  if (!guildId || !entry) return;
+  recentWelcomeCache.set(guildId, entry);
+}
+
+async function applyOauthGuildLang({ guildId = null, userId = null, locale = null } = {}) {
+  const detected = detectLocaleLang(locale);
+  if (userId) {
+    const existingUserLang = await getUserLang(userId);
+    if (!existingUserLang) {
+      await setUserLang(userId, detected);
+    }
+  }
+
+  let updatedGuild = false;
+  if (guildId) {
+    oauthGuildLangCache.set(guildId, detected);
+    const currentSource = await getLangSource(guildId);
+    if (currentSource !== "manual") {
+      const recent = recentWelcomeCache.get(guildId);
+      const needsEdit = Boolean(
+        recent &&
+        recent.source !== "manual" &&
+        recent.lang !== detected &&
+        typeof recent.message?.edit === "function" &&
+        typeof recent.render === "function"
+      );
+      await setLang(guildId, detected, { source: "oauth" });
+      updatedGuild = true;
+      if (needsEdit) {
+        try {
+          await recent.message.edit(recent.render(detected));
+        } catch {}
+      }
+    }
+  }
+
+  return { lang: detected, updatedGuild, guildId, userId };
 }
 
 async function getUserLang(userId) {
@@ -348,7 +422,11 @@ module.exports = {
   setPrefix,
   detectDefaultGuildLang,
   getLang,
+  getLangSource,
   setLang,
+  getOauthGuildLang,
+  registerWelcomeCard,
+  applyOauthGuildLang,
   getUserLang,
   setUserLang,
   resolveContextLang,

@@ -22,6 +22,10 @@ function validateEnv() {
     API_KEY: process.env.API_KEY || "",
     API_CORS_ORIGIN: process.env.API_CORS_ORIGIN || "*",
     TRUST_PROXY: process.env.TRUST_PROXY === "true",
+    CLIENT_SECRET: process.env.CLIENT_SECRET || "",
+    OAUTH_REDIRECT_URI: process.env.OAUTH_REDIRECT_URI || "https://redbot.me/api/oauth/callback",
+    OAUTH_SUCCESS_URL: process.env.OAUTH_SUCCESS_URL || "",
+    INVITE_PERMISSIONS: process.env.INVITE_PERMISSIONS || "8",
   };
 }
 

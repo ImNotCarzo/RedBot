@@ -6,6 +6,7 @@ const guildSchema = new Schema({
   guildId:       { type: String, required: true, unique: true },
   prefix:        { type: String, default: ".", trim: true, minlength: 1, maxlength: 3 },
   lang:          { type: String, enum: ["es", "en", null], default: null },
+  langSource:    { type: String, enum: ["auto", "oauth", "manual"], default: "auto" },
   aiContext:     { type: String, default: "", maxlength: 1000 },
   warnThreshold: { type: Number, default: 0, min: 0, max: 50 },
   warnMuteMs:    { type: Number, default: 10 * 60 * 1000 },

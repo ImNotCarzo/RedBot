@@ -24,14 +24,14 @@ const IDS = {
 //  CATEGORÍAS
 // ─────────────────────────────────────────────
 
-const CATEGORIES = ["ai", "utilidad", "usuario", "moderacion", "servidor", "roles", "canal"];
+const CATEGORIES = ["utilidad", "ai", "moderacion", "servidor", "usuario", "roles", "canal"];
 
 const CATEGORY_LABELS = {
-  ai:         "IA",
   utilidad:   "Utilidad",
-  usuario:    "Usuario",
+  ai:         "IA",
   moderacion: "Moderación",
   servidor:   "Servidor",
+  usuario:    "Usuario",
   roles:      "Roles",
   canal:      "Canal",
 };
