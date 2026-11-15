@@ -10,6 +10,7 @@ const {
   parseDuration,
   formatDuration,
   addWarn,
+  applyWarnEscalation,
   removeWarnById,
   clearWarnsForUser,
   listWarnsForUser,
@@ -651,16 +652,23 @@ const data = {
             }
           }
 
+          const escalation = await applyWarnEscalation(ctx.guild, member, total);
+
+          const warnFields = [
+            ["Usuario", userValue(member.user)],
+            ["ID de advertencia", V2Text.code(warnId)],
+            ["Total", V2Text.code(total)],
+            ["Razón", V2Text.clip(reason, 300, "Sin razón")],
+          ];
+          if (escalation?.muted) {
+            warnFields.push(["Auto-moderación", escalation.reason]);
+          }
+
           await ctx.send(
             buildActionCard({
               title: "Usuario advertido",
               thumbnail: avatarUrl(member.user),
-              fields: [
-                ["Usuario", userValue(member.user)],
-                ["ID de advertencia", V2Text.code(warnId)],
-                ["Total", V2Text.code(total)],
-                ["Razón", V2Text.clip(reason, 300, "Sin razón")],
-              ],
+              fields: warnFields,
               moderator: tag,
               color: YELLOW,
             })

@@ -2,6 +2,8 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder, ComponentsV2Builder, V2Text
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError } = require("../../src/runtime");
 const { generateText, generateVision, fetchImageAsInlineData } = require("../../src/ai");
 const { RED, BADGE_NAMES, USER_APP_CONFIG } = require("../../src/config");
+const { getLang } = require("../../src/guild");
+const { detectLocaleLang } = require("../../src/i18n");
 
 const log = new Logger("CMD_FUN", process.env.LOG_LEVEL);
 
@@ -11,27 +13,54 @@ Sin emojis salvo que realmente sumen. Sin frases como "¡Claro!", "¡Por supuest
 Respuestas concisas, con personalidad, directas al grano.
 RESPONDE SIEMPRE EN ESPAÑOL. Ninguna palabra en otro idioma.`;
 
-function msATexto(ms) {
+const PERSONA_EN = `You are RedBot, a Discord bot with a sarcastic, witty, and irreverent personality.
+Speak casual, punchy English with zero corporate politeness.
+No emojis unless they genuinely add punch. Never say "Sure!", "Of course!", "Understood!".
+Concise, opinionated answers straight to the point.
+RESPOND ALWAYS IN ENGLISH. Not a single word in another language.`;
+
+async function resolveCtxLang(ctx) {
+  if (ctx?.guild?.id) return getLang(ctx.guild.id);
+  return detectLocaleLang(ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale);
+}
+
+function getPersona(lang) {
+  return lang === "en" ? PERSONA_EN : PERSONA;
+}
+
+function msATexto(ms, lang = "es") {
   const min = Math.floor(ms / 60000);
   const hrs = Math.floor(min / 60);
   const dias = Math.floor(hrs / 24);
   const mes = Math.floor(dias / 30);
-  const años = Math.floor(dias / 365);
-  if (años >= 1) return `${años} año${años > 1 ? "s" : ""}`;
+  const anos = Math.floor(dias / 365);
+  if (lang === "en") {
+    if (anos >= 1) return `${anos} year${anos > 1 ? "s" : ""}`;
+    if (mes >= 1) return `${mes} month${mes > 1 ? "s" : ""}`;
+    if (dias >= 1) return `${dias} day${dias > 1 ? "s" : ""}`;
+    if (hrs >= 1) return `${hrs} hour${hrs > 1 ? "s" : ""}`;
+    return `${min} minute${min > 1 ? "s" : ""}`;
+  }
+  if (anos >= 1) return `${anos} año${anos > 1 ? "s" : ""}`;
   if (mes >= 1) return `${mes} mes${mes > 1 ? "es" : ""}`;
   if (dias >= 1) return `${dias} día${dias > 1 ? "s" : ""}`;
   if (hrs >= 1) return `${hrs} hora${hrs > 1 ? "s" : ""}`;
   return `${min} minuto${min > 1 ? "s" : ""}`;
 }
 
-async function runTextFunCommand(ctx, { logTag, prompt, fallbackText, title, footerText }) {
+async function runTextFunCommand(ctx, { logTag, buildPrompt, prompt, fallbackText, title, footerText }) {
   await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
   try {
-    const raw = await generateText(prompt);
+    const lang = await resolveCtxLang(ctx);
+    const resolvedPrompt = typeof buildPrompt === "function" ? buildPrompt(lang, getPersona(lang)) : prompt;
+    const raw = await generateText(resolvedPrompt);
+    const resolvedTitle = typeof title === "function" ? title(lang) : title;
+    const resolvedFallback = typeof fallbackText === "function" ? fallbackText(lang) : fallbackText;
+    const resolvedFooter = typeof footerText === "function" ? footerText(lang) : footerText;
     const card = ComponentsV2Builder.card({
-      title,
-      description: raw || fallbackText,
-      footer: footerText,
+      title: resolvedTitle,
+      description: raw || resolvedFallback,
+      footer: resolvedFooter,
       color: RED,
     });
     await ctx.send(card);
@@ -64,9 +93,12 @@ const data = {
         const tema = ctx.get("tema");
         await runTextFunCommand(ctx, {
           logTag: "[fun opinion]",
-          prompt: `${PERSONA}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`,
-          fallbackText: "No pude generar una opinión",
-          title: `Mi opinión sobre: ${tema}`,
+          buildPrompt: (lang, persona) =>
+            lang === "en"
+              ? `${persona}\nGive your personal, sarcastic, unfiltered opinion on: "${tema}". Max 3 paragraphs, no generic intro, straight to the point.`
+              : `${persona}\nDa tu opinión personal, sarcástica y sin filtro sobre: "${tema}". Máximo 3 párrafos, sin introducción genérica, ve directo al punto.`,
+          fallbackText: (lang) => (lang === "en" ? "I couldn't generate an opinion" : "No pude generar una opinión"),
+          title: (lang) => (lang === "en" ? `My opinion on: ${tema}` : `Mi opinión sobre: ${tema}`),
         });
       },
     })
@@ -84,9 +116,12 @@ const data = {
         const tema = ctx.get("tema");
         await runTextFunCommand(ctx, {
           logTag: "[fun critica]",
-          prompt: `${PERSONA}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`,
-          fallbackText: "No pude generar una crítica",
-          title: `Crítica de: ${tema}`,
+          buildPrompt: (lang, persona) =>
+            lang === "en"
+              ? `${persona}\nDeliver a sharp, witty, merciless critique of: "${tema}". Mock its weak spots with humor and sarcasm. Max 3 paragraphs, no generic intro.`
+              : `${persona}\nHaz una crítica directa, ingeniosa y sin piedad de: "${tema}". Señala sus puntos débiles con humor y sarcasmo. Máximo 3 párrafos, sin introducción genérica.`,
+          fallbackText: (lang) => (lang === "en" ? "I couldn't generate a critique" : "No pude generar una crítica"),
+          title: (lang) => (lang === "en" ? `Review of: ${tema}` : `Crítica de: ${tema}`),
         });
       },
     })
@@ -101,17 +136,21 @@ const data = {
         required: false,
       }),
       async code(ctx) {
-        const situacion = ctx.get("situacion")?.trim() || "cualquier situación";
-        const prompt =
-          situacion === "cualquier situación"
-            ? `${PERSONA}\nGenera una excusa ridícula, creativa y divertida para cualquier situación. Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`
-            : `${PERSONA}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${situacion}". Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`;
-
+        const rawSituacion = ctx.get("situacion")?.trim();
         await runTextFunCommand(ctx, {
           logTag: "[fun excusa]",
-          prompt,
-          fallbackText: "No pude generar una excusa",
-          title: "Tu excusa profesional",
+          buildPrompt: (lang, persona) => {
+            if (lang === "en") {
+              return rawSituacion
+                ? `${persona}\nCreate a ridiculous, creative, half-plausible excuse for: "${rawSituacion}". Make it funny, original, and narrative. Max 2 paragraphs.`
+                : `${persona}\nCreate a ridiculous, creative, hilarious excuse for any situation. Make it original and narrative. Max 2 paragraphs.`;
+            }
+            return rawSituacion
+              ? `${persona}\nGenera una excusa ridícula, creativa y medianamente plausible para: "${rawSituacion}". Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`
+              : `${persona}\nGenera una excusa ridícula, creativa y divertida para cualquier situación. Que sea graciosa, original y tenga narrativa. Máximo 2 párrafos.`;
+          },
+          fallbackText: (lang) => (lang === "en" ? "I couldn't generate an excuse" : "No pude generar una excusa"),
+          title: (lang) => (lang === "en" ? "Your professional excuse" : "Tu excusa profesional"),
         });
       },
     })
@@ -129,10 +168,13 @@ const data = {
         const tema = ctx.get("tema");
         await runTextFunCommand(ctx, {
           logTag: "[fun teoria]",
-          prompt: `${PERSONA}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`,
-          fallbackText: "No pude generar una teoría",
-          title: `Teoría: ${tema}`,
-          footerText: "Esto es ficción... o quizás no.",
+          buildPrompt: (lang, persona) =>
+            lang === "en"
+              ? `${persona}\nInvent a ridiculous yet internally consistent conspiracy theory about: "${tema}". Present it dead seriously with fabricated "evidence" and absurd connections. Max 3 paragraphs, never state it is fiction.`
+              : `${persona}\nCrea una teoría conspirativa ridícula pero internamente consistente sobre: "${tema}". Preséntala como si fuera verdad, con "evidencia" inventada y conexiones absurdas. Máximo 3 párrafos, sin aclarar que es ficción.`,
+          fallbackText: (lang) => (lang === "en" ? "I couldn't generate a theory" : "No pude generar una teoría"),
+          title: (lang) => (lang === "en" ? `Theory: ${tema}` : `Teoría: ${tema}`),
+          footerText: (lang) => (lang === "en" ? "This is fiction... or maybe not." : "Esto es ficción... o quizás no."),
         });
       },
     })
@@ -152,8 +194,12 @@ const data = {
         await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
 
         try {
+          const lang = await resolveCtxLang(ctx);
+          const isEn = lang === "en";
           const baseTarget = ctx.get("usuario") ?? ctx.member;
-          if (!baseTarget) return ctx.ephemeral("No pude obtener la información del usuario");
+          if (!baseTarget) {
+            return ctx.ephemeral(isEn ? "I couldn't fetch that user's info" : "No pude obtener la información del usuario");
+          }
 
           // Precarga miembro (roles, presencia, ingreso) y foto antes de generar, para evitar fallos iniciales
           const target = await ctx.guild.members.fetch({ user: baseTarget.id, force: true }).catch(() => baseTarget);
@@ -164,41 +210,60 @@ const data = {
           const usertag = user.username;
 
           const ahoraMs = Date.now();
-          const createdHace = msATexto(ahoraMs - user.createdTimestamp);
-          const createdDate = new Date(user.createdTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" });
-          const joinedHace = target.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp) : null;
+          const localeTag = isEn ? "en-US" : "es-ES";
+          const createdHace = msATexto(ahoraMs - user.createdTimestamp, lang);
+          const createdDate = new Date(user.createdTimestamp).toLocaleDateString(localeTag, { year: "numeric", month: "long" });
+          const joinedHace = target.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp, lang) : null;
           const joinedDate = target.joinedTimestamp
-            ? new Date(target.joinedTimestamp).toLocaleDateString("es-ES", { year: "numeric", month: "long" })
+            ? new Date(target.joinedTimestamp).toLocaleDateString(localeTag, { year: "numeric", month: "long" })
             : null;
 
           const activity = target.presence?.activities?.[0]?.name ?? null;
           const status = target.presence?.status ?? "offline";
 
+          const noneLabel = isEn ? "none" : "ninguno";
           const roles = target.roles?.cache
             ?.filter((r) => r.id !== ctx.guild.id)
             ?.map((r) => r.name)
             ?.slice(0, 8)
-            ?.join(", ") || "ninguno";
+            ?.join(", ") || noneLabel;
 
           const PERMS_RELEVANTES = [
             "Administrator", "ManageGuild", "ManageMessages",
             "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
           ];
-          const perms = target.permissions?.toArray()?.filter((p) => PERMS_RELEVANTES.includes(p))?.join(", ") || "ninguno";
-          const badges = user.flags?.toArray()?.map((f) => BADGE_NAMES[f] ?? f)?.join(", ") || "ninguna";
+          const perms = target.permissions?.toArray()?.filter((p) => PERMS_RELEVANTES.includes(p))?.join(", ") || noneLabel;
+          const badges = user.flags?.toArray()?.map((f) => BADGE_NAMES[f] ?? f)?.join(", ") || (isEn ? "none" : "ninguna");
 
-          const datosUsuario = [
-            `Nombre: ${username} (@${usertag})`,
-            `Cuenta creada: hace ${createdHace} (${createdDate})`,
-            joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
-            `Estado: ${status}`,
-            activity ? `Actividad: ${activity}` : null,
-            `Roles: ${roles}`,
-            `Permisos notables: ${perms}`,
-            `Insignias: ${badges}`,
-          ].filter(Boolean).join("\n");
+          const datosUsuario = isEn
+            ? [
+                `Name: ${username} (@${usertag})`,
+                `Account created: ${createdHace} ago (${createdDate})`,
+                joinedHace ? `Joined server: ${joinedHace} ago (${joinedDate})` : "Joined server: unknown",
+                `Status: ${status}`,
+                activity ? `Activity: ${activity}` : null,
+                `Roles: ${roles}`,
+                `Notable permissions: ${perms}`,
+                `Badges: ${badges}`,
+              ].filter(Boolean).join("\n")
+            : [
+                `Nombre: ${username} (@${usertag})`,
+                `Cuenta creada: hace ${createdHace} (${createdDate})`,
+                joinedHace ? `Entró al servidor: hace ${joinedHace} (${joinedDate})` : "Entró al servidor: desconocido",
+                `Estado: ${status}`,
+                activity ? `Actividad: ${activity}` : null,
+                `Roles: ${roles}`,
+                `Permisos notables: ${perms}`,
+                `Insignias: ${badges}`,
+              ].filter(Boolean).join("\n");
 
-          const prompt = `${PERSONA}
+          const prompt = isEn
+            ? `${getPersona("en")}
+Your task is to BRUTALLY ROAST this Discord user.
+Sarcasm, dark humor, and sharp wit. No real threats. Never generic.
+Use the profile facts and avatar image to mock specific details. Max 3 paragraphs.
+${datosUsuario}`
+            : `${getPersona("es")}
 Tu tarea es ROASTEAR brutalmente a este usuario de Discord.
 Sarcasmo, humor negro e ingenio. Sin amenazas reales. Sin ser genérico.
 Usa los datos y la foto para burlarte de cosas específicas. Máximo 3 párrafos.
@@ -206,9 +271,9 @@ ${datosUsuario}`;
 
           const generated = imagePart ? await generateVision(prompt, imagePart) : await generateText(prompt);
           const card = ComponentsV2Builder.card({
-            title: `Roast de ${username}`,
+            title: isEn ? `Roast of ${username}` : `Roast de ${username}`,
             subtitle: V2Text.subtext(`@${usertag}`),
-            description: generated || "Ocurrió un error con la IA, intenta de nuevo",
+            description: generated || (isEn ? "AI error occurred, please try again" : "Ocurrió un error con la IA, intenta de nuevo"),
             thumbnail: avatarUrl,
             color: RED,
           });
@@ -234,30 +299,36 @@ ${datosUsuario}`;
       async code(ctx) {
         await ctx.defer();
         try {
+          const lang = await resolveCtxLang(ctx);
+          const isEn = lang === "en";
           const raw = (ctx.get("opciones") ?? "").trim();
           let items = [];
           if (raw.includes("|")) {
             items = raw.split("|");
           } else if (raw.includes(",")) {
             items = raw.split(",");
-          } else if (/\s+o\s+/i.test(raw)) {
-            items = raw.split(/\s+o\s+/i);
+          } else if (/\s+(?:o|or)\s+/i.test(raw)) {
+            items = raw.split(/\s+(?:o|or)\s+/i);
           } else {
             items = raw.split(/\s+/);
           }
 
           items = items.map((s) => s.trim()).filter(Boolean);
           if (items.length < 2) {
-            return ctx.ephemeral("Debes darme al menos 2 opciones para elegir (sepáralas con `,` o `|`)");
+            return ctx.ephemeral(
+              isEn
+                ? "Give me at least 2 options to pick from (separate with `,` or `|`)"
+                : "Debes darme al menos 2 opciones para elegir (sepáralas con `,` o `|`)"
+            );
           }
 
           const eleccion = items[Math.floor(Math.random() * items.length)];
 
           const card = ComponentsV2Builder.card({
-            title: "Decisión tomada",
+            title: isEn ? "Decision made" : "Decisión tomada",
             fields: [
-              ["Opciones", items.map((i) => V2Text.code(i)).join(", ")],
-              ["Elección", `**${eleccion}**`],
+              [isEn ? "Options" : "Opciones", items.map((i) => V2Text.code(i)).join(", ")],
+              [isEn ? "Choice" : "Elección", `**${eleccion}**`],
             ],
             fieldsSeparator: false,
             color: RED,

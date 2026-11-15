@@ -140,10 +140,12 @@ const getBaseCommands = () => ({
 
 const getCommands = () => {
   const commands = getBaseCommands();
-  commands.utilidad.poll   = { short: "poll",   slash: "util poll",   id: IDS.util(),    usage: ".poll <pregunta> / <op1> / <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
-  commands.utilidad.remind = { short: "remind", slash: "util remind", id: IDS.util(),    usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." };
-  commands.utilidad.ocr    = { short: "ocr",    slash: "util ocr",    id: IDS.util(),    usage: ".ocr <url | adjunto>",             aliases: ["leer", "extraer"],                      description: "Extrae el texto de una imagen." };
-  commands.canal.recap     = { short: "recap",  slash: "channel recap", id: IDS.channel(), usage: ".recap [cantidad]",              aliases: ["resumen", "tldr"],                      description: "Resume los últimos mensajes del canal." };
+  commands.utilidad.poll      = { short: "poll",      slash: "util poll",      id: IDS.util(),    usage: ".poll <pregunta> / <op1> / <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
+  commands.utilidad.remind    = { short: "remind",    slash: "util remind",    id: IDS.util(),    usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." };
+  commands.utilidad.reminders = { short: "reminders", slash: "util reminders", id: IDS.util(),    usage: ".reminders",                       aliases: ["recordatorios", "myreminders"],         description: "Lista o cancela tus recordatorios activos." };
+  commands.utilidad.ocr       = { short: "ocr",       slash: "util ocr",       id: IDS.util(),    usage: ".ocr <url | adjunto>",             aliases: ["leer", "extraer"],                      description: "Extrae el texto de una imagen." };
+  commands.utilidad.setlang   = { short: "setlang",   slash: "util setlang",   id: IDS.util(),    usage: ".setlang [es|en]",                 aliases: ["lang", "idioma"],                       description: "Cambia o muestra el idioma del servidor." };
+  commands.canal.recap        = { short: "recap",     slash: "channel recap",  id: IDS.channel(), usage: ".recap [cantidad]",                aliases: ["resumen", "tldr"],                      description: "Resume los últimos mensajes del canal." };
   return commands;
 };
 

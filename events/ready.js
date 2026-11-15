@@ -1,4 +1,5 @@
 const { ActivityType, REST, Routes } = require("discord.js");
+const { hydrateAiSessions } = require("../src/ai");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/moderation");
 const { restoreReminders } = require("../src/reminders");
 const { Logger, sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
@@ -136,6 +137,7 @@ const event = {
 
     await restoreTempBans(client);
     await restoreReminders(client);
+    await hydrateAiSessions();
     startPresenceRotation(client);
 
     try {

@@ -16,7 +16,7 @@ const { generateText, generateVision } = require("./ai");
 const { getMessageText } = require("./adapter");
 const { GREEN, RED, YELLOW } = require("./config");
 const { logAction } = require("./guild");
-const { addWarn, generateId, listWarnsForUser, parseDuration } = require("./moderation");
+const { addWarn, applyWarnEscalation, generateId, listWarnsForUser, parseDuration } = require("./moderation");
 const { createReminder } = require("./reminders");
 const { Logger } = require("./runtime");
 
@@ -449,6 +449,7 @@ async function handleModDossierContext(interaction) {
           reason,
           warnId,
         });
+        if (member) await applyWarnEscalation(guild, member, total);
         await logAction(guild, {
           title: "Usuario Advertido (Expediente)",
           color: YELLOW,

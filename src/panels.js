@@ -9,12 +9,33 @@ const {
 const { ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { JoinRole, Log } = require("./database");
 const { GREEN, RED } = require("./config");
-const { getPrefix, setPrefix, setLogChannel, clearLogChannel, logAction } = require("./guild");
+const { getPrefix, setPrefix, setLogChannel, clearLogChannel, logAction, getLang, setLang, getWarnPolicy, setWarnPolicy } = require("./guild");
+const { t } = require("./i18n");
+const { formatDuration } = require("./moderation");
 
-function buildSetupCard({ guild, prefix, logChannelId, joinRoleDoc, view, isEnded, hasCustomBot = false }) {
+const WARN_AUTO_STEPS = [0, 3, 5];
+
+function buildSetupCard({
+  guild,
+  prefix,
+  logChannelId,
+  joinRoleDoc,
+  lang = "es",
+  warnPolicy = { warnThreshold: 0, warnMuteMs: 10 * 60_000 },
+  view,
+  isEnded,
+  hasCustomBot = false,
+}) {
   const joinValue = joinRoleDoc?.roleId
     ? `<@&${joinRoleDoc.roleId}>${joinRoleDoc.ignoreBots ? " (ignora bots)" : ""}`
     : "Desactivado";
+
+  const warnValue = warnPolicy?.warnThreshold > 0
+    ? t(lang, "setup.warn_auto_val", {
+        count: warnPolicy.warnThreshold,
+        duration: formatDuration(warnPolicy.warnMuteMs || 10 * 60_000),
+      })
+    : t(lang, "setup.warn_auto_off");
 
   const builder = new ComponentsV2Builder({ color: RED })
     .addSection(
@@ -29,6 +50,8 @@ function buildSetupCard({ guild, prefix, logChannelId, joinRoleDoc, view, isEnde
       ["Prefijo", V2Text.code(prefix)],
       ["Canal de logs", logChannelId ? `<#${logChannelId}>` : "Desactivado"],
       ["Rol automático", joinValue],
+      [t(lang, "setup.lang_label"), lang === "en" ? "English (`en`)" : "Español (`es`)"],
+      [t(lang, "setup.warn_auto_label"), warnValue],
     ]);
 
   if (!isEnded && view) {
@@ -68,6 +91,10 @@ function buildSetupCard({ guild, prefix, logChannelId, joinRoleDoc, view, isEnde
           disabled: !joinRoleDoc?.roleId,
         },
         ...(hasCustomBot ? [{ customId: view.id("custombot"), label: "Perfil del bot", style: "secondary" }] : []),
+      ])
+      .addButtonsRow([
+        { customId: view.id("lang"), label: t(lang, "setup.btn_lang", { lang: lang.toUpperCase() }), style: "primary" },
+        { customId: view.id("warnauto"), label: t(lang, "setup.btn_warn_auto"), style: "secondary" },
       ]);
   }
 
@@ -97,10 +124,12 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
   const guild = ctx.guild;
   const author = ctx.user;
 
-  const [prefix, logDoc, joinRoleDoc] = await Promise.all([
+  const [prefix, logDoc, joinRoleDoc, lang, warnPolicy] = await Promise.all([
     getPrefix(guild.id),
     Log.findOne({ guildId: guild.id }).lean(),
     JoinRole.findOne({ guildId: guild.id }).lean(),
+    getLang(guild.id),
+    getWarnPolicy(guild.id),
   ]);
 
   const view = new V2View({
@@ -113,6 +142,8 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
       prefix,
       logChannelId: logDoc?.channelId ?? null,
       joinRoleDoc: joinRoleDoc ? { roleId: joinRoleDoc.roleId, ignoreBots: Boolean(joinRoleDoc.ignoreBots) } : null,
+      lang,
+      warnPolicy,
     },
     render: ({ state, view: activeView, isEnded }) =>
       buildSetupCard({
@@ -120,12 +151,22 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
         prefix: state.prefix,
         logChannelId: state.logChannelId,
         joinRoleDoc: state.joinRoleDoc,
+        lang: state.lang,
+        warnPolicy: state.warnPolicy,
         view: activeView,
         isEnded,
         hasCustomBot: typeof onOpenCustomBot === "function",
       }),
     renderStatic: ({ state }) =>
-      buildSetupCard({ guild, prefix: state.prefix, logChannelId: state.logChannelId, joinRoleDoc: state.joinRoleDoc, isEnded: true }),
+      buildSetupCard({
+        guild,
+        prefix: state.prefix,
+        logChannelId: state.logChannelId,
+        joinRoleDoc: state.joinRoleDoc,
+        lang: state.lang,
+        warnPolicy: state.warnPolicy,
+        isEnded: true,
+      }),
     actions: {
       logs: async ({ values, interaction, setState }) => {
         const channelId = values[0];
@@ -217,6 +258,21 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
           await activeView.message.edit(nextPayload).catch(() => {});
         }
         return false;
+      },
+      lang: async ({ state, setState }) => {
+        const nextLang = state.lang === "en" ? "es" : "en";
+        await setLang(guild.id, nextLang);
+        setState({ lang: nextLang });
+      },
+      warnauto: async ({ state, setState }) => {
+        const cur = state.warnPolicy?.warnThreshold ?? 0;
+        const idx = WARN_AUTO_STEPS.indexOf(cur);
+        const nextThreshold = WARN_AUTO_STEPS[(idx + 1) % WARN_AUTO_STEPS.length];
+        const saved = await setWarnPolicy(guild.id, {
+          warnThreshold: nextThreshold,
+          warnMuteMs: state.warnPolicy?.warnMuteMs || 10 * 60_000,
+        });
+        setState({ warnPolicy: saved });
       },
       custombot: async ({ interaction, view: activeView }) => {
         if (typeof onOpenCustomBot !== "function") return false;

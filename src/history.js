@@ -3,14 +3,53 @@ const { MessageFlags } = require("discord.js");
 const { ComponentsV2Builder, V2Paginator, V2Text } = require("gralonium");
 const { ImageHistory } = require("./database");
 const { RED } = require("./config");
+const { fetchPublic, readBodyLimited } = require("./security");
 
 const MAX_HISTORY_PER_TARGET = 15;
+const MAX_BACKUP_BYTES = 250 * 1024;
+const ALLOWED_BACKUP_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 function extractImageHash(url) {
   if (!url) return "";
   const clean = String(url).split("?")[0];
   const lastSegment = clean.split("/").pop() ?? clean;
   return lastSegment.replace(/\.[a-z0-9]+$/i, "") || clean;
+}
+
+function buildCompactUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.searchParams.has("size")) {
+      parsed.searchParams.set("size", "256");
+    } else if (/cdn\.discordapp\.(com|net)$/i.test(parsed.hostname)) {
+      parsed.searchParams.set("size", "256");
+    }
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+async function downloadBackupImage(url) {
+  try {
+    const res = await fetchPublic(buildCompactUrl(url), {}, 6000);
+    if (!res?.ok) return null;
+    const body = await readBodyLimited(res, MAX_BACKUP_BYTES);
+    if (body.tooLarge || !body.buffer?.length) return null;
+    const mimeType = (res.headers.get("content-type") || "image/png").split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_BACKUP_MIMES.has(mimeType)) return null;
+    return { imageData: body.buffer, mimeType };
+  } catch {
+    return null;
+  }
+}
+
+function extractImageBuffer(raw) {
+  if (!raw) return null;
+  if (Buffer.isBuffer(raw)) return raw;
+  if (raw instanceof Uint8Array) return Buffer.from(raw);
+  if (raw.buffer) return Buffer.from(raw.buffer);
+  return null;
 }
 
 async function recordImageIfNew(targetType, targetId, url) {
@@ -27,7 +66,14 @@ async function recordImageIfNew(targetType, targetId, url) {
 
     if (latest?.hash === hash) return false;
 
-    await ImageHistory.create({ targetType, targetId, url, hash });
+    const backup = await downloadBackupImage(url).catch(() => null);
+    await ImageHistory.create({
+      targetType,
+      targetId,
+      url,
+      hash,
+      ...(backup ? backup : {}),
+    });
 
     const overflow = await ImageHistory.find({ targetType, targetId })
       .sort({ createdAt: -1 })
@@ -79,13 +125,24 @@ async function replyWithImageHistory(interaction, { targetType, targetId, title,
     renderPage: ({ items: pageItems, pageIndex, totalPages, isEnded, controls }) => {
       const entry = pageItems[0];
       const ts = Math.floor(new Date(entry.createdAt ?? Date.now()).getTime() / 1000);
+      const buf = extractImageBuffer(entry.imageData);
+      const extMap = { "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "image/png": "png" };
+      const ext = extMap[entry.mimeType] || "png";
+      const fileName = `history-${pageIndex + 1}.${ext}`;
+
       const builder = new ComponentsV2Builder({ color })
         .addText(
           `${V2Text.heading(title, 3, 200)}\n` +
           `${V2Text.subtext(`Imagen ${pageIndex + 1}/${totalPages} · <t:${ts}:F> (<t:${ts}:R>)`)}`
-        )
-        .addGallery(entry.url)
-        .addSpacer("small");
+        );
+
+      if (buf?.length) {
+        builder.addAttachment(buf, { name: fileName }).addGallery(`attachment://${fileName}`);
+      } else {
+        builder.addGallery(entry.url);
+      }
+
+      builder.addSpacer("small");
 
       const rowButtons = [];
       if (!isEnded && totalPages > 1 && controls?.length) {

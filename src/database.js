@@ -3,8 +3,11 @@ const { Schema, model, models } = mongoose;
 const { dbOptions } = require("./config");
 
 const guildSchema = new Schema({
-  guildId: { type: String, required: true, unique: true },
-  prefix: { type: String, default: ".", trim: true, minlength: 1, maxlength: 3 },
+  guildId:       { type: String, required: true, unique: true },
+  prefix:        { type: String, default: ".", trim: true, minlength: 1, maxlength: 3 },
+  lang:          { type: String, enum: ["es", "en"], default: "es" },
+  warnThreshold: { type: Number, default: 0, min: 0, max: 50 },
+  warnMuteMs:    { type: Number, default: 10 * 60 * 1000 },
 }, { timestamps: true });
 
 const joinRoleSchema = new Schema({
@@ -66,8 +69,20 @@ const imageHistorySchema = new Schema({
   targetId:   { type: String, required: true },
   url:        { type: String, required: true },
   hash:       { type: String, required: true },
+  imageData:  { type: Buffer, default: null },
+  mimeType:   { type: String, default: "image/png" },
 }, { timestamps: true });
 imageHistorySchema.index({ targetType: 1, targetId: 1, createdAt: -1 });
+
+const aiSessionSchema = new Schema({
+  sessionKey:       { type: String, required: true, unique: true },
+  userId:           { type: String, required: true },
+  scope:            { type: String, default: "global" },
+  historial:        { type: [Schema.Types.Mixed], default: [] },
+  lastBotMessageId: { type: String, default: null },
+  expiresAt:        { type: Date, required: true },
+}, { timestamps: true });
+aiSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const GuildConfig   = models.GuildConfig   || model("GuildConfig", guildSchema);
 const JoinRole      = models.JoinRole      || model("JoinRole", joinRoleSchema);
@@ -78,6 +93,7 @@ const Afk           = models.Afk           || model("Afk", afkSchema);
 const Reminder      = models.Reminder      || model("Reminder", reminderSchema);
 const ReleaseNotice = models.ReleaseNotice || model("ReleaseNotice", releaseNoticeSchema);
 const ImageHistory  = models.ImageHistory  || model("ImageHistory", imageHistorySchema);
+const AiSession     = models.AiSession     || model("AiSession", aiSessionSchema);
 
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
@@ -122,4 +138,5 @@ module.exports = {
   Reminder,
   ReleaseNotice,
   ImageHistory,
+  AiSession,
 };

@@ -118,24 +118,28 @@ function loadAndRegisterEvents(bot, log = new Logger("EVENT")) {
 
   for (const file of eventFiles) {
     try {
-      const eventDef = require(path.join(eventsPath, file))?.data;
-      if (!eventDef?.name || typeof eventDef?.code !== "function") continue;
+      const exported = require(path.join(eventsPath, file))?.data;
+      const eventDefs = Array.isArray(exported) ? exported : exported ? [exported] : [];
 
-      const safeHandler = async (...args) => {
-        try {
-          await eventDef.code(bot, ...args);
-        } catch (err) {
-          log.error(`Fallo en evento: ${eventDef.name}`, {
-            event: eventDef.name,
-            ...extractEventContext(args),
-            err: sanitizeError(err),
-          });
-        }
-      };
+      for (const eventDef of eventDefs) {
+        if (!eventDef?.name || typeof eventDef?.code !== "function") continue;
 
-      if (eventDef.once) bot.once(eventDef.name, safeHandler);
-      else bot.on(eventDef.name, safeHandler);
-      loaded++;
+        const safeHandler = async (...args) => {
+          try {
+            await eventDef.code(bot, ...args);
+          } catch (err) {
+            log.error(`Fallo en evento: ${eventDef.name}`, {
+              event: eventDef.name,
+              ...extractEventContext(args),
+              err: sanitizeError(err),
+            });
+          }
+        };
+
+        if (eventDef.once) bot.once(eventDef.name, safeHandler);
+        else bot.on(eventDef.name, safeHandler);
+        loaded++;
+      }
     } catch (err) {
       log?.error(`Error cargando evento: ${file}`, { err: err.message });
     }
@@ -456,4 +460,5 @@ module.exports = {
   broadcastDm,
   buildDmAllEmbed,
   buildDmAllLogEmbed,
+  loadAndRegisterEvents,
 };

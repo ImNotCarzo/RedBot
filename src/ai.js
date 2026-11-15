@@ -1,5 +1,7 @@
 const { GoogleGenAI } = require("@google/genai");
 const { MAX_HISTORIAL, SYSTEM_PROMPT } = require("./config");
+const { AiSession } = require("./database");
+const { normalizeLang } = require("./i18n");
 const { Logger, wait, fetchWithTimeout } = require("./runtime");
 const { fetchPublic, readBodyLimited } = require("./security");
 
@@ -259,7 +261,8 @@ async function performWebSearch(query) {
   return snippets;
 }
 
-async function generateChatReply(historial) {
+async function generateChatReply(historial, { lang = "es" } = {}) {
+  const resolvedLang = normalizeLang(lang);
   const normalizedHistory = toGeminiHistory(historial);
   const lastUserMsg = Array.isArray(historial)
     ? [...historial].reverse().find((m) => m && m.role === "user")?.content ?? ""
@@ -267,19 +270,25 @@ async function generateChatReply(historial) {
 
   const temporalBlock = getTemporalPrompt();
   let systemInstruction = SYSTEM_PROMPT + temporalBlock;
+  if (resolvedLang === "en") {
+    systemInstruction += "\n\nLANGUAGE OVERRIDE: This server uses English. Respond ONLY in natural, sarcastic, witty English with zero filler phrases (never say 'Sure!' or 'Of course!'). Keep answers concise and direct.";
+  }
 
   if (shouldSearchWeb(lastUserMsg)) {
     const searchQuery = extractSearchQuery(lastUserMsg) || lastUserMsg;
     const webSnippets = await performWebSearch(searchQuery);
     if (webSnippets.length > 0) {
-      systemInstruction += `\n\n[Resultados de búsqueda web en tiempo real para "${searchQuery}"]:\n${webSnippets.join("\n")}\nUsa esta información actualizada para responder con precisión.`;
+      systemInstruction += resolvedLang === "en"
+        ? `\n\n[Real-time web search results for "${searchQuery}"]:\n${webSnippets.join("\n")}\nUse this up-to-date information to answer accurately.`
+        : `\n\n[Resultados de búsqueda web en tiempo real para "${searchQuery}"]:\n${webSnippets.join("\n")}\nUsa esta información actualizada para responder con precisión.`;
     }
   }
 
   if (normalizedHistory.length > 0) {
     const lastTurn = normalizedHistory[normalizedHistory.length - 1];
     if (lastTurn.role === "user") {
-      lastTurn.parts[0].text = `${temporalBlock.trim()}\n\nMensaje del usuario: ${lastTurn.parts[0].text}`;
+      const msgLabel = resolvedLang === "en" ? "User message" : "Mensaje del usuario";
+      lastTurn.parts[0].text = `${temporalBlock.trim()}\n\n${msgLabel}: ${lastTurn.parts[0].text}`;
     }
   }
 
@@ -292,18 +301,20 @@ async function generateChatReply(historial) {
     },
   });
 
-  return response.text?.trim() || "No pude generar una respuesta";
+  return response.text?.trim() || (resolvedLang === "en" ? "I couldn't generate a response" : "No pude generar una respuesta");
 }
 
 function sessionKey(userId, scope = "global") {
   return `${scope}:${userId}`;
 }
 
-function setConversacion(rawUserId, historial, lastBotMessageId = null, scope = "global") {
-  const userId = sessionKey(rawUserId, scope);
-  const current = sessions.get(userId);
-  if (current?.timeout) clearTimeout(current.timeout);
+function scheduleSessionTimeout(userId, ttlMs = SESSION_TTL_MS) {
+  const timeout = setTimeout(() => deleteSessionKey(userId), Math.max(1000, ttlMs));
+  timeout.unref();
+  return timeout;
+}
 
+function evictOldestSessionIfNeeded() {
   while (sessions.size >= MAX_SESSIONS) {
     const oldestKey = sessions.keys().next().value;
     if (!oldestKey) break;
@@ -311,15 +322,32 @@ function setConversacion(rawUserId, historial, lastBotMessageId = null, scope = 
     if (oldest?.timeout) clearTimeout(oldest.timeout);
     sessions.delete(oldestKey);
   }
+}
 
-  const timeout = setTimeout(() => deleteSessionKey(userId), SESSION_TTL_MS);
-  timeout.unref();
+function setConversacion(rawUserId, historial, lastBotMessageId = null, scope = "global") {
+  const userId = sessionKey(rawUserId, scope);
+  const current = sessions.get(userId);
+  if (current?.timeout) clearTimeout(current.timeout);
+
+  evictOldestSessionIfNeeded();
+
+  const trimmed = Array.isArray(historial) ? historial.slice(-MAX_HISTORIAL) : [];
+  const timeout = scheduleSessionTimeout(userId, SESSION_TTL_MS);
 
   sessions.set(userId, {
-    historial: Array.isArray(historial) ? historial.slice(-MAX_HISTORIAL) : [],
+    historial: trimmed,
     lastBotMessageId,
     timeout,
   });
+
+  if (AiSession?.db?.readyState === 1) {
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    AiSession.findOneAndUpdate(
+      { sessionKey: userId },
+      { $set: { userId: String(rawUserId), scope: String(scope), historial: trimmed, lastBotMessageId, expiresAt } },
+      { upsert: true }
+    ).catch(() => {});
+  }
 }
 
 function getConversacion(rawUserId, scope = "global") {
@@ -335,12 +363,46 @@ function deleteConversacion(rawUserId) {
   for (const key of [...sessions.keys()]) {
     if (key.endsWith(`:${rawUserId}`)) deleteSessionKey(key);
   }
+  if (AiSession?.db?.readyState === 1) {
+    AiSession.deleteMany({ userId: String(rawUserId) }).catch(() => {});
+  }
 }
 
 function deleteSessionKey(userId) {
   const session = sessions.get(userId);
   if (session?.timeout) clearTimeout(session.timeout);
   sessions.delete(userId);
+  if (AiSession?.db?.readyState === 1) {
+    AiSession.deleteOne({ sessionKey: userId }).catch(() => {});
+  }
+}
+
+async function hydrateAiSessions() {
+  if (AiSession?.db?.readyState !== 1) return 0;
+  try {
+    const now = Date.now();
+    const docs = await AiSession.find({ expiresAt: { $gt: new Date(now) } })
+      .sort({ updatedAt: -1 })
+      .limit(MAX_SESSIONS)
+      .lean();
+
+    let count = 0;
+    for (const doc of docs.reverse()) {
+      if (!doc?.sessionKey || sessions.has(doc.sessionKey)) continue;
+      evictOldestSessionIfNeeded();
+      const remaining = Math.max(1000, new Date(doc.expiresAt).getTime() - now);
+      sessions.set(doc.sessionKey, {
+        historial: Array.isArray(doc.historial) ? doc.historial.slice(-MAX_HISTORIAL) : [],
+        lastBotMessageId: doc.lastBotMessageId ?? null,
+        timeout: scheduleSessionTimeout(doc.sessionKey, remaining),
+      });
+      count += 1;
+    }
+    return count;
+  } catch (err) {
+    log.warn("No se pudieron hidratar sesiones IA", { err: err?.message ?? String(err) });
+    return 0;
+  }
 }
 
 async function fetchImageAsInlineData(url, timeoutMs = 10_000) {
@@ -458,4 +520,5 @@ module.exports = {
   setConversacion,
   getConversacion,
   deleteConversacion,
+  hydrateAiSessions,
 };

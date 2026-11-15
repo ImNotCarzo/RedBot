@@ -218,6 +218,8 @@ const DEFINITIONS = [
   { name: "recap", description: "Resume los últimos mensajes del canal", aliases: ["resumen", "tldr"], authorName: "Comando Recap", descriptionText: "**Usos:**\nResume la conversación reciente del canal (10 a 100 mensajes)\n\n**Aliases:**\n`resumen`, `tldr`\n\n```js\n.recap [cantidad]\nEjemplo: .recap 50```" },
   { name: "setup", description: "Panel interactivo de configuración del servidor", aliases: ["config", "panel"] },
   { name: "snipe", description: "Muestra el último mensaje borrado recientemente en el canal", aliases: ["borrado"] },
+  { name: "reminders", description: "Lista o cancela tus recordatorios activos", aliases: ["recordatorios", "myreminders"] },
+  { name: "setlang", description: "Cambia o consulta el idioma del bot en el servidor", aliases: ["lang", "idioma"] },
 ];
 
 module.exports = {

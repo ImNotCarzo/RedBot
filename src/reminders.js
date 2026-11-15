@@ -92,6 +92,30 @@ async function createReminder(client, { userId, guildId = null, channelId = null
   return { reminder: doc };
 }
 
+async function listUserReminders(userId) {
+  if (!userId || Reminder.db?.readyState !== 1) return [];
+  try {
+    return await Reminder.find({ userId }).sort({ remindAt: 1 }).lean();
+  } catch {
+    return [];
+  }
+}
+
+async function cancelReminder(userId, reminderId = null) {
+  if (!userId || Reminder.db?.readyState !== 1) return { deleted: 0 };
+  if (!reminderId || reminderId === "all") {
+    const docs = await Reminder.find({ userId }).select("_id").lean();
+    for (const d of docs) clearTimer(String(d._id));
+    const res = await Reminder.deleteMany({ userId });
+    return { deleted: res?.deletedCount ?? docs.length };
+  }
+
+  const removed = await Reminder.findOneAndDelete({ _id: reminderId, userId }).lean();
+  if (!removed) return { deleted: 0 };
+  clearTimer(String(removed._id));
+  return { deleted: 1, reminder: removed };
+}
+
 async function restoreReminders(client) {
   try {
     const pending = await Reminder.find({}).lean();
@@ -102,4 +126,11 @@ async function restoreReminders(client) {
   }
 }
 
-module.exports = { createReminder, restoreReminders, scheduleReminder, MAX_PER_USER };
+module.exports = {
+  createReminder,
+  listUserReminders,
+  cancelReminder,
+  restoreReminders,
+  scheduleReminder,
+  MAX_PER_USER,
+};

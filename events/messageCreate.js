@@ -4,7 +4,7 @@ const {
   getConversacion,
   generateChatReply,
 } = require("../src/ai");
-const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk } = require("../src/guild");
+const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk, getLang } = require("../src/guild");
 const { getMessageText } = require("../src/adapter");
 const { Logger } = require("../src/runtime");
 const {
@@ -94,6 +94,8 @@ const event = {
 
       await message.channel.sendTyping().catch(() => {});
 
+      const lang = message.guildId ? await getLang(message.guildId) : "es";
+      const isEn = lang === "en";
       const userData = getConversacion(message.author.id, message.guildId ?? "dm");
       let historial = Array.isArray(userData?.historial)
         ? [...userData.historial.slice(-MAX_HISTORIAL)]
@@ -108,23 +110,27 @@ const event = {
           (m) => m.role === "assistant" && m.content.includes(cleanPrev.slice(0, 80))
         );
         if (!alreadyInHistory) {
-          historial.push({ role: "user", content: "(Continuación sobre tu mensaje anterior)" });
+          historial.push({
+            role: "user",
+            content: isEn ? "(Continuation about your previous message)" : "(Continuación sobre tu mensaje anterior)",
+          });
           historial.push({ role: "assistant", content: cleanPrev });
         }
       }
 
       historial.push({ role: "user", content: pregunta });
 
-      const respuesta = await generateChatReply(historial);
+      const respuesta = await generateChatReply(historial, { lang });
 
       historial.push({ role: "assistant", content: respuesta });
       const historialFinal = historial.length > MAX_HISTORIAL
         ? historial.slice(-MAX_HISTORIAL)
         : historial;
 
-      const maxTexto = MAX_EMBED_DESCRIPTION - TRUNCATION_SUFFIX.length;
+      const suffix = isEn ? "\n*(response trimmed)*" : TRUNCATION_SUFFIX;
+      const maxTexto = MAX_EMBED_DESCRIPTION - suffix.length;
       const texto = respuesta.length > maxTexto
-        ? respuesta.slice(0, maxTexto) + TRUNCATION_SUFFIX
+        ? respuesta.slice(0, maxTexto) + suffix
         : respuesta;
 
       const embed = new EmbedBuilder()
@@ -149,10 +155,15 @@ const event = {
       setConversacion(message.author.id, historialFinal, botMsg.id, message.guildId ?? "dm");
     } catch (err) {
       log.error("messageCreate IA", { err: err?.message ?? String(err) });
+      const lang = message.guildId ? await getLang(message.guildId).catch(() => "es") : "es";
       const isRateLimit = err?.status === 429 || (err?.message ?? "").includes("429");
-      const errorMsg = isRateLimit
-        ? "Se agotó el límite de consultas de la IA por ahora. Intenta en unos minutos."
-        : "Ocurrió un error al procesar tu respuesta con la IA.";
+      const errorMsg = lang === "en"
+        ? (isRateLimit
+            ? "AI request quota reached for now. Try again in a few minutes."
+            : "An error occurred while processing your reply with AI.")
+        : (isRateLimit
+            ? "Se agotó el límite de consultas de la IA por ahora. Intenta en unos minutos."
+            : "Ocurrió un error al procesar tu respuesta con la IA.");
 
       await message.reply({
         content: errorMsg,

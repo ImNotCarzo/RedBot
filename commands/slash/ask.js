@@ -2,6 +2,8 @@ const { CommandBuilder, ParamsBuilder } = require("gralonium");
 const { EmbedBuilder } = require("discord.js");
 const { generateChatReply, setConversacion, getConversacion } = require("../../src/ai");
 const { MAX_HISTORIAL, RED, USER_APP_CONFIG } = require("../../src/config");
+const { getLang } = require("../../src/guild");
+const { detectLocaleLang } = require("../../src/i18n");
 const {
   Logger,
   THINKING_TEXT,
@@ -27,6 +29,11 @@ const data = {
   }),
 
   async code(ctx) {
+    const lang = ctx.guild?.id
+      ? await getLang(ctx.guild.id)
+      : detectLocaleLang(ctx.interaction?.locale ?? ctx.interaction?.guildLocale);
+    const isEn = lang === "en";
+
     const pregunta = ctx.interaction
       ? ctx.get("pregunta")
       : ctx.args?.join(" ").trim();
@@ -34,11 +41,15 @@ const data = {
     if (!pregunta) {
       const bot = ctx.bot.user;
       const paramerror = new EmbedBuilder()
-        .setAuthor({ name: "Comando Ask", iconURL: bot.displayAvatarURL() })
+        .setAuthor({ name: isEn ? "Ask Command" : "Comando Ask", iconURL: bot.displayAvatarURL() })
         .setDescription(
-          `**Usos:**\nHazle una pregunta a la IA` +
-          `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-          `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
+          isEn
+            ? `**Usage:**\nAsk the AI a question` +
+              `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
+              `\n\n\`\`\`js\n.ask <question>\nExample: .ask why is the sky blue\`\`\``
+            : `**Usos:**\nHazle una pregunta a la IA` +
+              `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
+              `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
         )
         .setColor(RED);
 
@@ -57,12 +68,13 @@ const data = {
       const historial = [...(prev?.historial ?? [])];
       historial.push({ role: "user", content: pregunta });
 
-      const respuesta = await generateChatReply(historial);
+      const respuesta = await generateChatReply(historial, { lang });
       historial.push({ role: "assistant", content: respuesta });
       if (historial.length > MAX_HISTORIAL) historial.splice(0, historial.length - MAX_HISTORIAL);
 
+      const trimNote = isEn ? "\n*(response trimmed)*" : "\n*(respuesta recortada)*";
       const texto = respuesta.length > 4000
-        ? respuesta.slice(0, 4000) + "\n*(respuesta recortada)*"
+        ? respuesta.slice(0, 4000) + trimNote
         : respuesta;
 
       const embed = new EmbedBuilder()

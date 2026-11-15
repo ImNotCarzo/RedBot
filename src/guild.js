@@ -45,9 +45,87 @@ class TtlCache {
   }
 }
 
+const { detectLocaleLang, normalizeLang } = require("./i18n");
+
 const prefixCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const langCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const warnPolicyCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS);
 const afkCache = new TtlCache(AFK_CACHE_TTL_MS, AFK_CACHE_MAX);
+
+const DEFAULT_WARN_MUTE_MS = 10 * 60 * 1000;
+
+function detectDefaultGuildLang(guild) {
+  return detectLocaleLang(guild?.preferredLocale);
+}
+
+async function getLang(guildId) {
+  if (!guildId) return "es";
+  const cached = langCache.get(guildId);
+  if (cached) return cached;
+  if (GuildConfig.db?.readyState !== 1) return "es";
+  try {
+    const doc = await GuildConfig.findOne({ guildId }).select("lang").lean();
+    const lang = normalizeLang(doc?.lang);
+    langCache.set(guildId, lang);
+    return lang;
+  } catch {
+    return "es";
+  }
+}
+
+async function setLang(guildId, lang) {
+  const resolved = normalizeLang(lang);
+  if (!guildId) return resolved;
+  langCache.set(guildId, resolved);
+  if (GuildConfig.db?.readyState === 1) {
+    try {
+      await GuildConfig.findOneAndUpdate(
+        { guildId },
+        { $set: { lang: resolved } },
+        { upsert: true, new: true }
+      );
+    } catch {}
+  }
+  return resolved;
+}
+
+async function getWarnPolicy(guildId) {
+  const fallback = { warnThreshold: 0, warnMuteMs: DEFAULT_WARN_MUTE_MS };
+  if (!guildId) return fallback;
+  const cached = warnPolicyCache.get(guildId);
+  if (cached) return cached;
+  if (GuildConfig.db?.readyState !== 1) return fallback;
+  try {
+    const doc = await GuildConfig.findOne({ guildId }).select("warnThreshold warnMuteMs").lean();
+    const policy = {
+      warnThreshold: Number.isFinite(doc?.warnThreshold) ? doc.warnThreshold : 0,
+      warnMuteMs: Number.isFinite(doc?.warnMuteMs) && doc.warnMuteMs > 0 ? doc.warnMuteMs : DEFAULT_WARN_MUTE_MS,
+    };
+    warnPolicyCache.set(guildId, policy);
+    return policy;
+  } catch {
+    return fallback;
+  }
+}
+
+async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_WARN_MUTE_MS } = {}) {
+  const threshold = Math.max(0, Math.min(50, Math.floor(Number(warnThreshold) || 0)));
+  const muteMs = Math.max(60_000, Number(warnMuteMs) || DEFAULT_WARN_MUTE_MS);
+  const policy = { warnThreshold: threshold, warnMuteMs: muteMs };
+  if (!guildId) return policy;
+  warnPolicyCache.set(guildId, policy);
+  if (GuildConfig.db?.readyState === 1) {
+    try {
+      await GuildConfig.findOneAndUpdate(
+        { guildId },
+        { $set: policy },
+        { upsert: true, new: true }
+      );
+    } catch {}
+  }
+  return policy;
+}
 
 async function getPrefix(guildId) {
   const cached = prefixCache.get(guildId);
@@ -123,6 +201,7 @@ async function removeAfk(guildId, userId) {
 async function getLogChannelId(guildId) {
   const cached = logChannelCache.get(guildId);
   if (cached !== undefined) return cached;
+  if (Log.db?.readyState !== 1) return null;
   const doc = await Log.findOne({ guildId }).lean();
   const channelId = doc?.channelId ?? null;
   logChannelCache.set(guildId, channelId);
@@ -188,6 +267,11 @@ module.exports = {
   DEFAULT_PREFIX,
   getPrefix,
   setPrefix,
+  detectDefaultGuildLang,
+  getLang,
+  setLang,
+  getWarnPolicy,
+  setWarnPolicy,
   getAfk,
   setAfk,
   removeAfk,

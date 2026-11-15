@@ -7,11 +7,13 @@ const {
   Plugins,
   ComponentsV2Builder,
   V2Text,
+  V2View,
 } = require("gralonium");
 const { deleteConversacion, generateText, generateVision, generateTranscription } = require("../../src/ai");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN, YELLOW, USER_APP_CONFIG } = require("../../src/config");
-const { getPrefix, setPrefix, setAfk, sendLog } = require("../../src/guild");
+const { getPrefix, setPrefix, setAfk, sendLog, getLang, setLang } = require("../../src/guild");
+const { detectLocaleLang, normalizeLang, t } = require("../../src/i18n");
 const {
   Logger,
   THINKING_TEXT,
@@ -26,7 +28,7 @@ const {
 } = require("../../src/runtime");
 const { version: botVersion } = require("../../package.json");
 const { fetchPublic, readBodyLimited } = require("../../src/security");
-const { createReminder } = require("../../src/reminders");
+const { createReminder, listUserReminders, cancelReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
 
 let graloniumVersion = "0.4.0";
@@ -1104,6 +1106,168 @@ const ocrCommand = {
   },
 };
 
-data.data.addCommand(pollCommand).addCommand(remindCommand).addCommand(ocrCommand);
+const remindersCommand = {
+  data: new CommandBuilder({
+    name: "reminders",
+    description: "Lista o cancela tus recordatorios activos",
+    aliases: ["recordatorios", "myreminders"],
+  }),
+  params: new ParamsBuilder(),
+
+  async code(ctx) {
+    try {
+      const lang = ctx.guild?.id
+        ? await getLang(ctx.guild.id)
+        : detectLocaleLang(ctx.interaction?.locale ?? ctx.interaction?.guildLocale);
+      const userId = ctx.user?.id;
+      const items = await listUserReminders(userId);
+
+      if (!items.length) {
+        return ctx.ephemeral(t(lang, "reminders.empty"));
+      }
+
+      const renderCard = (currentItems, activeView, isEnded) => {
+        if (!currentItems.length) {
+          return buildCompactCard({
+            title: t(lang, "reminders.title"),
+            body: t(lang, "reminders.empty"),
+            color: GREEN,
+          });
+        }
+
+        const lines = currentItems.map((item, idx) => {
+          const ts = Math.floor(new Date(item.remindAt).getTime() / 1000);
+          return `**${idx + 1}.** <t:${ts}:R> — ${V2Text.clip(item.text, 90)}`;
+        });
+
+        const builder = new ComponentsV2Builder({ color: RED })
+          .addText(V2Text.heading(t(lang, "reminders.title"), 3))
+          .addSeparator("small")
+          .addText(lines.join("\n"));
+
+        if (!isEnded && activeView) {
+          builder
+            .addSpacer("small")
+            .addSelectMenu({
+              customId: activeView.id("cancel_one"),
+              placeholder: t(lang, "reminders.select_placeholder"),
+              options: currentItems.slice(0, 25).map((item, idx) => ({
+                label: `${idx + 1}. ${V2Text.clip(item.text, 80)}`,
+                value: String(item._id),
+                description: new Date(item.remindAt).toISOString().slice(0, 16).replace("T", " "),
+              })),
+            })
+            .addSpacer("small")
+            .addButtonsRow([
+              {
+                customId: activeView.id("cancel_all"),
+                label: t(lang, "reminders.cancel_all"),
+                style: "danger",
+              },
+            ]);
+        }
+
+        return builder;
+      };
+
+      const view = new V2View({
+        authorId: userId,
+        timeout: 2 * 60_000,
+        thirdPartyMode: "reject",
+        onEnd: "static",
+        state: { items },
+        render: ({ state, view: activeView, isEnded }) => renderCard(state.items, activeView, isEnded),
+        renderStatic: ({ state }) => renderCard(state.items, null, true),
+        actions: {
+          cancel_one: async ({ values, state, setState }) => {
+            const targetId = values[0];
+            if (!targetId) return false;
+            await cancelReminder(userId, targetId);
+            const remaining = state.items.filter((item) => String(item._id) !== String(targetId));
+            setState({ items: remaining });
+          },
+          cancel_all: async ({ setState }) => {
+            await cancelReminder(userId, "all");
+            setState({ items: [] });
+          },
+        },
+      });
+
+      await view.send(ctx);
+    } catch (err) {
+      log.error("[util reminders]", { err: err?.message ?? String(err) });
+      handleCommandError(ctx, err);
+    }
+  },
+};
+
+const setlangCommand = {
+  data: new CommandBuilder({
+    name: "setlang",
+    description: "Cambia o consulta el idioma del bot en este servidor",
+    aliases: ["lang", "idioma"],
+  }),
+  params: new ParamsBuilder().addString({
+    name: "idioma",
+    description: "Idioma del servidor (es / en)",
+    required: false,
+    choices: [
+      { name: "Español (es)", value: "es" },
+      { name: "English (en)", value: "en" },
+    ],
+  }),
+  plugins: [Plugins.hasPerms("ManageGuild")],
+
+  async code(ctx) {
+    try {
+      if (!ctx.guild) return noGuildReply(ctx);
+
+      const currentLang = await getLang(ctx.guild.id);
+      const rawArg = (ctx.get("idioma") ?? ctx.args?.[0] ?? "").trim().toLowerCase();
+      const guildIcon = ctx.guild.iconURL({ size: 256 });
+
+      if (!rawArg) {
+        return ctx.send(
+          buildCompactCard({
+            title: currentLang === "en" ? "Current language" : "Idioma actual",
+            subtitle: ctx.guild.name,
+            body: V2Text.fields([[t(currentLang, "setup.lang_label"), currentLang === "en" ? "English (`en`)" : "Español (`es`)"]]),
+            thumbnailUrl: guildIcon,
+            color: RED,
+          })
+        );
+      }
+
+      if (rawArg !== "es" && rawArg !== "en") {
+        return ctx.ephemeral(
+          currentLang === "en"
+            ? "Supported languages: `es`, `en`."
+            : "Idiomas disponibles: `es`, `en`."
+        );
+      }
+
+      const nextLang = await setLang(ctx.guild.id, normalizeLang(rawArg));
+      await ctx.send(
+        buildCompactCard({
+          title: nextLang === "en" ? "Language updated" : "Idioma actualizado",
+          subtitle: ctx.guild.name,
+          body: t(nextLang, "lang.updated"),
+          thumbnailUrl: guildIcon,
+          color: GREEN,
+        })
+      );
+    } catch (err) {
+      log.error("[util setlang]", { err: err?.message ?? String(err) });
+      handleCommandError(ctx, err);
+    }
+  },
+};
+
+data.data
+  .addCommand(pollCommand)
+  .addCommand(remindCommand)
+  .addCommand(ocrCommand)
+  .addCommand(remindersCommand)
+  .addCommand(setlangCommand);
 
 module.exports = { data };

@@ -1,5 +1,7 @@
 const { Errors, ComponentsV2Builder } = require("gralonium");
 const { RED } = require("../src/config");
+const { getLang } = require("../src/guild");
+const { detectLocaleLang, t } = require("../src/i18n");
 const { Logger, sanitizeError } = require("../src/runtime");
 
 const log = new Logger("EVENT_FRAMEWORK_ERROR", process.env.LOG_LEVEL);
@@ -60,6 +62,9 @@ const event = {
     const guildId = ctx?.guild?.id ?? ctx?.data?.guildId;
     const userId = ctx?.user?.id;
     const commandName = ctx?.command?.data?.name;
+    const lang = guildId
+      ? await getLang(guildId)
+      : detectLocaleLang(ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale);
 
     const safeSend = async (payload) => {
       try {
@@ -84,19 +89,21 @@ const event = {
       }
     };
 
+    const requiredFallback = lang === "en" ? "the required ones" : "los requeridos";
+
     if (is(err, Errors.GuildOnly)) {
-      return safeSend("Este comando solo se puede usar en servidores");
+      return safeSend(t(lang, "error.guild_only"));
     }
 
     if (is(err, Errors.CommandNotFound)) return;
 
     if (is(err, Errors.NotOwner)) {
-      return safeSend("Este comando solo puede ser utilizado por el dueño del bot");
+      return safeSend(t(lang, "error.not_owner"));
     }
 
     if (is(err, Errors.MissingPermission)) {
-      const permisos = err.permissions?.join(", ") || "los requeridos";
-      return safeSend(`No tienes permisos para usar este comando, necesitas: \`${permisos}\``);
+      const permisos = err.permissions?.join(", ") || requiredFallback;
+      return safeSend(t(lang, "error.missing_perm", { perms: permisos }));
     }
 
     if (
@@ -105,22 +112,22 @@ const event = {
       isDiscordPermError(err)
     ) {
       const missing = resolveMissingBotPermissions(ctx, err, _client);
-      const permisos = missing.length ? missing.join(", ") : "los requeridos";
-      return safeSend(`No tengo permisos suficientes en este canal, necesito: \`${permisos}\``);
+      const permisos = missing.length ? missing.join(", ") : requiredFallback;
+      return safeSend(t(lang, "error.missing_bot_perm", { perms: permisos }));
     }
 
     if (is(err, Errors.MissingChannelPermission)) {
-      const permisos = err.permissions?.join(", ") || "los requeridos";
-      return safeSend(`No tienes permisos en este canal, necesitas: \`${permisos}\``);
+      const permisos = err.permissions?.join(", ") || requiredFallback;
+      return safeSend(t(lang, "error.missing_channel_perm", { perms: permisos }));
     }
 
     if (is(err, Errors.OnlyForIDs)) {
-      return safeSend("Este comando solo lo pueden usar usuarios específicos");
+      return safeSend(t(lang, "error.only_ids"));
     }
 
     if (is(err, Errors.CommandInCooldown)) {
       const secs = Math.max(1, Math.ceil((err.timeLeft ?? 1000) / 1000));
-      return safeSend(`Espera \`${secs}s\` antes de volver a usar este comando`);
+      return safeSend(t(lang, "error.cooldown", { secs }));
     }
 
     if (is(err, Errors.MissingRequiredParam)) {
@@ -128,20 +135,24 @@ const event = {
       const bot = err.ctx?.bot?.user ?? _client?.user;
 
       if (commandName === "ask" || err.param?.name === "pregunta") {
+        const isEn = lang === "en";
+        const askTitle = isEn ? "Ask Command" : "Comando Ask";
+        const askDesc = isEn
+          ? "**Usage:**\nAsk the AI a question\n\n**Aliases:**\n`ia`, `ai`\n\n```js\n.ask <question>\nExample: .ask why is the sky blue\n```"
+          : "**Usos:**\nHazle una pregunta a la IA\n\n**Aliases:**\n`ia`, `ai`\n\n```js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\n```";
         const canEmbed = !ctx?.guild || ctx.channel?.permissionsFor?.(ctx.guild.members.me || _client?.user)?.has("EmbedLinks");
         if (!canEmbed) {
           return safeSend(
-            `**Comando Ask**\n**Usos:** Hazle una pregunta a la IA\n**Aliases:** \`ia\`, \`ai\`\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
+            isEn
+              ? `**Ask Command**\n**Usage:** Ask the AI a question\n**Aliases:** \`ia\`, \`ai\`\n\`\`\`js\n.ask <question>\nExample: .ask why is the sky blue\`\`\``
+              : `**Comando Ask**\n**Usos:** Hazle una pregunta a la IA\n**Aliases:** \`ia\`, \`ai\`\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
           );
         }
 
         const paramErrorCard = ComponentsV2Builder.card({
-          title: "Comando Ask",
+          title: askTitle,
           thumbnail: bot?.displayAvatarURL?.() ?? null,
-          description:
-            "**Usos:**\nHazle una pregunta a la IA" +
-            "\n\n**Aliases:**\n`ia`, `ai`" +
-            "\n\n```js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\n```",
+          description: askDesc,
           color: RED,
           headerSeparator: false,
         });
@@ -149,28 +160,28 @@ const event = {
         return safeSend(paramErrorCard);
       }
 
-      const paramName = err.param?.name ?? "requerido";
-      return safeSend(`Falta el parámetro requerido: \`${paramName}\``);
+      const paramName = err.param?.name ?? (lang === "en" ? "required" : "requerido");
+      return safeSend(t(lang, "error.missing_param", { param: paramName }));
     }
-    
+
     if (is(err, Errors.NotNSFW)) {
-      return safeSend("Este comando solo se puede usar en canales NSFW");
+      return safeSend(t(lang, "error.not_nsfw"));
     }
 
     if (is(err, Errors.NotInChannelType)) {
-      return safeSend("No puedes usar este comando en este tipo de canal");
+      return safeSend(t(lang, "error.wrong_channel_type"));
     }
 
     if (is(err, Errors.InvalidParamMember)) {
-      return safeSend("No encontré ese usuario en el servidor");
+      return safeSend(t(lang, "error.invalid_member"));
     }
 
     if (is(err, Errors.InvalidParamChannel)) {
-      return safeSend("No encontré ese canal");
+      return safeSend(t(lang, "error.invalid_channel"));
     }
 
     if (is(err, Errors.InvalidParamRole)) {
-      return safeSend("No encontré ese rol");
+      return safeSend(t(lang, "error.invalid_role"));
     }
 
     if (
@@ -179,11 +190,12 @@ const event = {
       is(err, Errors.InvalidParamChoice) ||
       is(err, Errors.InvalidChannelType)
     ) {
-      return safeSend(`Parámetro inválido: \`${err.message ?? "valor incorrecto"}\``);
+      const detail = err.message ?? (lang === "en" ? "invalid value" : "valor incorrecto");
+      return safeSend(t(lang, "error.invalid_param", { detail }));
     }
 
     if (is(err, Errors.UnknownCommandError)) {
-      return safeSend("Ocurrió un error desconocido con el comando");
+      return safeSend(t(lang, "error.unknown_command"));
     }
 
     log.error("FrameworkError no categorizado", {
@@ -193,7 +205,7 @@ const event = {
       commandName,
       err: sanitizeError(err),
     });
-    return safeSend("Ocurrió un error interno al ejecutar el comando.");
+    return safeSend(t(lang, "error.internal"));
   },
 };
 

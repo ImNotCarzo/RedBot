@@ -1,5 +1,8 @@
 const crypto = require("node:crypto");
+const { YELLOW } = require("./config");
 const { Warn, TempBan } = require("./database");
+const { getLang, getWarnPolicy, logAction } = require("./guild");
+const { t } = require("./i18n");
 const { Logger } = require("./runtime");
 
 const log = new Logger("MODERATION_SERVICE");
@@ -155,12 +158,51 @@ async function cancelTempBan(guildId, userId) {
   await TempBan.deleteOne({ guildId, userId }).catch(() => {});
 }
 
+async function applyWarnEscalation(guild, member, totalWarns) {
+  if (!guild?.id || !member?.id) return null;
+  const policy = await getWarnPolicy(guild.id);
+  if (!policy.warnThreshold || totalWarns < policy.warnThreshold) return null;
+
+  const me = guild.members?.me ?? (await guild.members?.fetchMe?.().catch(() => null));
+  if (me?.permissions?.has && !me.permissions.has("ModerateMembers")) return null;
+  if (!member.moderatable || typeof member.timeout !== "function") return null;
+
+  const maxDiscordTimeoutMs = 28 * 24 * 60 * 60 * 1000;
+  const muteMs = Math.min(policy.warnMuteMs || 10 * 60_000, maxDiscordTimeoutMs);
+  const lang = await getLang(guild.id);
+  const reason = t(lang, "warn.auto_muted", { duration: formatDuration(muteMs), count: totalWarns });
+
+  try {
+    await member.timeout(muteMs, reason);
+  } catch (err) {
+    log.warn("No se pudo aplicar auto-mute por warns", {
+      guildId: guild.id,
+      userId: member.id,
+      err: err?.message ?? String(err),
+    });
+    return null;
+  }
+
+  await logAction(guild, {
+    title: lang === "en" ? "Auto-Mute Applied" : "Auto-mute aplicado",
+    color: YELLOW,
+    fields: [
+      { name: lang === "en" ? "User" : "Usuario", value: `${member.user?.tag ?? member.id} (\`${member.id}\`)`, inline: true },
+      { name: lang === "en" ? "Warnings" : "Advertencias", value: `${totalWarns}`, inline: true },
+      { name: lang === "en" ? "Duration" : "Duración", value: formatDuration(muteMs), inline: true },
+    ],
+  }).catch(() => {});
+
+  return { muted: true, muteMs, reason };
+}
+
 module.exports = {
   cancelTempBan,
   generateId,
   parseDuration,
   formatDuration,
   addWarn,
+  applyWarnEscalation,
   removeWarnById,
   clearWarnsForUser,
   listWarnsForUser,
