@@ -21,9 +21,11 @@ const {
 const { logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
 
 function notifyUser(user, { description, color = RED, fields = null }) {
+  const { getCurrentLang, translateEmbed } = require("../../src/i18n");
   const embed = new EmbedBuilder().setColor(color).setDescription(description);
   if (fields?.length) embed.addFields(fields);
-  return user.send({ embeds: [embed] }).catch(() => {});
+  const finalEmbed = getCurrentLang() === "en" ? translateEmbed(embed, "en") : embed;
+  return user.send({ embeds: [finalEmbed] }).catch(() => {});
 }
 
 function hierarchyChecks(ctx, member, action = "actuar sobre") {

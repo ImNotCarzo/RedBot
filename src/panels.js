@@ -71,7 +71,7 @@ function buildSetupCard({
       })
       .addSpacer("small")
       .addButtonsRow([
-        { customId: view.id("prefix"), label: "Prefijo", style: "primary" },
+        { customId: view.id("prefix"), label: "Prefijo", style: "danger" },
         {
           customId: view.id("togglebots"),
           label: joinRoleDoc?.ignoreBots ? "Autorole: Ignora bots" : "Autorole: Incluye bots",
@@ -93,7 +93,7 @@ function buildSetupCard({
         ...(hasCustomBot ? [{ customId: view.id("custombot"), label: "Perfil del bot", style: "secondary" }] : []),
       ])
       .addButtonsRow([
-        { customId: view.id("lang"), label: t(lang, "setup.btn_lang", { lang: lang.toUpperCase() }), style: "primary" },
+        { customId: view.id("lang"), label: t(lang, "setup.btn_lang", { lang: lang.toUpperCase() }), style: "danger" },
         { customId: view.id("warnauto"), label: t(lang, "setup.btn_warn_auto"), style: "secondary" },
       ]);
   }

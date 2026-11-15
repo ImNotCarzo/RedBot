@@ -531,7 +531,7 @@ const data = {
     async code(ctx) {
       await ctx.defer();
       const texto = ctx.get("texto");
-      const idioma = ctx.get("idioma") ?? "es";
+      const idioma = ctx.get("idioma") ?? require("../../src/i18n").getCurrentLang();
 
       try {
         const { translate } = require("@vitalets/google-translate-api");
@@ -637,7 +637,9 @@ const data = {
       if (invalid) return invalid;
 
       try {
-        const prompt = "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
+        const prompt = require("../../src/i18n").getCurrentLang() === "en"
+          ? "Describe in detail what is in this image. Be specific: colors, objects, people, visible text, setting, style. Respond in English. Maximum 3 paragraphs."
+          : "Describe detalladamente qué hay en esta imagen. Sé específico: colores, objetos, personas, texto visible, ambiente, estilo. Responde en español. Máximo 3 párrafos.";
         const texto = await generateVision(prompt, attachment.url);
 
         const meta = formatAttachmentMeta(attachment, "imagen");
@@ -735,7 +737,7 @@ const data = {
           .addSmartText(texto, {
             maxLength: 3600,
             overflow: "file",
-            filename: "transcripcion.txt",
+            filename: require("../../src/i18n").getCurrentLang() === "en" ? "transcription.txt" : "transcripcion.txt",
             preview: false,
             overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
           });
@@ -903,7 +905,9 @@ const data = {
 
       try {
         const resumen = await generateText(
-          `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
+          require("../../src/i18n").getCurrentLang() === "en"
+            ? `Summarize the following text. Only provide the summary, with no introductory phrases or extra commentary. Stay objective and faithful to the original content, without opinions or interpretations. Respond in English.\n\n${texto.slice(0, 8000)}`
+            : `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${texto.slice(0, 8000)}`
         );
 
         const header = resumen
@@ -1093,7 +1097,7 @@ const ocrCommand = {
         .addSmartText(texto, {
           maxLength: 3600,
           overflow: "file",
-          filename: "texto.txt",
+          filename: require("../../src/i18n").getCurrentLang() === "en" ? "text.txt" : "texto.txt",
           preview: false,
           overflowNotice: "El texto supera el límite del mensaje, se adjunta como archivo.",
         });

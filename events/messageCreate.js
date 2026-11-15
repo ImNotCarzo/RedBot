@@ -20,6 +20,9 @@ const SAFE_MENTIONS = { parse: [], repliedUser: false };
 async function handleAfkChecks(message, prefix) {
   if (!message.guildId || message.author.bot) return;
 
+  let cachedLang = null;
+  const resolveLang = async () => (cachedLang ??= await getLang(message.guildId).catch(() => "es"));
+
   const content = message.content?.trim() ?? "";
   const isInvokingAfk =
     content.startsWith(prefix) &&
@@ -29,9 +32,14 @@ async function handleAfkChecks(message, prefix) {
     const authorAfk = await getAfk(message.guildId, message.author.id);
     if (authorAfk && Date.now() - new Date(authorAfk.createdAt).getTime() >= 2500) {
       await removeAfk(message.guildId, message.author.id);
+      const isEn = (await resolveLang()) === "en";
       const sinceTs = Math.floor(new Date(authorAfk.createdAt).getTime() / 1000);
       const welcomeEmbed = new EmbedBuilder()
-        .setDescription(`Bienvenido de vuelta ${message.author} (ausente por <t:${sinceTs}:R>).`)
+        .setDescription(
+          isEn
+            ? `Welcome back ${message.author} (away for <t:${sinceTs}:R>).`
+            : `Bienvenido de vuelta ${message.author} (ausente por <t:${sinceTs}:R>).`
+        )
         .setColor(RED);
 
       message
@@ -50,8 +58,13 @@ async function handleAfkChecks(message, prefix) {
     for (const targetUser of mentioned) {
       const targetAfk = await getAfk(message.guildId, targetUser.id);
       if (targetAfk) {
+        const isEn = (await resolveLang()) === "en";
         const sinceTs = Math.floor(new Date(targetAfk.createdAt).getTime() / 1000);
-        afkLines.push(`**${targetUser.username}** está AFK (<t:${sinceTs}:R>): ${targetAfk.reason}`);
+        afkLines.push(
+          isEn
+            ? `**${targetUser.username}** is AFK (<t:${sinceTs}:R>): ${targetAfk.reason}`
+            : `**${targetUser.username}** está AFK (<t:${sinceTs}:R>): ${targetAfk.reason}`
+        );
       }
     }
 

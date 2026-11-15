@@ -4,6 +4,7 @@ const { EmbedBuilder } = require("discord.js");
 const { Gralonium, ComponentsV2Builder, V2Text, V2Paginator } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
+const { getCurrentLang } = require("./i18n");
 
 const LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
 
@@ -167,8 +168,11 @@ function createBot() {
         const trimmed = content.trim();
         if (trimmed === mentionA || trimmed === mentionB) {
           const guildPrefix = guildId ? await getPrefix(guildId) : DEFAULT_PREFIX;
+          const lang = guildId ? await require("./guild").getLang(guildId) : "es";
           await message.reply({
-            content: `Mi prefijo en este servidor es \`${guildPrefix}\``,
+            content: lang === "en"
+              ? `My prefix in this server is \`${guildPrefix}\``
+              : `Mi prefijo en este servidor es \`${guildPrefix}\``,
             allowedMentions: { repliedUser: false },
           }).catch(() => {});
           return null;
@@ -263,11 +267,13 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
   return fetch(url, { ...options, signal });
 }
 
-function noGuildReply(ctx, message = "Este comando solo funciona en servidores") {
+function noGuildReply(ctx, message = null) {
+  const isEn = getCurrentLang() === "en";
+  const text = message ?? (isEn ? "This command only works in servers" : "Este comando solo funciona en servidores");
   const card = ComponentsV2Builder.card({
-    description: message,
+    description: text,
     color: RED,
-    links: [{ label: "Invítame", url: INVITE_URL }],
+    links: [{ label: isEn ? "Invite me" : "Invítame", url: INVITE_URL }],
   });
   return ctx.ephemeral(card);
 }
@@ -299,13 +305,14 @@ function buildActionCard({
   color = RED,
   thumbnail = null,
 }) {
+  const modLabel = getCurrentLang() === "en" ? "Moderator" : "Moderador";
   return ComponentsV2Builder.card({
     title: title ? V2Text.heading(title, 3, 200) : null,
     subtitle: subtitle ? V2Text.subtext(subtitle, 120) : null,
     description,
     fields: Array.isArray(fields) && fields.length ? fields : undefined,
     sections: Array.isArray(sections) && sections.length ? sections : undefined,
-    footer: moderator ? V2Text.subtext(`Moderador: ${moderator}`, 200) : null,
+    footer: moderator ? V2Text.subtext(`${modLabel}: ${moderator}`, 200) : null,
     color,
     thumbnail,
   });
@@ -326,7 +333,7 @@ function createListPaginator({ items, ownerId, perPage = 15, timeout = 2 * 60 * 
     perPage,
     ownerId,
     thirdPartyMode,
-    thirdPartyMessage: "No es tu comando",
+    thirdPartyMessage: getCurrentLang() === "en" ? "This is not your command" : "No es tu comando",
     wrap: false,
     prevButton: { label: "◀" },
     nextButton: { label: "▶" },
@@ -407,16 +414,17 @@ async function broadcastDm({ guild, embed, soloRolId, excluirRolId, excluirUserI
 }
 
 function buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros }) {
+  const isEn = getCurrentLang() === "en";
   return new EmbedBuilder()
-    .setTitle("DM masivo enviado")
+    .setTitle(isEn ? "Mass DM sent" : "DM masivo enviado")
     .setColor(RED)
     .addFields(
-      { name: "Moderador", value: author.tag ?? author.username, inline: true },
-      { name: "Enviados", value: `\`${enviados}\``, inline: true },
-      { name: "Fallidos", value: `\`${fallidos}\``, inline: true },
-      { name: "Título", value: clip(titulo), inline: false },
-      { name: "Texto", value: clip(texto), inline: false },
-      ...(filtros.length ? [{ name: "Filtros", value: clip(filtros.join("\n")), inline: false }] : []),
+      { name: isEn ? "Moderator" : "Moderador", value: author.tag ?? author.username, inline: true },
+      { name: isEn ? "Sent" : "Enviados", value: `\`${enviados}\``, inline: true },
+      { name: isEn ? "Failed" : "Fallidos", value: `\`${fallidos}\``, inline: true },
+      { name: isEn ? "Title" : "Título", value: clip(titulo), inline: false },
+      { name: isEn ? "Text" : "Texto", value: clip(texto), inline: false },
+      ...(filtros.length ? [{ name: isEn ? "Filters" : "Filtros", value: clip(filtros.join("\n")), inline: false }] : []),
     )
     .setTimestamp();
 }

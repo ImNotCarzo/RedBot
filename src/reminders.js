@@ -47,8 +47,9 @@ async function deliverReminder(client, doc) {
     const pending = await Reminder.exists({ _id: doc._id });
     if (!pending) return;
 
+    const lang = doc.guildId ? await require("./guild").getLang(doc.guildId).catch(() => "es") : "es";
     const embed = new EmbedBuilder()
-      .setTitle("Recordatorio")
+      .setTitle(lang === "en" ? "Reminder" : "Recordatorio")
       .setDescription(doc.text)
       .setColor(RED)
       .setTimestamp(doc.createdAt ? new Date(doc.createdAt) : new Date());

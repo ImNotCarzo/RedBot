@@ -71,11 +71,13 @@ function extractContextImage(message) {
 }
 
 async function replyEphemeral(interaction, payload) {
-  const data = typeof payload === "string"
+  const { getCurrentLang, translatePayload } = require("./i18n");
+  const raw = typeof payload === "string"
     ? { content: payload, flags: MessageFlags.Ephemeral }
     : typeof payload?.toPayload === "function"
       ? payload.toPayload({ ephemeral: true })
       : { ...payload, flags: MessageFlags.Ephemeral };
+  const data = translatePayload(raw, getCurrentLang());
 
   if (interaction.deferred || interaction.replied) {
     return interaction.editReply(data).catch(() => interaction.followUp(data).catch(() => null));
@@ -100,13 +102,15 @@ async function handleTranslateContext(interaction) {
       return replyEphemeral(interaction, "Este mensaje no tiene texto para traducir");
     }
 
+    const { getCurrentLang } = require("./i18n");
+    const defaultTarget = getCurrentLang();
     const { translate } = require("@vitalets/google-translate-api");
-    let res = await translate(text.slice(0, 3000), { to: "es" });
-    let targetLang = "es";
+    let res = await translate(text.slice(0, 3000), { to: defaultTarget });
+    let targetLang = defaultTarget;
 
-    if (res?.raw?.src?.toLowerCase() === "es") {
-      res = await translate(text.slice(0, 3000), { to: "en" });
-      targetLang = "en";
+    if (res?.raw?.src?.toLowerCase() === defaultTarget) {
+      targetLang = defaultTarget === "en" ? "es" : "en";
+      res = await translate(text.slice(0, 3000), { to: targetLang });
     }
 
     if (!res?.text) {
@@ -169,8 +173,11 @@ async function handleResumeContext(interaction) {
       return replyEphemeral(interaction, "El mensaje es demasiado corto para resumir");
     }
 
+    const isEn = require("./i18n").getCurrentLang() === "en";
     const resumen = await generateText(
-      `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${text.slice(0, 8000)}`
+      isEn
+        ? `Summarize the following text. Only provide the summary, with no introductory phrases or extra commentary. Stay objective and faithful to the original content, without opinions or interpretations. Respond in English.\n\n${text.slice(0, 8000)}`
+        : `Resume el siguiente texto. Solo el resumen, sin frases previas ni comentarios adicionales. Objetivo, fiel al contenido original, sin opiniones ni interpretaciones. Responde en español.\n\n${text.slice(0, 8000)}`
     );
 
     const card = new ComponentsV2Builder({ color: RED })
@@ -250,10 +257,13 @@ async function handleRemindContext(client, interaction) {
     return replyEphemeral(submitted, "Tiempo inválido. Usa `30s`, `10m`, `2h`, `1d` o `1w` (entre 10s y 365d)");
   }
 
+  const isEn = require("./i18n").getCurrentLang() === "en";
   const remindAt = new Date(Date.now() + duration);
-  const msgLink = targetMsg.url ? `[Ir al mensaje](${targetMsg.url})` : "";
+  const msgLink = targetMsg.url ? `[${isEn ? "Jump to message" : "Ir al mensaje"}](${targetMsg.url})` : "";
   const bodyParts = [
-    note || `Recordatorio de mensaje de **${targetMsg.author?.username ?? "usuario"}**`,
+    note || (isEn
+      ? `Reminder about message from **${targetMsg.author?.username ?? "user"}**`
+      : `Recordatorio de mensaje de **${targetMsg.author?.username ?? "usuario"}**`),
     preview !== "(Mensaje sin texto)" ? `> ${preview}` : "",
     msgLink,
   ].filter(Boolean);
@@ -288,7 +298,7 @@ function buildDossierPayload({ targetUser, member, warns, modMember, guild, ids 
     !targetUser.bot &&
     targetUser.id !== modMember.id &&
     targetUser.id !== guild.ownerId &&
-    (modMember.id === guild.ownerId || (member && member.roles.highest.position < modMember.roles.highest.position));
+    (modMember.id === guild.ownerId || (member && (member.roles?.highest?.position ?? 0) < (modMember.roles?.highest?.position ?? 0)));
 
   const recentWarns = warns.slice(0, 3).map((w) => {
     const ts = Math.floor(new Date(w.createdAt).getTime() / 1000);
@@ -315,7 +325,7 @@ function buildDossierPayload({ targetUser, member, warns, modMember, guild, ids 
   if (canTarget && member && ids) {
     builder.addSpacer("small").addComponent(
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(ids.warn).setLabel("Advertir").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(ids.warn).setLabel("Advertir").setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId(ids.mute).setLabel("Mute 10m").setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId(ids.kick)
@@ -344,8 +354,8 @@ async function handleModDossierContext(interaction) {
     const targetUser = interaction.targetUser;
     const member =
       interaction.targetMember ??
-      guild.members.cache.get(targetUser.id) ??
-      (await guild.members.fetch(targetUser.id).catch(() => null));
+      guild.members?.cache?.get?.(targetUser.id) ??
+      (await guild.members?.fetch?.(targetUser.id).catch(() => null));
 
     const warns = await listWarnsForUser({ guildId: guild.id, userId: targetUser.id });
     const session = Date.now().toString(36);
@@ -366,7 +376,11 @@ async function handleModDossierContext(interaction) {
     });
 
     collector.on("collect", async (btn) => {
-      try {
+      const { runWithLang, wrapInteractionForLang, getCurrentLang } = require("./i18n");
+      const lang = guild?.id ? await require("./guild").getLang(guild.id).catch(() => getCurrentLang()) : getCurrentLang();
+      return runWithLang(lang, async () => {
+        wrapInteractionForLang(btn, lang);
+        try {
         if (btn.customId === ids.mute) {
           const me = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
           if (!me?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
@@ -471,6 +485,7 @@ async function handleModDossierContext(interaction) {
           await btn.reply({ content: "No se pudo ejecutar la acción", flags: MessageFlags.Ephemeral }).catch(() => {});
         }
       }
+      });
     });
   } catch (err) {
     log.error("[ctx mod]", { err: err?.message ?? String(err) });
@@ -478,10 +493,25 @@ async function handleModDossierContext(interaction) {
   }
 }
 
+function withContextLang(handler) {
+  return async function (...args) {
+    const interaction = args.length >= 2 ? args[1] : args[0];
+    const { runWithLang, wrapInteractionForLang, detectLocaleLang } = require("./i18n");
+    const { getLang } = require("./guild");
+    const lang = interaction?.guildId
+      ? await getLang(interaction.guildId).catch(() => "es")
+      : interaction?.locale
+        ? detectLocaleLang(interaction.locale)
+        : "es";
+    wrapInteractionForLang(interaction, lang);
+    return runWithLang(lang, () => handler(...args));
+  };
+}
+
 module.exports = {
-  handleTranslateContext,
-  handleOcrContext,
-  handleResumeContext,
-  handleRemindContext,
-  handleModDossierContext,
+  handleTranslateContext: withContextLang(handleTranslateContext),
+  handleOcrContext: withContextLang(handleOcrContext),
+  handleResumeContext: withContextLang(handleResumeContext),
+  handleRemindContext: withContextLang(handleRemindContext),
+  handleModDossierContext: withContextLang(handleModDossierContext),
 };

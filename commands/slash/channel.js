@@ -534,9 +534,13 @@ const recapCommand = {
         return ctx.ephemeral("No hay suficientes mensajes para resumir");
       }
 
+      const isEn = require("../../src/i18n").getCurrentLang() === "en";
       const prompt =
-        "Resume la siguiente conversación de un canal de Discord. Indica los temas principales y, cuando sea relevante, quién dijo qué. " +
-        "Solo el resumen, objetivo, sin opiniones ni frases previas. Responde en español, máximo 3 párrafos.\n\n" +
+        (isEn
+          ? "Summarize the following Discord channel conversation. Highlight the main topics and, when relevant, who said what. " +
+            "Only provide the summary, objective, with no opinions or introductory phrases. Respond in English, max 3 paragraphs.\n\n"
+          : "Resume la siguiente conversación de un canal de Discord. Indica los temas principales y, cuando sea relevante, quién dijo qué. " +
+            "Solo el resumen, objetivo, sin opiniones ni frases previas. Responde en español, máximo 3 párrafos.\n\n") +
         lines.join("\n").slice(0, 12000);
 
       const resumen = await generateText(prompt);

@@ -28,13 +28,13 @@ function buildWelcomeCard(lang, guild) {
       {
         customId: "welcome_lang:es",
         label: t(active, "welcome.btn_es"),
-        style: active === "es" ? "primary" : "secondary",
+        style: active === "es" ? "danger" : "secondary",
         disabled: active === "es",
       },
       {
         customId: "welcome_lang:en",
         label: t(active, "welcome.btn_en"),
-        style: active === "en" ? "primary" : "secondary",
+        style: active === "en" ? "danger" : "secondary",
         disabled: active === "en",
       },
     ]);
@@ -59,15 +59,7 @@ const event = {
   async code(_bot, guild) {
     if (!guild?.id) return;
 
-    let initialLang = detectDefaultGuildLang(guild);
-    if (GuildConfig.db?.readyState === 1) {
-      try {
-        const existing = await GuildConfig.findOne({ guildId: guild.id }).select("lang").lean();
-        if (existing?.lang === "es" || existing?.lang === "en") {
-          initialLang = existing.lang;
-        }
-      } catch {}
-    }
+    const initialLang = detectDefaultGuildLang(guild);
 
     await setLang(guild.id, initialLang);
     log.info("Bot añadido a servidor", {

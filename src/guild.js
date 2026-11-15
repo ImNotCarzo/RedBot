@@ -66,8 +66,10 @@ async function getLang(guildId) {
   if (GuildConfig.db?.readyState !== 1) return "es";
   try {
     const doc = await GuildConfig.findOne({ guildId }).select("lang").lean();
-    const lang = normalizeLang(doc?.lang);
-    langCache.set(guildId, lang);
+    const lang = doc?.lang === "en" ? "en" : "es";
+    if (doc?.lang === "es" || doc?.lang === "en") {
+      langCache.set(guildId, lang);
+    }
     return lang;
   } catch {
     return "es";
@@ -83,7 +85,7 @@ async function setLang(guildId, lang) {
       await GuildConfig.findOneAndUpdate(
         { guildId },
         { $set: { lang: resolved } },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: "after" }
       );
     } catch {}
   }
@@ -120,7 +122,7 @@ async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_
       await GuildConfig.findOneAndUpdate(
         { guildId },
         { $set: policy },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: "after" }
       );
     } catch {}
   }
@@ -239,7 +241,9 @@ async function sendLog(guild, embed, context = {}) {
     }
 
     if (!channel.isTextBased()) return false;
-    await channel.send({ embeds: [embed] });
+    const lang = await getLang(guild.id);
+    const finalEmbed = lang === "en" ? require("./i18n").translateEmbed(embed, "en") : embed;
+    await channel.send({ embeds: [finalEmbed] });
     return true;
   } catch (err) {
     log.error("Error enviando log de guild", {

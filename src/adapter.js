@@ -7,14 +7,18 @@ const RELEASE_NOTICE_VERSION = "0.4.0";
 const seenReleaseUsers = new Set();
 const handledReleaseCtx = new WeakSet();
 
-function buildReleaseNoticeEmbed() {
+function buildReleaseNoticeEmbed(lang = null) {
   const { EmbedBuilder } = require("discord.js");
   const { RED } = require("./config");
+  const resolvedLang = lang ?? require("./i18n").getCurrentLang();
+  const isEn = resolvedLang === "en";
   return new EmbedBuilder()
     .setColor(RED)
-    .setTitle(`Nuevos comandos añadidos (${RELEASE_NOTICE_VERSION})`)
+    .setTitle(isEn ? `New commands added (${RELEASE_NOTICE_VERSION})` : `Nuevos comandos añadidos (${RELEASE_NOTICE_VERSION})`)
     .setDescription([
-      "/server custombot ``.custombot`` -> personaliza el avatar, banner, apodo y biografia de redbot en tu servidor",
+      isEn
+        ? "/server custombot ``.custombot`` -> customize redbot's avatar, banner, nickname, and bio in your server"
+        : "/server custombot ``.custombot`` -> personaliza el avatar, banner, apodo y biografia de redbot en tu servidor",
       "",
       "/server customreset ``.customreset``",
       "/util poll ``.poll``",
@@ -366,14 +370,58 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
   return { values, missingRequired, notFound };
 }
 
+const CTX_I18N_WRAPPED = Symbol.for("redbot.ctxI18nWrapped");
+
+function wrapCtxForLang(ctx, lang) {
+  if (lang !== "en" || !ctx || typeof ctx !== "object" || ctx[CTX_I18N_WRAPPED]) return ctx;
+  ctx[CTX_I18N_WRAPPED] = true;
+  const { translatePayload, wrapInteractionForLang } = require("./i18n");
+
+  const wrapSentMsg = (msg) => {
+    if (msg && typeof msg === "object" && typeof msg.edit === "function" && !msg[CTX_I18N_WRAPPED]) {
+      msg[CTX_I18N_WRAPPED] = true;
+      const origEdit = msg.edit.bind(msg);
+      msg.edit = (payload, ...rest) => origEdit(translatePayload(payload, lang), ...rest);
+    }
+    return msg;
+  };
+
+  for (const fnName of ["send", "ephemeral"]) {
+    if (typeof ctx[fnName] === "function") {
+      const orig = ctx[fnName].bind(ctx);
+      ctx[fnName] = async (payload, ...rest) => {
+        if (payload && typeof payload === "object" && typeof payload.toPayload === "function") {
+          payload._i18nLang = lang;
+          return wrapSentMsg(await orig(payload, ...rest));
+        }
+        return wrapSentMsg(await orig(translatePayload(payload, lang), ...rest));
+      };
+    }
+  }
+
+  if (ctx.interaction) wrapInteractionForLang(ctx.interaction, lang);
+  return ctx;
+}
+
 function wrapSlashCommand(cmd) {
   const originalCode = cmd?.code;
   if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
 
   cmd.code = async function (ctx, ...args) {
-    const result = await originalCode.call(this, ctx, ...args);
-    await maybeSendReleaseNotice(ctx);
-    return result;
+    const { runWithLang, detectLocaleLang } = require("./i18n");
+    const { getLang } = require("./guild");
+    const guildId = ctx?.guild?.id ?? ctx?.interaction?.guildId ?? null;
+    const lang = guildId
+      ? await getLang(guildId)
+      : ctx?.interaction?.locale
+        ? detectLocaleLang(ctx.interaction.locale)
+        : "es";
+    return runWithLang(lang, async () => {
+      const langCtx = wrapCtxForLang(ctx, lang);
+      const result = await originalCode.call(this, langCtx, ...args);
+      await maybeSendReleaseNotice(langCtx);
+      return result;
+    });
   };
 
   wrappedOriginalCodes.add(originalCode);
@@ -463,12 +511,16 @@ function wrapSingleCommand(command, file, log) {
           ctx.command = prevCommand;
         }
 
+        const { runWithLang } = require("./i18n");
+        const { getLang } = require("./guild");
+        const lang = ctx?.guild?.id ? await getLang(ctx.guild.id) : "es";
+        wrapCtxForLang(ctx, lang);
         const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey);
-        if (parsedValues.notFound) return ctx.send("No encontré a ese usuario");
+        if (parsedValues.notFound) return ctx.send(lang === "en" ? "Could not find that user" : "No encontré a ese usuario");
         if (parsedValues.missingRequired) {
-          const fallbackResult = await originalCode.call(this, ctx, ...args);
+          const fallbackResult = await runWithLang(lang, () => originalCode.call(this, ctx, ...args));
           if (fallbackResult !== undefined) return fallbackResult;
-          return ctx.send("Faltan parámetros requeridos para ejecutar este comando.");
+          return ctx.send(lang === "en" ? "Missing required parameters to run this command." : "Faltan parámetros requeridos para ejecutar este comando.");
         }
 
         await applyDelegatedCooldown(ctx, slashCommand);
@@ -493,12 +545,19 @@ function wrapSingleCommand(command, file, log) {
     }
 
     try {
-      const result = await originalCode.call(this, ctx, ...args);
-      await maybeSendReleaseNotice(ctx);
-      return result;
+      const { runWithLang, getCurrentLang } = require("./i18n");
+      const { getLang } = require("./guild");
+      const lang = ctx?.guild?.id ? await getLang(ctx.guild.id) : "es";
+      wrapCtxForLang(ctx, lang);
+      return await runWithLang(lang, async () => {
+        const result = await originalCode.call(this, ctx, ...args);
+        await maybeSendReleaseNotice(ctx);
+        return result;
+      });
     } catch (err) {
       log?.error(`[${command?.data?.name ?? file}]`, { err: err.message });
-      return ctx.send("Ocurrió un error ejecutando el comando");
+      const errLang = ctx?.guild?.id ? await require("./guild").getLang(ctx.guild.id).catch(() => "es") : getCurrentLang();
+      return ctx.send(errLang === "en" ? "An error occurred while running the command" : "Ocurrió un error ejecutando el comando");
     }
   };
 

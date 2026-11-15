@@ -160,7 +160,8 @@ function buildCustomBotEmbed({ updatedMe, bioValue = null, moderator }) {
     });
   }
 
-  return embed;
+  const { getCurrentLang, translateEmbed } = require("../../src/i18n");
+  return getCurrentLang() === "en" ? translateEmbed(embed, "en") : embed;
 }
 
 function buildCustomBotStatusCard(me, guild, { isEnded = false, controls = null } = {}) {
@@ -370,8 +371,8 @@ async function sendCustomBotPanel(ctx) {
       const controls = isEnded
         ? null
         : [
-            { customId: activeView.id("editar"), label: "Editar perfil", style: "primary" },
-            { customId: activeView.id("reset"), label: "Restablecer todo", style: "danger" },
+            { customId: activeView.id("editar"), label: "Editar perfil", style: "danger" },
+            { customId: activeView.id("reset"), label: "Restablecer todo", style: "secondary" },
           ];
       return buildCustomBotStatusCard(state.me, guild, { isEnded, controls });
     },
