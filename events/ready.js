@@ -1,6 +1,11 @@
 const { ActivityType, REST, Routes } = require("discord.js");
 const { hydrateAiSessions } = require("../src/ai");
+const { startAutomationWorkers } = require("../src/automation");
+const { restoreTempChannels, startChannelsWorkers } = require("../src/channelsExtra");
+const { snapshotAllInvites, startCommunityWorkers } = require("../src/community");
+const { startSocialFeedWorker } = require("../src/feeds");
 const { scheduleTempUnban, listPendingTempBans } = require("../src/moderation");
+const { restoreTempRoles } = require("../src/reactionRoles");
 const { restoreReminders } = require("../src/reminders");
 const { Logger, sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
 const { setId } = require("../src/config");
@@ -110,7 +115,14 @@ const event = {
 
     await restoreTempBans(client);
     await restoreReminders(client);
+    await restoreTempRoles(client);
+    await restoreTempChannels(client);
     await hydrateAiSessions();
+    await snapshotAllInvites(client).catch(() => {});
+    startChannelsWorkers(client);
+    startAutomationWorkers(client);
+    startSocialFeedWorker(client);
+    startCommunityWorkers(client);
     startPresenceRotation(client);
 
     try {

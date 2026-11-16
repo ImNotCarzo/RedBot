@@ -1,10 +1,11 @@
 const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { Logger } = require("./runtime");
 // Todas las peticiones del downloader pasan por validacion de host publico (anti-SSRF) y redirecciones controladas
-const { fetchPublic: fetchWithTimeout, readBodyLimited } = require("./security");
+const { assertPublicUrl, fetchPublic: fetchWithTimeout, readBodyLimited, readTextLimited } = require("./security");
 const { RED } = require("./config");
 
 const log = new Logger("DOWNLOAD");
+const MAX_HTML_BYTES = 1024 * 1024;
 
 const DISCORD_BOT_UA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -106,7 +107,7 @@ async function fetchVisitorDataFromEmbed(videoId) {
       8000
     );
     if (!res.ok) return null;
-    const html = await res.text();
+    const html = await readTextLimited(res, MAX_HTML_BYTES);
     const match = html.match(/"VISITOR_DATA":"([^"]+)"/);
     return match ? match[1] : null;
   } catch {
@@ -202,7 +203,7 @@ async function pickNoTubeServers(count = 2, exclude = new Set()) {
       )
         .then(async (res) => {
           if (!res.ok) return;
-          const text = (await res.text()).trim();
+          const text = (await readTextLimited(res, 64 * 1024)).trim();
           if (text === "OK" && ready.length < count) {
             ready.push(host);
             if (ready.length >= count) {
@@ -299,7 +300,7 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     8_000
   );
   if (!pageRes.ok) throw new Error(`download page HTTP ${pageRes.status}`);
-  const pageHtml = await pageRes.text();
+  const pageHtml = await readTextLimited(pageRes, MAX_HTML_BYTES);
   const dlMatch = pageHtml.match(/href="(https:\/\/[^"]+download\.php\?[^"]+)"/i);
   if (!dlMatch?.[1]) throw new Error("missing download.php link");
 
@@ -438,10 +439,11 @@ async function extractInstagram(url) {
       const embedUrl = `https://www.instagram.com/p/${codeMatch[1]}/embed/captioned/`;
       const res = await fetchWithTimeout(embedUrl, { headers: { "User-Agent": BROWSER_UA } }, 8000);
       if (res.ok) {
-        const html = await res.text();
+        const html = await readTextLimited(res, MAX_HTML_BYTES);
         const vMatch = html.match(/"video_url"\s*:\s*"([^"]+)"/);
         if (vMatch?.[1]) {
           const cleanVideoUrl = JSON.parse(`"${vMatch[1]}"`);
+          await assertPublicUrl(cleanVideoUrl);
           return {
             platform: "Instagram",
             author: "Instagram",
@@ -496,7 +498,7 @@ async function extractOpenGraphVideo(fetchUrl, platformLabel = "Web", originalUr
       };
     }
 
-    const html = await res.text();
+    const html = await readTextLimited(res, MAX_HTML_BYTES);
     const videoType = extractMetaTag(html, "og:video:type");
     if (videoType && /text\/html|application\/x-shockwave-flash/i.test(videoType)) {
       return null;
@@ -509,7 +511,7 @@ async function extractOpenGraphVideo(fetchUrl, platformLabel = "Web", originalUr
       extractMetaTag(html, "twitter:player:stream");
 
     if (!videoUrl || !/^https?:\/\//i.test(videoUrl)) return null;
-    if (/\/embed\//i.test(videoUrl)) return null;
+    if (/\/embed\//i.test(videoUrl) || /\.html?(\?|$)/i.test(videoUrl)) return null;
 
     const title =
       extractMetaTag(html, "og:description") ||
@@ -620,7 +622,9 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
             45_000
           );
           if (!r.ok && r.status !== 206) throw new Error(`HTTP ${r.status}`);
-          buffers[index] = Buffer.from(await r.arrayBuffer());
+          const chunkBody = await readBodyLimited(r, chunkSize + 4096);
+          if (chunkBody.tooLarge || !chunkBody.buffer) throw new Error("Chunk de video excede el tamaño esperado");
+          buffers[index] = chunkBody.buffer;
         }
       };
       await Promise.all(Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, ranges.length) }, worker));

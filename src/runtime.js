@@ -51,10 +51,23 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function redactSecrets(text) {
+  let out = String(text ?? "");
+  for (const envKey of ["TOKEN", "MONGO", "GEMINI", "GEMINI2", "GROQ", "CLIENT_SECRET", "API_KEY"]) {
+    const val = process.env[envKey];
+    if (val && val.length >= 6) {
+      out = out.split(val).join(`[REDACTED_${envKey}]`);
+    }
+  }
+  return out
+    .replace(/(Bearer\s+)[A-Za-z0-9._-]+/gi, "$1[REDACTED]")
+    .replace(/(mongodb(?:\+srv)?:\/\/[^:\s]+:)[^@\s]+@/gi, "$1[REDACTED]@");
+}
+
 function sanitizeError(err) {
   if (!err) return "unknown";
-  if (typeof err === "string") return err;
-  return err.stack || err.message || String(err);
+  if (typeof err === "string") return redactSecrets(err);
+  return redactSecrets(err.stack || err.message || String(err));
 }
 
 async function withTimeout(promise, timeoutMs, taskName = "Operación") {
@@ -231,6 +244,11 @@ async function gracefulShutdown(signal, bot, log) {
       const { stopApi } = require("./api");
       await stopApi();
     } catch {}
+    try { require("./channelsExtra").stopChannelsWorkers(); } catch {}
+    try { require("./reactionRoles").stopTempRoleTimers(); } catch {}
+    try { require("./automation").stopAutomationWorkers(); } catch {}
+    try { require("./feeds").stopSocialFeedWorker(); } catch {}
+    try { require("./community").stopCommunityWorkers(); } catch {}
 
     if (typeof bot?.destroy === "function") {
       await bot.destroy().catch((err) => log?.error("Error al cerrar bot", { err: err.message }));
@@ -401,7 +419,7 @@ async function broadcastDm({ guild, embed, soloRolId, excluirRolId, excluirUserI
     let fallidos = 0;
 
     for (let i = 0; i < total; i++) {
-      if (await sendDmWithRetry(members[i], { embeds: [embed] })) enviados++;
+      if (await sendDmWithRetry(members[i], { embeds: [embed], allowedMentions: { parse: [] } })) enviados++;
       else fallidos++;
 
       await wait(500);

@@ -1,5 +1,36 @@
-const dns = require("node:dns").promises;
+const dns = require("node:dns");
+const dnsPromises = dns.promises;
 const net = require("node:net");
+
+let publicAgent = null;
+try {
+  const { Agent } = require("undici");
+  publicAgent = new Agent({
+    connect: {
+      lookup(hostname, opts, cb) {
+        const cleanHost = String(hostname || "").replace(/^\[|\]$/g, "").toLowerCase();
+        if (BLOCKED_HOSTNAMES.has(cleanHost) || BLOCKED_SUFFIXES.some((s) => cleanHost.endsWith(s))) {
+          return cb(new Error("Host no permitido"));
+        }
+        dns.lookup(hostname, opts, (err, address, family) => {
+          if (err) return cb(err);
+          if (Array.isArray(address)) {
+            if (!address.length || address.some((r) => isPrivateAddress(r.address))) {
+              return cb(new Error("Host no permitido"));
+            }
+            return cb(null, address);
+          }
+          if (!address || isPrivateAddress(address)) {
+            return cb(new Error("Host no permitido"));
+          }
+          return cb(null, address, family);
+        });
+      },
+    },
+  });
+} catch {
+  // En entornos donde undici no este disponible, fetchPublic igualmente valida via assertPublicUrl
+}
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "ip6-localhost", "ip6-loopback", "metadata.google.internal"]);
 const BLOCKED_SUFFIXES = [".localhost", ".local", ".internal", ".lan", ".home", ".corp"];
@@ -74,7 +105,7 @@ async function assertPublicUrl(rawUrl) {
     return parsed;
   }
 
-  const records = await dns.lookup(host, { all: true, verbatim: true });
+  const records = await dnsPromises.lookup(host, { all: true, verbatim: true });
   if (!records.length || records.some((r) => isPrivateAddress(r.address))) {
     throw new Error("Host no permitido");
   }
@@ -91,7 +122,11 @@ async function fetchPublic(url, options = {}, timeoutMs = 10_000) {
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     await assertPublicUrl(current);
-    const res = await fetch(current, { ...options, redirect: "manual", signal });
+    const fetchOpts = { ...options, redirect: "manual", signal };
+    if (publicAgent && !fetchOpts.dispatcher) {
+      fetchOpts.dispatcher = publicAgent;
+    }
+    const res = await fetch(current, fetchOpts);
 
     const location = res.headers.get("location");
     if (res.status >= 300 && res.status < 400 && location) {
@@ -137,4 +172,12 @@ async function readBodyLimited(res, maxBytes) {
   return { tooLarge: false, size, buffer: Buffer.concat(chunks) };
 }
 
-module.exports = { assertPublicUrl, fetchPublic, isPrivateAddress, readBodyLimited };
+async function readTextLimited(res, maxBytes = 2 * 1024 * 1024) {
+  const body = await readBodyLimited(res, maxBytes);
+  if (body.tooLarge || !body.buffer) {
+    throw new Error("Respuesta HTML/texto demasiado grande");
+  }
+  return body.buffer.toString("utf8");
+}
+
+module.exports = { assertPublicUrl, fetchPublic, isPrivateAddress, readBodyLimited, readTextLimited };

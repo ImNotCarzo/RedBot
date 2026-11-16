@@ -3,6 +3,7 @@ const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { RED } = require("../src/config");
 const {
   detectDefaultGuildLang,
+  getLang,
   getOauthGuildLang,
   getUserLang,
   registerWelcomeCard,
@@ -32,12 +33,14 @@ function buildWelcomeCard(lang, guild) {
     .addButtonsRow([
       {
         customId: "welcome_lang:es",
+        emoji: "🇪🇸",
         label: t(active, "welcome.btn_es"),
         style: active === "es" ? "danger" : "secondary",
         disabled: active === "es",
       },
       {
         customId: "welcome_lang:en",
+        emoji: "🇺🇸",
         label: t(active, "welcome.btn_en"),
         style: active === "en" ? "danger" : "secondary",
         disabled: active === "en",
@@ -121,9 +124,10 @@ const event = {
 
       collector.on("collect", async (interaction) => {
         try {
+          const liveLang = await getLang(guild.id).catch(() => currentLang);
           if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
             await interaction.reply({
-              content: t(currentLang, "lang.no_perm"),
+              content: t(liveLang, "lang.no_perm"),
               flags: MessageFlags.Ephemeral,
             }).catch(() => {});
             return;

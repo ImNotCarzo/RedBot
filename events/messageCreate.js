@@ -4,8 +4,11 @@ const {
   getConversacion,
   generateChatReply,
 } = require("../src/ai");
+const { dispatchAutoRules, handleCustomCommandsOnMessage } = require("../src/automation");
+const { handleStickyOnMessage } = require("../src/channelsExtra");
 const { getPrefix, DEFAULT_PREFIX, getAfk, removeAfk, getLang, resolveContextLang, getAiContext } = require("../src/guild");
 const { getMessageText } = require("../src/adapter");
+const { evaluateMessageAutomod } = require("../src/moderationExtra");
 const { Logger } = require("../src/runtime");
 const {
   MAX_HISTORIAL,
@@ -97,8 +100,24 @@ const event = {
     try {
       if (message.author.bot) return;
 
+      if (message.guildId) {
+        const blocked = await evaluateMessageAutomod(message).catch(() => false);
+        if (blocked) return;
+      }
+
       const prefix = message.guildId ? await getPrefix(message.guildId) : DEFAULT_PREFIX;
       await handleAfkChecks(message, prefix).catch(() => {});
+
+      if (message.guildId) {
+        handleStickyOnMessage(message).catch(() => {});
+        dispatchAutoRules("message", {
+          guild: message.guild,
+          message,
+          member: message.member,
+          channel: message.channel,
+        }).catch(() => {});
+        handleCustomCommandsOnMessage(message, prefix).catch(() => {});
+      }
 
       if (!message.reference?.messageId) return;
 

@@ -31,6 +31,8 @@ const CASE_TYPE_LABELS = {
   softban: "Softban",
   unban: "Unban",
 };
+const { GuildConfig } = require("../../src/database");
+const { getAutomodConfig, updateAutomodConfig } = require("../../src/moderationExtra");
 const { logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
 
 function notifyUser(user, { description, color = RED, fields = null }) {
@@ -920,6 +922,136 @@ const data = {
         } catch (err) {
           return failWith(ctx, err, "No se pudo desactivar los logs");
         }
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "automod",
+        description: "Configura el filtro automático ampliado y respuestas personalizadas",
+      }),
+      params: new ParamsBuilder()
+        .addString({
+          name: "estado",
+          description: "Activar o desactivar AutoMod",
+          required: false,
+          choices: [{ name: "Activar", value: "on" }, { name: "Desactivar", value: "off" }],
+        })
+        .addString({
+          name: "accion",
+          description: "Sanción al detectar infracción",
+          required: false,
+          choices: [
+            { name: "Solo borrar", value: "delete" },
+            { name: "Borrar + Warn", value: "warn" },
+            { name: "Borrar + Mute 5m", value: "mute" },
+            { name: "Borrar + Kick", value: "kick" },
+          ],
+        })
+        .addString({
+          name: "antispam",
+          description: "Detectar mensajes repetidos rápidos",
+          required: false,
+          choices: [{ name: "Sí", value: "true" }, { name: "No", value: "false" }],
+        })
+        .addString({
+          name: "antiinvites",
+          description: "Bloquear invitaciones de Discord",
+          required: false,
+          choices: [{ name: "Sí", value: "true" }, { name: "No", value: "false" }],
+        })
+        .addString({
+          name: "antilinks",
+          description: "Bloquear enlaces http/https",
+          required: false,
+          choices: [{ name: "Sí", value: "true" }, { name: "No", value: "false" }],
+        })
+        .addString({
+          name: "anticaps",
+          description: "Bloquear exceso de mayúsculas",
+          required: false,
+          choices: [{ name: "Sí", value: "true" }, { name: "No", value: "false" }],
+        })
+        .addString({
+          name: "antimentions",
+          description: "Bloquear menciones masivas (>=5)",
+          required: false,
+          choices: [{ name: "Sí", value: "true" }, { name: "No", value: "false" }],
+        })
+        .addString({ name: "palabras", description: "Lista separada por comas de palabras bloqueadas", required: false })
+        .addString({ name: "mensaje_custom", description: "Respuesta custom al sancionar ({user}, {reason})", required: false }),
+      plugins: [Plugins.hasPerms("ManageGuild"), Plugins.hasBotPerms("ManageMessages")],
+      async code(ctx) {
+        if (!ctx.guild) return noGuildReply(ctx);
+        const patch = {};
+        if (ctx.get("estado")) patch.enabled = ctx.get("estado") === "on";
+        if (ctx.get("accion")) patch.action = ctx.get("accion");
+        if (ctx.get("antispam")) patch.antiSpam = ctx.get("antispam") === "true";
+        if (ctx.get("antiinvites")) patch.antiInvites = ctx.get("antiinvites") === "true";
+        if (ctx.get("antilinks")) patch.antiLinks = ctx.get("antilinks") === "true";
+        if (ctx.get("anticaps")) patch.antiCaps = ctx.get("anticaps") === "true";
+        if (ctx.get("antimentions")) patch.antiMentions = ctx.get("antimentions") === "true";
+        if (ctx.get("palabras") !== null && ctx.get("palabras") !== undefined) {
+          patch.blockedWords = String(ctx.get("palabras"))
+            .split(",")
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean)
+            .slice(0, 100);
+        }
+        if (ctx.get("mensaje_custom") !== null && ctx.get("mensaje_custom") !== undefined) {
+          patch.customMessage = String(ctx.get("mensaje_custom")).trim().slice(0, 400);
+        }
+
+        const cfg = Object.keys(patch).length
+          ? await updateAutomodConfig(ctx.guild.id, patch)
+          : await getAutomodConfig(ctx.guild.id);
+
+        await ctx.send(buildActionCard({
+          title: "Configuración AutoMod",
+          fields: [
+            ["Estado", V2Text.code(cfg.enabled ? "Activado" : "Desactivado")],
+            ["Acción", V2Text.code(cfg.action)],
+            ["Filtros activos", V2Text.code([
+              cfg.antiSpam && "AntiSpam",
+              cfg.antiInvites && "AntiInvites",
+              cfg.antiLinks && "AntiLinks",
+              cfg.antiCaps && "AntiCaps",
+              cfg.antiMentions && "AntiMentions",
+              cfg.blockedWords?.length && `Palabras(${cfg.blockedWords.length})`,
+            ].filter(Boolean).join(", ") || "Ninguno")],
+            cfg.customMessage ? ["Mensaje custom", V2Text.clip(cfg.customMessage, 200)] : null,
+          ].filter(Boolean),
+          moderator: modTag(ctx),
+          color: cfg.enabled ? GREEN : RED,
+        }));
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "dramawatcher",
+        description: "Configura el canal de Drama Watcher para moderar con botones y emojis",
+      }),
+      params: new ParamsBuilder()
+        .addChannel({ name: "canal", description: "Canal privado para alertas interactivas (omitir para desactivar)", required: false }),
+      plugins: [Plugins.hasPerms("ManageGuild")],
+      async code(ctx) {
+        if (!ctx.guild) return noGuildReply(ctx);
+        const ch = ctx.get("canal");
+        if (ch && !ch.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
+
+        await GuildConfig.findOneAndUpdate(
+          { guildId: ctx.guild.id },
+          { $set: { dramaChannelId: ch ? ch.id : null } },
+          { upsert: true, returnDocument: "after" }
+        );
+
+        await ctx.send(buildActionCard({
+          title: ch ? "Drama Watcher activado" : "Drama Watcher desactivado",
+          description: ch
+            ? `Las alertas de AutoMod llegarán a ${ch} con botones y emojis rápidos (🔨 Ban, 👢 Kick, 🔇 Mute, ⚠️ Warn, ✅ Ignorar).`
+            : "Se desactivó el canal de Drama Watcher.",
+          moderator: modTag(ctx),
+          color: ch ? GREEN : RED,
+        }));
       },
     }),
 };

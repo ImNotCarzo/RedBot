@@ -1,4 +1,5 @@
 const path = require("path");
+const { PermissionFlagsBits } = require("discord.js");
 const {
   version: djsVersion,
   GroupBuilder,
@@ -12,7 +13,7 @@ const {
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN, YELLOW, USER_APP_CONFIG } = require("../../src/config");
 const { getPrefix, setPrefix, setAfk, sendLog, getLang, setLang, setUserLang, resolveContextLang } = require("../../src/guild");
-const { normalizeLang, t } = require("../../src/i18n");
+const { normalizeLang, runWithLang, t } = require("../../src/i18n");
 const {
   Logger,
   THINKING_TEXT,
@@ -552,7 +553,12 @@ const data = {
           throw sendErr;
         }
       } catch (err) {
-        log.error("[util download]", { err: err?.message ?? String(err) });
+        const errMsg = err?.message ?? String(err);
+        if (errMsg.includes("URL resolved to HTML")) {
+          log.warn("[util download] enlace no es stream directo", { url });
+          return ctx.ephemeral("El enlace no apunta a un video descargable directo. Prueba con otro enlace o publicación pública.");
+        }
+        log.error("[util download]", { err: errMsg });
         return ctx.ephemeral("No se pudo descargar el video en este momento. Intenta con otro enlace.");
       }
     },
@@ -607,6 +613,15 @@ const data = {
       const rolExcluido = ctx.get("excluir_rol");
       const usuarioExcluido = ctx.get("excluir_usuario");
       const imagen = ctx.get("imagen");
+
+      if (imagen) {
+        const ct = imagen.contentType ?? "";
+        const attName = imagen.name ?? "";
+        const isImg = /^image\/(jpeg|png|gif|webp)/i.test(ct) || /\.(png|jpe?g|gif|webp)$/i.test(attName);
+        if (!isImg || (imagen.size ?? 0) > 8 * 1024 * 1024) {
+          return ctx.ephemeral("La imagen adjunta debe ser jpg, png, gif o webp de máximo 8MB");
+        }
+      }
 
       await ctx.defer({ ephemeral: true });
 
@@ -1028,15 +1043,80 @@ const setlangCommand = {
         : ctx.user?.displayAvatarURL?.({ size: 256 }) ?? null;
 
       if (!rawArg) {
-        return ctx.send(
-          buildCompactCard({
-            title: currentLang === "en" ? "Current language" : "Idioma actual",
-            subtitle,
-            body: V2Text.fields([[t(currentLang, "setup.lang_label"), currentLang === "en" ? "English (`en`)" : "Español (`es`)"]]),
-            thumbnailUrl: thumb,
-            color: RED,
-          })
-        );
+        const buildLangPanel = (activeLang, activeView = null, ended = false) => {
+          const isEn = activeLang === "en";
+          const langLabel = isEn ? "English (`en`)" : "Español (`es`)";
+          const desc = isGuild
+            ? (isEn
+                ? "Select the bot's language for this server using the buttons below."
+                : "Selecciona el idioma del bot en este servidor usando los botones.")
+            : (isEn
+                ? "Select your personal language for DMs and User Apps using the buttons below."
+                : "Selecciona tu idioma personal para DMs y User Apps usando los botones.");
+
+          const builder = new ComponentsV2Builder({ color: RED });
+          builder._i18nLang = activeLang;
+          builder
+            .addSection(
+              [
+                V2Text.heading(isEn ? "Language settings" : "Configuración de idioma", 3, 200),
+                V2Text.subtext(subtitle, 120),
+              ],
+              { thumbnail: thumb, fallbackToText: true }
+            )
+            .addSeparator("small")
+            .addText(desc)
+            .addFields([[isEn ? "Language" : "Idioma", langLabel]], false);
+
+          if (!ended && activeView) {
+            builder.addSpacer("small").addButtonsRow([
+              {
+                customId: activeView.id("lang", "es"),
+                emoji: "🇪🇸",
+                label: "Español",
+                style: activeLang === "es" ? "danger" : "secondary",
+                disabled: activeLang === "es",
+              },
+              {
+                customId: activeView.id("lang", "en"),
+                emoji: "🇺🇸",
+                label: "English",
+                style: activeLang === "en" ? "danger" : "secondary",
+                disabled: activeLang === "en",
+              },
+            ]);
+          }
+          return builder;
+        };
+
+        const view = new V2View({
+          authorId: ctx.user?.id,
+          timeout: 2 * 60_000,
+          thirdPartyMode: "reject",
+          thirdPartyMessage: currentLang === "en" ? "This is not your command" : "No es tu comando",
+          onEnd: "static",
+          state: { lang: currentLang },
+          render: ({ state, view: activeView, isEnded }) => buildLangPanel(state.lang, activeView, isEnded),
+          renderStatic: ({ state }) => buildLangPanel(state.lang, null, true),
+          actions: {
+            lang: async ({ parts, interaction, setState, state }) => {
+              const target = parts[0] === "en" ? "en" : "es";
+              if (isGuild && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+                await interaction.reply({
+                  content: t(state.lang, "lang.no_perm"),
+                  flags: 64,
+                }).catch(() => {});
+                return false;
+              }
+              const updated = isGuild
+                ? await setLang(ctx.guild.id, target, { source: "manual" })
+                : await setUserLang(ctx.user.id, target);
+              setState({ lang: updated });
+            },
+          },
+        });
+
+        return await view.send(ctx);
       }
 
       if (rawArg !== "es" && rawArg !== "en") {
@@ -1049,7 +1129,7 @@ const setlangCommand = {
 
       const normalized = normalizeLang(rawArg);
       const nextLang = isGuild
-        ? await setLang(ctx.guild.id, normalized)
+        ? await setLang(ctx.guild.id, normalized, { source: "manual" })
         : await setUserLang(ctx.user.id, normalized);
 
       const updatedMsg = isGuild
@@ -1058,14 +1138,16 @@ const setlangCommand = {
             ? "Your personal language was changed to **English** (`en`) for DMs and User Apps."
             : "Tu idioma personal fue cambiado a **Español** (`es`) para DMs y User Apps.");
 
-      await ctx.send(
-        buildCompactCard({
-          title: nextLang === "en" ? "Language updated" : "Idioma actualizado",
-          subtitle,
-          body: updatedMsg,
-          thumbnailUrl: thumb,
-          color: GREEN,
-        })
+      await runWithLang(nextLang, () =>
+        ctx.send(
+          buildCompactCard({
+            title: nextLang === "en" ? "Language updated" : "Idioma actualizado",
+            subtitle,
+            body: updatedMsg,
+            thumbnailUrl: thumb,
+            color: GREEN,
+          })
+        )
       );
     } catch (err) {
       log.error("[util setlang]", { err: err?.message ?? String(err) });

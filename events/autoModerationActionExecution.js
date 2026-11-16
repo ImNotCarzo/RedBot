@@ -1,6 +1,7 @@
 const { AutoModerationActionType, EmbedBuilder } = require("discord.js");
 const { YELLOW } = require("../src/config");
 const { sendLog } = require("../src/guild");
+const { postToDramaWatcher } = require("../src/moderationExtra");
 
 const ACTION_LABELS = {
   [AutoModerationActionType.BlockMessage]: "Mensaje bloqueado",
@@ -42,6 +43,16 @@ const data = {
       .setTimestamp();
 
     await sendLog(execution.guild, embed);
+    if (execution.user) {
+      await postToDramaWatcher({
+        guild: execution.guild,
+        targetUser: execution.user,
+        channelId: execution.channelId ?? null,
+        reason: execution.matchedKeyword ? `AutoMod Discord: ${execution.matchedKeyword}` : actionLabel,
+        ruleName: "Discord AutoMod",
+        excerpt: execution.content ? String(execution.content).slice(0, 400) : "",
+      }).catch(() => {});
+    }
   },
 };
 

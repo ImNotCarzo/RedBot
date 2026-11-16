@@ -1,3 +1,4 @@
+const { ChannelType } = require("discord.js");
 const {
   GroupBuilder,
   CommandBuilder,
@@ -20,8 +21,15 @@ const {
   failWith,
   wait,
 } = require("../../src/runtime");
-const { JoinRole } = require("../../src/database");
+const { JoinRole, ReactionRolePanel, VoiceLink } = require("../../src/database");
 const { logAction } = require("../../src/guild");
+const { formatDuration, parseDuration } = require("../../src/moderation");
+const {
+  MAX_PANELS_PER_GUILD,
+  MAX_ROLES_PER_GUILD,
+  buildReactionRolePanelPayload,
+  grantTempRole,
+} = require("../../src/reactionRoles");
 const { RED, GREEN, DARK } = require("../../src/config");
 
 const PAGE_SIZE = 15;
@@ -880,6 +888,244 @@ const data = {
           log.error("Error en role permissions", { err: err?.message ?? String(err) });
           return handleCommandError(ctx, err);
         }
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "reaction",
+        description: "Paneles de roles por reacción o botón (normales, únicos o temporales)",
+      }),
+      params: new ParamsBuilder()
+        .addString({
+          name: "accion",
+          description: "Acción sobre paneles de roles",
+          required: true,
+          choices: [
+            { name: "Crear panel", value: "create" },
+            { name: "Añadir rol al panel", value: "add" },
+            { name: "Quitar rol del panel", value: "remove" },
+            { name: "Publicar / actualizar panel", value: "send" },
+            { name: "Listar paneles", value: "list" },
+            { name: "Eliminar panel", value: "delete" },
+          ],
+        })
+        .addString({ name: "panel_id", description: "Nombre corto del panel (ej: colores)", required: false })
+        .addRole({ name: "rol", description: "Rol a vincular", required: false })
+        .addString({ name: "emoji", description: "Emoji de reacción/botón (ej: 🔴)", required: false })
+        .addString({ name: "etiqueta", description: "Texto del botón o título del panel", required: false })
+        .addString({
+          name: "modo",
+          description: "Comportamiento del panel",
+          required: false,
+          choices: [
+            { name: "Normal (poner/quitar)", value: "normal" },
+            { name: "Único (solo 1 por panel)", value: "unique" },
+            { name: "Verificación (solo poner)", value: "verify" },
+            { name: "Temporal (expira tras tiempo)", value: "temp" },
+          ],
+        })
+        .addString({ name: "duracion", description: "Duración si es temporal (ej: 2h, 1d)", required: false })
+        .addChannel({ name: "canal", description: "Canal donde publicar el panel", required: false }),
+      plugins: MANAGE_ROLES_PLUGINS,
+      async code(ctx) {
+        if (!ctx.guild) return noGuildReply(ctx);
+        const action = ctx.get("accion");
+        const panelId = String(ctx.get("panel_id") ?? "").trim().toLowerCase().slice(0, 32);
+
+        if (action === "list") {
+          const panels = await ReactionRolePanel.find({ guildId: ctx.guild.id }).lean();
+          if (!panels.length) return ctx.ephemeral("No hay paneles de roles por reacción creados");
+          const totalRoles = panels.reduce((acc, p) => acc + (p.entries?.length ?? 0), 0);
+          return ctx.send(ComponentsV2Builder.card({
+            title: `Paneles de roles (${panels.length}/${MAX_PANELS_PER_GUILD} · ${totalRoles}/${MAX_ROLES_PER_GUILD} roles)`,
+            description: panels.map((p) => `• \`${p.panelId}\` (**${p.mode}**) — ${p.entries?.length ?? 0} roles`).join("\n"),
+            color: RED,
+          }));
+        }
+
+        if (!panelId) return ctx.ephemeral("Debes indicar `panel_id`");
+
+        if (action === "delete") {
+          const res = await ReactionRolePanel.deleteOne({ guildId: ctx.guild.id, panelId });
+          if (!res.deletedCount) return ctx.ephemeral("No encontré ese panel");
+          return ctx.send(ComponentsV2Builder.card({ title: "Panel eliminado", description: `Se borró \`${panelId}\`.`, color: RED }));
+        }
+
+        if (action === "create") {
+          const count = await ReactionRolePanel.countDocuments({ guildId: ctx.guild.id });
+          if (count >= MAX_PANELS_PER_GUILD) return ctx.ephemeral(`Alcanzaste el límite de ${MAX_PANELS_PER_GUILD} paneles`);
+          const mode = ctx.get("modo") || "normal";
+          const durationMs = mode === "temp" ? parseDuration(ctx.get("duracion") || "1h") : null;
+          if (mode === "temp" && (!durationMs || durationMs < 60_000)) {
+            return ctx.ephemeral("Indica una duración válida para roles temporales (ej: `30m`, `2h`)");
+          }
+          await ReactionRolePanel.findOneAndUpdate(
+            { guildId: ctx.guild.id, panelId },
+            {
+              $set: {
+                channelId: (ctx.get("canal") ?? ctx.channel).id,
+                title: String(ctx.get("etiqueta") || `Roles: ${panelId}`).slice(0, 200),
+                mode,
+                durationMs,
+              },
+              $setOnInsert: { entries: [] },
+            },
+            { upsert: true, returnDocument: "after" }
+          );
+          return ctx.send(ComponentsV2Builder.card({
+            title: "Panel creado",
+            description: `Panel \`${panelId}\` creado en modo **${mode}**. Añade roles con \`/role reaction accion:add\` y publícalo con \`send\`.`,
+            color: GREEN,
+          }));
+        }
+
+        const panel = await ReactionRolePanel.findOne({ guildId: ctx.guild.id, panelId });
+        if (!panel) return ctx.ephemeral("Primero crea el panel con `accion:create`");
+
+        if (action === "add") {
+          const role = ctx.get("rol");
+          const hierr = roleHierarchyCheck(ctx, role);
+          if (hierr) return ctx.ephemeral(hierr);
+
+          const allPanels = await ReactionRolePanel.find({ guildId: ctx.guild.id }).select("entries").lean();
+          const totalRoles = allPanels.reduce((acc, p) => acc + (p.entries?.length ?? 0), 0);
+          if (totalRoles >= MAX_ROLES_PER_GUILD) {
+            return ctx.ephemeral(`Alcanzaste el límite de ${MAX_ROLES_PER_GUILD} roles por reacción en el servidor`);
+          }
+          if (panel.entries.length >= 25) return ctx.ephemeral("Cada panel admite hasta 25 botones/reacciones");
+
+          const key = `r_${Date.now().toString(36)}_${panel.entries.length}`;
+          panel.entries.push({
+            key,
+            emoji: ctx.get("emoji") || null,
+            label: String(ctx.get("etiqueta") || role.name).slice(0, 80),
+            roleId: role.id,
+          });
+          await panel.save();
+          return ctx.send(ComponentsV2Builder.card({
+            title: "Rol añadido al panel",
+            description: `${role} añadido a \`${panelId}\` (${panel.entries.length}/25). Usa \`accion:send\` para publicarlo.`,
+            color: GREEN,
+          }));
+        }
+
+        if (action === "remove") {
+          const role = ctx.get("rol");
+          if (!role) return ctx.ephemeral("Indica el rol a quitar");
+          panel.entries = panel.entries.filter((e) => e.roleId !== role.id);
+          await panel.save();
+          return ctx.send(ComponentsV2Builder.card({ title: "Rol quitado del panel", description: `Se quitó ${role} de \`${panelId}\`.`, color: RED }));
+        }
+
+        if (action === "send") {
+          if (!panel.entries.length) return ctx.ephemeral("Añade al menos un rol al panel antes de publicarlo");
+          const targetCh = ctx.get("canal") ?? ctx.guild.channels.cache.get(panel.channelId) ?? ctx.channel;
+          if (!targetCh?.isTextBased?.()) return ctx.ephemeral("Canal inválido");
+          const sent = await targetCh.send(buildReactionRolePanelPayload(panel));
+          panel.channelId = targetCh.id;
+          panel.messageId = sent.id;
+          await panel.save();
+          for (const entry of panel.entries) {
+            if (entry.emoji) await sent.react(entry.emoji).catch(() => {});
+          }
+          return ctx.ephemeral(`Panel \`${panelId}\` publicado en ${targetCh}`);
+        }
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "voicelink",
+        description: "Asigna y quita un rol automáticamente al entrar o salir de canales de voz",
+      }),
+      params: new ParamsBuilder()
+        .addString({
+          name: "accion",
+          description: "Acción",
+          required: true,
+          choices: [{ name: "Vincular", value: "add" }, { name: "Desvincular", value: "remove" }, { name: "Listar", value: "list" }],
+        })
+        .addRole({ name: "rol", description: "Rol a otorgar en voz", required: false })
+        .addChannel({ name: "canal_voz", description: "Canal de voz específico (omitir para cualquiera)", required: false }),
+      plugins: MANAGE_ROLES_PLUGINS,
+      async code(ctx) {
+        if (!ctx.guild) return noGuildReply(ctx);
+        const action = ctx.get("accion");
+
+        if (action === "list") {
+          const list = await VoiceLink.find({ guildId: ctx.guild.id, targetType: "role" }).lean();
+          if (!list.length) return ctx.ephemeral("No hay vínculos voz-rol configurados");
+          return ctx.send(ComponentsV2Builder.card({
+            title: "Voice-Role Links",
+            description: list.map((l) => `• ${l.voiceChannelId === "any" ? "`Cualquier canal de voz`" : `<#${l.voiceChannelId}>`} → <@&${l.targetId}>`).join("\n"),
+            color: RED,
+          }));
+        }
+
+        const role = ctx.get("rol");
+        const hierr = roleHierarchyCheck(ctx, role);
+        if (hierr) return ctx.ephemeral(hierr);
+
+        const vch = ctx.get("canal_voz");
+        if (vch && vch.type !== ChannelType.GuildVoice) return ctx.ephemeral("El canal debe ser de voz");
+        const voiceChannelId = vch?.id ?? "any";
+
+        if (action === "remove") {
+          await VoiceLink.deleteOne({ guildId: ctx.guild.id, voiceChannelId, targetType: "role", targetId: role.id });
+          return ctx.send(ComponentsV2Builder.card({ title: "Vínculo eliminado", description: `Se quitó el vínculo de voz para ${role}.`, color: RED }));
+        }
+
+        await VoiceLink.findOneAndUpdate(
+          { guildId: ctx.guild.id, voiceChannelId, targetType: "role", targetId: role.id },
+          { $setOnInsert: { guildId: ctx.guild.id } },
+          { upsert: true, returnDocument: "after" }
+        );
+        await ctx.send(ComponentsV2Builder.card({
+          title: "Voice-Role Link activado",
+          description: `Quien entre a ${vch ? vch : "**cualquier canal de voz**"} recibirá ${role} temporalmente.`,
+          color: GREEN,
+        }));
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "temprole",
+        description: "Asigna un rol temporal a un usuario que se quita solo al expirar",
+      }),
+      params: new ParamsBuilder()
+        .addMember({ name: "usuario", description: "Usuario objetivo", required: true })
+        .addRole({ name: "rol", description: "Rol temporal", required: true })
+        .addString({ name: "duracion", description: "Duración (ej: 30m, 2h, 7d)", required: true }),
+      plugins: MANAGE_ROLES_PLUGINS,
+      async code(ctx) {
+        if (!ctx.guild) return noGuildReply(ctx);
+        const member = ctx.get("usuario");
+        const role = ctx.get("rol");
+        const hierr = roleHierarchyCheck(ctx, role);
+        if (hierr) return ctx.ephemeral(hierr);
+
+        const ms = parseDuration(ctx.get("duracion"));
+        if (!ms || ms < 60_000 || ms > 365 * 86_400_000) {
+          return ctx.ephemeral("Indica una duración válida entre `1m` y `365d`");
+        }
+        const expiresAt = await grantTempRole({
+          client: ctx.bot?.client ?? ctx.guild.client,
+          guild: ctx.guild,
+          member,
+          role,
+          durationMs: ms,
+          source: ctx.user.tag,
+        });
+        const ts = Math.floor(expiresAt.getTime() / 1000);
+        await ctx.send(buildActionCard({
+          title: "Rol temporal asignado",
+          fields: [
+            ["Usuario", `${member}`],
+            ["Rol", `${role}`],
+            ["Expira", `<t:${ts}:R> (${formatDuration(ms)})`],
+          ],
+          moderator: ctx.user.tag,
+          color: GREEN,
+        }));
       },
     }),
 };

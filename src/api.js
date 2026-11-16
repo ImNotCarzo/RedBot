@@ -488,7 +488,8 @@ async function handleOAuthCallback(req, res, urlObj) {
 
   const stateParam = urlObj.searchParams.get("state") || "";
   const cookieState = parseCookies(req).redbot_oauth_state || "";
-  if (stateParam || cookieState) {
+  const requireState = apiConfig?.OAUTH_REQUIRE_STATE === true || process.env.OAUTH_REQUIRE_STATE === "true";
+  if (requireState || stateParam || cookieState) {
     const cookieMatches = !cookieState || safeEqualString(stateParam, cookieState);
     if (!cookieMatches || !consumeOAuthState(stateParam)) {
       return sendHtml(
@@ -634,6 +635,7 @@ function startApi(client, config, logger) {
     setApiContext({ client, config, logger });
 
     const port = Number(config?.API_PORT) || 3000;
+    const host = config?.API_HOST || process.env.API_HOST || undefined;
     server = http.createServer((req, res) => {
       Promise.resolve(handleRequest(req, res)).catch((err) => {
         log?.error("Error no controlado en API", { err: err?.message ?? String(err) });
@@ -651,9 +653,10 @@ function startApi(client, config, logger) {
       log.error("Error en servidor API", { err: err.message });
     });
 
-    server.listen(port, () => {
+    const onListen = () => {
       log.info("API iniciada", {
         port,
+        ...(host ? { host } : {}),
         auth: config?.API_KEY ? "API key" : "pública (sin key)",
         cors: config?.API_CORS_ORIGIN || "*",
       });
@@ -670,7 +673,10 @@ function startApi(client, config, logger) {
       ratePruneTimer.unref();
 
       resolve();
-    });
+    };
+
+    if (host) server.listen(port, host, onListen);
+    else server.listen(port, onListen);
   });
 }
 

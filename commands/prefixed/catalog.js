@@ -84,8 +84,29 @@ const dmallCommand = {
     const { titulo, texto, soloId, rolId, userId, imagen: imagenUrl } = parseDmAllArgs(raw);
     if (!titulo || !texto) return ctx.send(DMALL_PARAMERROR(bot));
 
+    if (imagenUrl) {
+      let validImgUrl = false;
+      try {
+        const parsedImg = new URL(imagenUrl);
+        validImgUrl = parsedImg.protocol === "https:" || parsedImg.protocol === "http:";
+      } catch {}
+      if (!validImgUrl) {
+        return ctx.send("La URL de `--imagen` debe ser un enlace válido (`https://...`)");
+      }
+    }
+
+    const firstAtt = ctx.message.attachments.first();
+    if (!imagenUrl && firstAtt) {
+      const ct = firstAtt.contentType ?? "";
+      const attName = firstAtt.name ?? "";
+      const isImg = /^image\/(jpeg|png|gif|webp)/i.test(ct) || /\.(png|jpe?g|gif|webp)$/i.test(attName);
+      if (!isImg || (firstAtt.size ?? 0) > 8 * 1024 * 1024) {
+        return ctx.send("La imagen adjunta debe ser jpg, png, gif o webp de máximo 8MB");
+      }
+    }
+
     const author = ctx.author;
-    const imagen = imagenUrl ?? ctx.message.attachments.first()?.url ?? null;
+    const imagen = imagenUrl ?? firstAtt?.url ?? null;
     const embed = buildDmAllEmbed({ titulo, texto, author, guild, imagenUrl: imagen });
 
     let progressMsg = null;
@@ -211,7 +232,10 @@ const DEFINITIONS = [
   { name: "describe", description: "Describe el contenido de una imagen", aliases: ["describir"], authorName: "Comando Describe", descriptionText: "**Usos:**\nDescribe el contenido de una imagen\n\n**Aliases:**\n`describir`\n\n```js\n.describe <adjunto>\nEjemplo: .describe <Subeunaimagenwe.png> ```" },
   { name: "invite", description: "Obtén los links de invitación del bot", aliases: ["inv"] },
   { name: "jumbo", description: "Muestra un emoji en tamaño grande", aliases: ["emojijumbo", "bigemoji"], authorName: "Comando Jumbo", descriptionText: "**Usos:**\nMuestra un emoji personalizado o estándar en tamaño grande\n\n**Aliases:**\n`emojijumbo`, `bigemoji`\n\n```js\n.jumbo <emoji>\nEjemplo: .jumbo <:redbot:1474109778044260478>```" },
+  { name: "ocr", description: "Extrae el texto visible de una imagen (OCR)", aliases: ["leer", "extraer"], authorName: "Comando OCR", descriptionText: "**Usos:**\nExtrae todo el texto legible de una imagen adjunta, enlace o respuesta\n\n**Aliases:**\n`leer`, `extraer`\n\n```js\n.ocr <imagen o URL>\nEjemplo: .ocr <adjunto>```" },
   { name: "ping", description: "Muestra la latencia del bot", aliases: [] },
+  { name: "poll", description: "Crea una encuesta nativa de Discord", aliases: ["encuesta"], authorName: "Comando Poll", descriptionText: "**Usos:**\nCrea una encuesta nativa separando la pregunta y las opciones con `/`\n\n**Aliases:**\n`encuesta`\n\n```js\n.poll <pregunta> / <op1> / <op2> [--horas N] [--multi]\nEjemplo: .poll ¿Pizza o tacos? / Pizza / Tacos```" },
+  { name: "remind", description: "Programa un recordatorio personal", aliases: ["recordar", "recordatorio", "reminder"], authorName: "Comando Remind", descriptionText: "**Usos:**\nPrograma un recordatorio personal por mensaje privado\n\n**Aliases:**\n`recordar`, `recordatorio`\n\n```js\n.remind <tiempo> <texto>\nEjemplo: .remind 30m Revisar el servidor```" },
   { name: "resume", description: "Resume un texto largo", aliases: ["resumir", "summarize"], authorName: "Comando Resume", descriptionText: "**Usos:**\nResume un texto de 100 caracteres o más\n\n**Aliases:**\n`resumir`, `summarize`\n\n```js\n.resume <texto>\nEjemplo: .resume en terminos de reproducción entre hombres humanos y Pokémon hembras, Vaporeon es el...```" },
   { name: "setprefix", description: "Cambia o muestra el prefix del bot en este servidor", aliases: ["prefix"] },
   { name: "transcribe", description: "Transcribe un audio o video a texto", aliases: ["transcribir"], authorName: "Comando Transcribe", descriptionText: "**Usos:**\nTranscribe un audio o video a texto\n\n**Aliases:**\n`transcribir`\n\n```js\n.transcribe <url | adjunto>\nEjemplo: .transcribe https://ejemplo.com/audio.mp3```" },
@@ -221,6 +245,8 @@ const DEFINITIONS = [
   { name: "snipe", description: "Muestra el último mensaje borrado recientemente en el canal", aliases: ["borrado"] },
   { name: "reminders", description: "Lista o cancela tus recordatorios activos", aliases: ["recordatorios", "myreminders"] },
   { name: "setlang", description: "Cambia o consulta el idioma del bot en el servidor", aliases: ["lang", "idioma"] },
+  { name: "ticket", description: "Abre un ticket de soporte", aliases: ["nuevo"] },
+  { name: "invites", description: "Consulta las invitaciones de un usuario", aliases: ["invitaciones"] },
 ];
 
 module.exports = {

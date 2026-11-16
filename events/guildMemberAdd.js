@@ -1,3 +1,5 @@
+const { dispatchAutoRules } = require("../src/automation");
+const { sendWelcomeOrGoodbye, trackMemberJoinInvite } = require("../src/community");
 const { JoinRole } = require("../src/database");
 const { Logger } = require("../src/runtime");
 const log = new Logger("EVENT_GUILD_MEMBER_ADD", process.env.LOG_LEVEL);
@@ -11,7 +13,11 @@ const event = {
     const guildId = member.guild.id;
     const userId = member.user.id;
 
-    const config = await JoinRole.findOne({ guildId }).lean();
+    const inviteInfo = await trackMemberJoinInvite(member).catch(() => null);
+    await sendWelcomeOrGoodbye(member, "welcome", inviteInfo).catch(() => {});
+    await dispatchAutoRules("member_join", { guild: member.guild, member }).catch(() => {});
+
+    const config = await JoinRole.findOne({ guildId }).lean().catch(() => null);
     if (!config) return;
 
     if (config.ignoreBots && member.user.bot) return;

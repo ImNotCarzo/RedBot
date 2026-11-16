@@ -1,13 +1,18 @@
-const SNIPE_TTL_MS = 3 * 60 * 1000;
+const SNIPE_TTL_MS = 30 * 60 * 1000;
 const MAX_SNIPE_CHANNELS = 1000;
+const MAX_SNIPES_PER_CHANNEL = 100;
 const snipes = new Map();
+
+function purgeChannelExpired(list, now = Date.now()) {
+  return list.filter((entry) => now - entry.deletedAt <= SNIPE_TTL_MS);
+}
 
 function purgeExpired() {
   const now = Date.now();
-  for (const [channelId, entry] of snipes.entries()) {
-    if (now - entry.deletedAt > SNIPE_TTL_MS) {
-      snipes.delete(channelId);
-    }
+  for (const [channelId, list] of snipes.entries()) {
+    const valid = purgeChannelExpired(list, now);
+    if (!valid.length) snipes.delete(channelId);
+    else snipes.set(channelId, valid);
   }
 }
 
@@ -30,7 +35,7 @@ function recordDeletedMessage(message) {
   const attachmentUrl = getSnipeImageAttachment(message);
   if (!content && !attachmentUrl) return false;
 
-  if (snipes.size >= MAX_SNIPE_CHANNELS) {
+  if (snipes.size >= MAX_SNIPE_CHANNELS && !snipes.has(message.channelId)) {
     purgeExpired();
     if (snipes.size >= MAX_SNIPE_CHANNELS) {
       const oldest = snipes.keys().next().value;
@@ -38,8 +43,8 @@ function recordDeletedMessage(message) {
     }
   }
 
-  snipes.delete(message.channelId);
-  snipes.set(message.channelId, {
+  const prev = purgeChannelExpired(snipes.get(message.channelId) ?? []);
+  prev.unshift({
     content,
     authorId: message.author?.id ?? null,
     authorTag: message.author?.tag ?? message.author?.username ?? "Desconocido",
@@ -48,23 +53,38 @@ function recordDeletedMessage(message) {
     attachmentUrl,
     deletedAt: Date.now(),
   });
+  if (prev.length > MAX_SNIPES_PER_CHANNEL) prev.length = MAX_SNIPES_PER_CHANNEL;
+
+  snipes.delete(message.channelId);
+  snipes.set(message.channelId, prev);
   return true;
 }
 
-function getSnipedMessage(channelId) {
-  if (!channelId) return null;
-  const entry = snipes.get(channelId);
-  if (!entry) return null;
+function listSnipedMessages(channelId) {
+  if (!channelId) return [];
+  const raw = snipes.get(channelId);
+  if (!raw?.length) return [];
 
-  if (Date.now() - entry.deletedAt > SNIPE_TTL_MS) {
+  const valid = purgeChannelExpired(raw);
+  if (!valid.length) {
     snipes.delete(channelId);
-    return null;
+    return [];
   }
-  return entry;
+  if (valid.length !== raw.length) snipes.set(channelId, valid);
+  return valid;
+}
+
+function getSnipedMessage(channelId, index = 0) {
+  const list = listSnipedMessages(channelId);
+  if (!list.length) return null;
+  const idx = Math.max(0, Math.min(list.length - 1, Math.floor(Number(index) || 0)));
+  return list[idx] ?? null;
 }
 
 module.exports = {
   SNIPE_TTL_MS,
+  MAX_SNIPES_PER_CHANNEL,
   recordDeletedMessage,
+  listSnipedMessages,
   getSnipedMessage,
 };

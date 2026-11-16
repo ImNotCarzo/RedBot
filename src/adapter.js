@@ -23,7 +23,7 @@ function buildReleaseNoticeEmbed(lang = null) {
       "/server customreset ``.customreset``",
       "/util poll ``.poll``",
       "/util remind ``.remind``",
-      "/util ocr ``.ocr``",
+      "/ai ocr ``.ocr``",
       "/channel recap ``.recap``",
     ].join("\n"));
 }
@@ -123,6 +123,8 @@ const PREFIXED_TO_SLASH_MAP = {
   user: "user/info",
   uroles: "user/roles",
   userperms: "user/permissions",
+  ticket: "tickets/create",
+  invites: "community/invites",
 };
 
 const wrappedOriginalCodes = new WeakSet();
@@ -364,7 +366,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
         } else {
           value = args.shift();
         }
-      } else if (def.required && getMessageText(replyMsg)) {
+      } else if (def.required && def.name !== "tiempo" && getMessageText(replyMsg)) {
         value = getMessageText(replyMsg);
       } else if (def.required && slashName === "ask" && attachments.length) {
         value = "Analiza esta imagen.";
@@ -386,15 +388,20 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
 const CTX_I18N_WRAPPED = Symbol.for("redbot.ctxI18nWrapped");
 
 function wrapCtxForLang(ctx, lang) {
-  if (lang !== "en" || !ctx || typeof ctx !== "object" || ctx[CTX_I18N_WRAPPED]) return ctx;
+  if (!ctx || typeof ctx !== "object" || ctx[CTX_I18N_WRAPPED]) return ctx;
   ctx[CTX_I18N_WRAPPED] = true;
-  const { translatePayload, wrapInteractionForLang } = require("./i18n");
+  const { getCurrentLang, translatePayload, wrapInteractionForLang } = require("./i18n");
+
+  const activeLang = () => getCurrentLang() || lang;
 
   const wrapSentMsg = (msg) => {
     if (msg && typeof msg === "object" && typeof msg.edit === "function" && !msg[CTX_I18N_WRAPPED]) {
       msg[CTX_I18N_WRAPPED] = true;
       const origEdit = msg.edit.bind(msg);
-      msg.edit = (payload, ...rest) => origEdit(translatePayload(payload, lang), ...rest);
+      msg.edit = (payload, ...rest) => {
+        const cur = activeLang();
+        return origEdit(cur === "en" ? translatePayload(payload, cur) : payload, ...rest);
+      };
     }
     return msg;
   };
@@ -403,16 +410,17 @@ function wrapCtxForLang(ctx, lang) {
     if (typeof ctx[fnName] === "function") {
       const orig = ctx[fnName].bind(ctx);
       ctx[fnName] = async (payload, ...rest) => {
+        const cur = activeLang();
         if (payload && typeof payload === "object" && typeof payload.toPayload === "function") {
-          payload._i18nLang = lang;
+          payload._i18nLang = cur;
           return wrapSentMsg(await orig(payload, ...rest));
         }
-        return wrapSentMsg(await orig(translatePayload(payload, lang), ...rest));
+        return wrapSentMsg(await orig(cur === "en" ? translatePayload(payload, cur) : payload, ...rest));
       };
     }
   }
 
-  if (ctx.interaction) wrapInteractionForLang(ctx.interaction, lang);
+  if (ctx.interaction && lang === "en") wrapInteractionForLang(ctx.interaction, lang);
   return ctx;
 }
 
@@ -554,9 +562,18 @@ function wrapSingleCommand(command, file, log) {
         }
       } catch (err) {
         if (err && typeof err === "object" && !err.ctx) err.ctx = ctx;
-        log?.error(`[adapter:${slashName ?? prefixedName ?? "unknown"}]`, {
-          err: err?.stack || err?.message || String(err),
-        });
+        const { Errors } = require("gralonium");
+        const isExpectedFrameworkError =
+          (Errors?.CommandMissingPermissions && err instanceof Errors.CommandMissingPermissions) ||
+          (Errors?.CommandMissingBotPermissions && err instanceof Errors.CommandMissingBotPermissions) ||
+          (Errors?.CommandInCooldown && err instanceof Errors.CommandInCooldown) ||
+          (Errors?.GuildOnly && err instanceof Errors.GuildOnly) ||
+          (Errors?.NotOwner && err instanceof Errors.NotOwner);
+        if (!isExpectedFrameworkError) {
+          log?.error(`[adapter:${slashName ?? prefixedName ?? "unknown"}]`, {
+            err: err?.stack || err?.message || String(err),
+          });
+        }
         throw err;
       }
     }
