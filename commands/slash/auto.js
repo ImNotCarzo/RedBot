@@ -308,7 +308,6 @@ const data = {
             { name: "Cuenta menor a X días", value: "account_age_lt_days" },
           ],
         })
-        .addString({ name: "valor_condicion", description: "Valor para la condición (texto, ID o días)", required: false })
         .addString({
           name: "accion",
           description: "Acción a ejecutar",
@@ -321,6 +320,7 @@ const data = {
             { name: "Borrar mensaje", value: "delete_message" },
           ],
         })
+        .addString({ name: "valor_condicion", description: "Valor para la condición (texto, ID o días)", required: false })
         .addString({ name: "valor_accion", description: "Texto, ID de rol o canalId|mensaje", required: false }),
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
