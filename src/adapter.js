@@ -125,6 +125,47 @@ const PREFIXED_TO_SLASH_MAP = {
   userperms: "user/permissions",
   ticket: "tickets/create",
   invites: "community/invites",
+  automod: "mod/automod",
+  dramawatcher: "mod/dramawatcher",
+  reactionrole: "role/reaction",
+  voicerole: "role/voicelink",
+  temprole: "role/temprole",
+  autopurge: "channel/autopurge",
+  sticky: "channel/sticky",
+  temp: "channel/temp",
+  voicelink: "channel/voicelink",
+  ticketsetup: "tickets/setup",
+  ticketpanel: "tickets/panel",
+  ticketclose: "tickets/close",
+  ticketadd: "tickets/add",
+  ticketremove: "tickets/remove",
+  ticketclaim: "tickets/claim",
+  transcript: "tickets/transcript",
+  cmdadd: "auto/cmdadd",
+  cmdremove: "auto/cmdremove",
+  cmdlist: "auto/cmdlist",
+  embedadd: "auto/embedadd",
+  embedview: "auto/embedview",
+  embedremove: "auto/embedremove",
+  embedlist: "auto/embedlist",
+  timeradd: "auto/timeradd",
+  timerremove: "auto/timerremove",
+  timerlist: "auto/timerlist",
+  ruleadd: "auto/ruleadd",
+  ruleremove: "auto/ruleremove",
+  rulelist: "auto/rulelist",
+  feedadd: "feeds/add",
+  feedremove: "feeds/remove",
+  feedlist: "feeds/list",
+  feedtest: "feeds/test",
+  welcome: "community/welcome",
+  goodbye: "community/goodbye",
+  birthday: "community/birthday",
+  birthdays: "community/birthdays",
+  birthdaysetup: "community/birthdaysetup",
+  invitetop: "community/inviteleaderboard",
+  inviteadd: "community/inviteadd",
+  invitereward: "community/invitereward",
 };
 
 const wrappedOriginalCodes = new WeakSet();
@@ -283,6 +324,325 @@ function parsePollArgs(rawArgs) {
   };
 }
 
+const DURATION_TOKEN_RE = /^\d+[smhdwy]$/i;
+const CHANNEL_MENTION_RE = /^<#\d{17,20}>$/;
+const ROLE_MENTION_RE = /^<@&\d{17,20}>$/;
+
+function extractDashFlags(rawArgs, booleanFlags = new Set()) {
+  const flags = {};
+  const positional = [];
+  for (let i = 0; i < rawArgs.length; i++) {
+    const tok = rawArgs[i];
+    if (tok.startsWith("--") && tok.length > 2) {
+      const eqIdx = tok.indexOf("=");
+      if (eqIdx !== -1) {
+        flags[tok.slice(2, eqIdx).toLowerCase()] = tok.slice(eqIdx + 1);
+        continue;
+      }
+      const key = tok.slice(2).toLowerCase();
+      if (booleanFlags.has(key)) {
+        flags[key] = "true";
+        continue;
+      }
+      const parts = [];
+      while (i + 1 < rawArgs.length && !rawArgs[i + 1].startsWith("--")) {
+        parts.push(rawArgs[++i]);
+      }
+      flags[key] = parts.join(" ");
+    } else {
+      positional.push(tok);
+    }
+  }
+  return { flags, positional };
+}
+
+async function parseCustomPrefixedArgs(ctx, slashKey, rawArgs) {
+  const { ChannelType } = require("discord.js");
+  const { flags, positional } = extractDashFlags(rawArgs, new Set(["probar", "test"]));
+
+  if (slashKey === "mod/automod") {
+    const values = {
+      estado: flags.estado ?? null,
+      accion: flags.accion ?? null,
+      antispam: flags.antispam ?? null,
+      antiinvites: flags.antiinvites ?? null,
+      antilinks: flags.antilinks ?? null,
+      anticaps: flags.anticaps ?? null,
+      antimentions: flags.antimentions ?? null,
+      palabras: flags.palabras ?? null,
+      mensaje_custom: flags.mensaje_custom ?? flags.mensaje ?? null,
+    };
+    for (const tok of positional) {
+      const low = tok.toLowerCase();
+      if (!values.estado && (low === "on" || low === "off")) values.estado = low;
+      else if (!values.accion && ["delete", "warn", "mute", "kick"].includes(low)) values.accion = low;
+    }
+    return { values, missingRequired: false, notFound: false };
+  }
+
+  if (slashKey === "channel/autopurge") {
+    const firstLow = positional[0]?.toLowerCase() ?? "";
+    let accion = ["set", "remove", "list"].includes(firstLow) ? positional.shift().toLowerCase() : null;
+    if (!accion && DURATION_TOKEN_RE.test(firstLow)) accion = "set";
+    let tiempo = flags.tiempo ?? null;
+    let canal = flags.canal ? await resolveChannelFlexible(ctx, flags.canal) : null;
+    let filtro = flags.filtro ?? null;
+    for (const tok of positional) {
+      const low = tok.toLowerCase();
+      if (!filtro && ["all", "bots", "humans"].includes(low)) { filtro = low; continue; }
+      if (!canal && (CHANNEL_MENTION_RE.test(tok) || DISCORD_ID_PATTERN.test(tok))) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal = ch; continue; }
+      }
+      if (!tiempo && DURATION_TOKEN_RE.test(tok)) { tiempo = tok; continue; }
+      if (!canal) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal = ch; continue; }
+      }
+      if (!tiempo) tiempo = tok;
+    }
+    return { values: { accion, tiempo, canal, filtro }, missingRequired: !accion, notFound: false };
+  }
+
+  if (slashKey === "channel/sticky") {
+    const firstLow = positional[0]?.toLowerCase() ?? "";
+    const accion = ["set", "remove", "list"].includes(firstLow) ? positional.shift().toLowerCase() : null;
+    const embed = flags.embed ?? null;
+    let canal = flags.canal ? await resolveChannelFlexible(ctx, flags.canal) : null;
+    const msgTokens = [];
+    for (const tok of positional) {
+      if (!canal && (CHANNEL_MENTION_RE.test(tok) || (accion === "remove" && DISCORD_ID_PATTERN.test(tok)))) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal = ch; continue; }
+      }
+      msgTokens.push(tok);
+    }
+    const mensaje = flags.mensaje ?? (msgTokens.length ? msgTokens.join(" ") : null);
+    return { values: { accion, mensaje, embed, canal }, missingRequired: !accion, notFound: false };
+  }
+
+  if (slashKey === "channel/temp") {
+    const firstLow = positional[0]?.toLowerCase() ?? "";
+    const modo = ["timed", "hub", "off"].includes(firstLow) ? positional.shift().toLowerCase() : null;
+    let canal_hub = flags.canal_hub || flags.canal ? await resolveChannelFlexible(ctx, flags.canal_hub || flags.canal) : null;
+    let duracion = flags.duracion ?? null;
+    let tipo = flags.tipo ?? null;
+    const nameTokens = [];
+    for (const tok of positional) {
+      const low = tok.toLowerCase();
+      if (modo === "hub" && !canal_hub && (CHANNEL_MENTION_RE.test(tok) || DISCORD_ID_PATTERN.test(tok))) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal_hub = ch; continue; }
+      }
+      if (modo === "timed" && !tipo && (low === "text" || low === "voice")) { tipo = low; continue; }
+      if (modo === "timed" && !duracion && DURATION_TOKEN_RE.test(tok)) { duracion = tok; continue; }
+      nameTokens.push(tok);
+    }
+    const nombre = flags.nombre ?? (nameTokens.length ? nameTokens.join(" ") : null);
+    return { values: { modo, nombre, duracion, tipo, canal_hub }, missingRequired: !modo, notFound: false };
+  }
+
+  if (slashKey === "role/reaction") {
+    const firstLow = positional[0]?.toLowerCase() ?? "";
+    const accion = ["create", "add", "remove", "send", "list", "delete"].includes(firstLow) ? positional.shift().toLowerCase() : null;
+    const panel_id = flags.panel_id ?? flags.panel ?? (accion && accion !== "list" ? positional.shift() ?? null : null);
+    let rol = flags.rol ? await resolveRoleFlexible(ctx, flags.rol) : null;
+    let emoji = flags.emoji ?? null;
+    let modo = flags.modo ?? null;
+    let duracion = flags.duracion ?? null;
+    let canal = flags.canal ? await resolveChannelFlexible(ctx, flags.canal) : null;
+    const labelTokens = [];
+    for (const tok of positional) {
+      const low = tok.toLowerCase();
+      if (!canal && CHANNEL_MENTION_RE.test(tok)) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal = ch; continue; }
+      }
+      if ((accion === "add" || accion === "remove") && !rol) {
+        const r = await resolveRoleFlexible(ctx, tok);
+        if (r) { rol = r; continue; }
+      }
+      if (accion === "create" && !modo && ["normal", "unique", "verify", "temp"].includes(low)) { modo = low; continue; }
+      if (accion === "create" && !duracion && DURATION_TOKEN_RE.test(tok)) { duracion = tok; continue; }
+      if (accion === "add" && rol && !emoji) { emoji = tok; continue; }
+      labelTokens.push(tok);
+    }
+    const etiqueta = flags.etiqueta ?? flags.label ?? (labelTokens.length ? labelTokens.join(" ") : null);
+    return {
+      values: { accion, panel_id, rol, emoji, etiqueta, modo, duracion, canal },
+      missingRequired: !accion,
+      notFound: false,
+    };
+  }
+
+  if (slashKey === "role/temprole") {
+    if (positional.length >= 3 && DURATION_TOKEN_RE.test(positional[positional.length - 1])) {
+      const usuario = await resolveMemberFlexible(ctx, positional[0]);
+      const duracion = positional[positional.length - 1];
+      const rol = await resolveRoleFlexible(ctx, positional.slice(1, -1).join(" "));
+      return { values: { usuario, rol, duracion }, missingRequired: !usuario || !rol || !duracion, notFound: false };
+    }
+    return null;
+  }
+
+  if (slashKey === "tickets/setup") {
+    let categoria = flags.categoria || flags.cat ? await resolveChannelFlexible(ctx, flags.categoria || flags.cat) : null;
+    let logs = flags.logs ? await resolveChannelFlexible(ctx, flags.logs) : null;
+    let rol_soporte = flags.rol_soporte || flags.rol ? await resolveRoleFlexible(ctx, flags.rol_soporte || flags.rol) : null;
+    const msgTokens = [];
+    for (const tok of positional) {
+      if (ROLE_MENTION_RE.test(tok) && !rol_soporte) {
+        const r = await resolveRoleFlexible(ctx, tok);
+        if (r) { rol_soporte = r; continue; }
+      }
+      if (CHANNEL_MENTION_RE.test(tok) || DISCORD_ID_PATTERN.test(tok)) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch?.type === ChannelType.GuildCategory && !categoria) { categoria = ch; continue; }
+        if (ch?.isTextBased?.() && !logs) { logs = ch; continue; }
+        const r = !rol_soporte ? await resolveRoleFlexible(ctx, tok) : null;
+        if (r) { rol_soporte = r; continue; }
+      }
+      msgTokens.push(tok);
+    }
+    const mensaje = flags.mensaje ?? flags.msg ?? (msgTokens.length ? msgTokens.join(" ") : null);
+    return { values: { categoria, logs, rol_soporte, mensaje }, missingRequired: false, notFound: false };
+  }
+
+  if (slashKey === "tickets/panel") {
+    let canal = flags.canal ? await resolveChannelFlexible(ctx, flags.canal) : null;
+    if (!canal && positional[0] && (CHANNEL_MENTION_RE.test(positional[0]) || DISCORD_ID_PATTERN.test(positional[0]))) {
+      const ch = await resolveChannelFlexible(ctx, positional[0]);
+      if (ch?.isTextBased?.()) { canal = ch; positional.shift(); }
+    }
+    const rawRest = positional.join(" ").trim();
+    const parts = rawRest ? rawRest.split("|").map((s) => s.trim()) : [];
+    const titulo = flags.titulo ?? (parts[0] || null);
+    const descripcion = flags.descripcion ?? flags.desc ?? (parts[1] || null);
+    const categoria = flags.categoria ?? (parts[2] || null);
+    return { values: { canal, titulo, descripcion, categoria }, missingRequired: false, notFound: false };
+  }
+
+  if (slashKey === "auto/cmdadd") {
+    const disparador = flags.disparador ?? positional.shift() ?? null;
+    const respuesta = flags.respuesta ?? (positional.length ? positional.join(" ") : null);
+    return {
+      values: { disparador, respuesta, tipo: flags.tipo ?? null, embed: flags.embed ?? null },
+      missingRequired: !disparador || !respuesta,
+      notFound: false,
+    };
+  }
+
+  if (slashKey === "auto/embedadd") {
+    const nombre = flags.nombre ?? positional.shift() ?? null;
+    const descripcion = flags.descripcion ?? (positional.length ? positional.join(" ") : null);
+    return {
+      values: {
+        nombre,
+        descripcion,
+        titulo: flags.titulo ?? null,
+        color: flags.color ?? null,
+        imagen: flags.imagen ?? null,
+        thumbnail: flags.thumbnail ?? null,
+        footer: flags.footer ?? null,
+      },
+      missingRequired: !nombre || !descripcion,
+      notFound: false,
+    };
+  }
+
+  if (slashKey === "auto/timeradd") {
+    const canalTok = flags.canal ?? positional.shift() ?? null;
+    const canal = canalTok ? await resolveChannelFlexible(ctx, canalTok) : null;
+    const intervalo = flags.intervalo ?? positional.shift() ?? null;
+    const mensaje = flags.mensaje ?? (positional.length ? positional.join(" ") : null);
+    return {
+      values: { canal, intervalo, mensaje, embed: flags.embed ?? null },
+      missingRequired: !canal || !intervalo,
+      notFound: false,
+    };
+  }
+
+  if (slashKey === "auto/ruleadd") {
+    const nombre = flags.nombre ?? positional.shift() ?? null;
+    const evento = flags.evento ?? positional.shift() ?? null;
+    const condicion = flags.condicion ?? positional.shift() ?? null;
+    const accion = flags.accion ?? positional.shift() ?? null;
+    let valor_condicion = flags.valor_condicion ?? flags.cond ?? null;
+    let valor_accion = flags.valor_accion ?? flags.val ?? null;
+    if (positional.length && valor_condicion === null && valor_accion === null) {
+      const restStr = positional.join(" ");
+      if (restStr.includes("|")) {
+        const [cPart, ...aParts] = restStr.split("|");
+        valor_condicion = cPart.trim() || null;
+        valor_accion = aParts.join("|").trim() || null;
+      } else if (condicion === "always" || condicion === "is_bot" || condicion === "not_bot") {
+        valor_accion = restStr;
+      } else {
+        valor_condicion = positional.shift() ?? null;
+        valor_accion = positional.length ? positional.join(" ") : null;
+      }
+    }
+    return {
+      values: { nombre, evento, condicion, accion, valor_condicion, valor_accion },
+      missingRequired: !nombre || !evento || !condicion || !accion,
+      notFound: false,
+    };
+  }
+
+  if (slashKey === "community/welcome" || slashKey === "community/goodbye") {
+    let estado = flags.estado ?? null;
+    let canal = flags.canal ? await resolveChannelFlexible(ctx, flags.canal) : null;
+    let probar = flags.probar ?? flags.test ?? null;
+    const msgTokens = [];
+    for (const tok of positional) {
+      const low = tok.toLowerCase();
+      if (!estado && (low === "on" || low === "off")) { estado = low; continue; }
+      if (!probar && (low === "probar" || low === "test")) { probar = "true"; continue; }
+      if (!canal && (CHANNEL_MENTION_RE.test(tok) || DISCORD_ID_PATTERN.test(tok))) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal = ch; continue; }
+      }
+      msgTokens.push(tok);
+    }
+    const mensaje = flags.mensaje ?? (msgTokens.length ? msgTokens.join(" ") : null);
+    const values = { estado, canal, mensaje, embed: flags.embed ?? null, probar };
+    if (slashKey === "community/welcome") values.dm = flags.dm ?? null;
+    return { values, missingRequired: false, notFound: false };
+  }
+
+  if (slashKey === "community/birthday") {
+    if (positional.length === 1 && /^\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?$/.test(positional[0])) {
+      const [dia, mes, anio] = positional[0].split(/[/-]/);
+      return { values: { dia, mes, anio: anio ?? null }, missingRequired: false, notFound: false };
+    }
+    return null;
+  }
+
+  if (slashKey === "community/birthdaysetup") {
+    let canal = flags.canal ? await resolveChannelFlexible(ctx, flags.canal) : null;
+    let rol = flags.rol ? await resolveRoleFlexible(ctx, flags.rol) : null;
+    let estado = flags.estado ?? null;
+    const msgTokens = [];
+    for (const tok of positional) {
+      const low = tok.toLowerCase();
+      if (!estado && (low === "on" || low === "off")) { estado = low; continue; }
+      if (!canal && (CHANNEL_MENTION_RE.test(tok) || DISCORD_ID_PATTERN.test(tok))) {
+        const ch = await resolveChannelFlexible(ctx, tok);
+        if (ch) { canal = ch; continue; }
+      }
+      if (!rol && ROLE_MENTION_RE.test(tok)) {
+        const r = await resolveRoleFlexible(ctx, tok);
+        if (r) { rol = r; continue; }
+      }
+      msgTokens.push(tok);
+    }
+    const mensaje = flags.mensaje ?? (msgTokens.length ? msgTokens.join(" ") : null);
+    return { values: { canal, rol, mensaje, estado }, missingRequired: false, notFound: false };
+  }
+
+  return null;
+}
+
 async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey = "") {
   const defs = slashCommand?.params?.params ?? [];
   const args = [...(ctx.args ?? [])];
@@ -302,6 +662,9 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
   let notFound = false;
 
   if (slashName === "poll") return parsePollArgs(args);
+
+  const customParsed = await parseCustomPrefixedArgs(ctx, slashKey, args);
+  if (customParsed) return customParsed;
 
   if (slashName === "purge" && args.length >= 2 && !/^\d{1,3}$/.test(args[0]) && /^\d{1,3}$/.test(args[1])) {
     [args[0], args[1]] = [args[1], args[0]];
