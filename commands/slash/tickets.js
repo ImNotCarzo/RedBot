@@ -10,6 +10,7 @@ const {
   generateTicketTranscript,
   getTicketConfig,
   openTicket,
+  sendTicketSetupPanel,
   updateTicketConfig,
 } = require("../../src/tickets");
 
@@ -51,17 +52,14 @@ const data = {
         if (role) patch.supportRoleId = role.id;
         if (msg) patch.welcomeMessage = msg.slice(0, 1500);
 
-        const cfg = await updateTicketConfig(ctx.guild.id, patch);
-        await ctx.send(ComponentsV2Builder.card({
-          title: "Tickets configurados",
-          fields: [
-            ["Categoría", cfg.categoryId ? `<#${cfg.categoryId}>` : V2Text.code("Por defecto")],
-            ["Logs / Transcripts", cfg.logChannelId ? `<#${cfg.logChannelId}>` : V2Text.code("Sin configurar")],
-            ["Rol soporte", cfg.supportRoleId ? `<@&${cfg.supportRoleId}>` : V2Text.code("Solo admins")],
-            ["Mensaje inicial", V2Text.clip(cfg.welcomeMessage, 300)],
-          ],
-          color: GREEN,
-        }));
+        let cfg = null;
+        if (Object.keys(patch).length > 1 || cat || logs || role || msg) {
+          cfg = await updateTicketConfig(ctx.guild.id, patch);
+        } else {
+          cfg = await getTicketConfig(ctx.guild.id);
+        }
+
+        await sendTicketSetupPanel(ctx, { initialCfg: cfg });
       },
     })
     .addCommand({
@@ -70,7 +68,8 @@ const data = {
         .addChannel({ name: "canal", description: "Canal donde enviar el panel (opcional, por defecto actual)", required: false })
         .addString({ name: "titulo", description: "Título del panel", required: false })
         .addString({ name: "descripcion", description: "Descripción del panel", required: false })
-        .addString({ name: "categoria", description: "Etiqueta o motivo del botón (ej: Soporte)", required: false }),
+        .addString({ name: "categoria", description: "Etiqueta o motivo del botón (ej: Soporte)", required: false })
+        .addString({ name: "boton", description: "Texto del botón de apertura", required: false }),
       plugins: [...ADMIN_PLUGINS, Plugins.hasBotPerms("ManageChannels")],
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
@@ -80,6 +79,7 @@ const data = {
           title: ctx.get("titulo"),
           description: ctx.get("descripcion"),
           category: ctx.get("categoria") || "General",
+          buttonLabel: ctx.get("boton"),
           lang: getCurrentLang(),
         });
         await ch.send(payload);

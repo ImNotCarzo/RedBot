@@ -519,7 +519,8 @@ async function parseCustomPrefixedArgs(ctx, slashKey, rawArgs) {
     const titulo = flags.titulo ?? (parts[0] || null);
     const descripcion = flags.descripcion ?? flags.desc ?? (parts[1] || null);
     const categoria = flags.categoria ?? (parts[2] || null);
-    return { values: { canal, titulo, descripcion, categoria }, missingRequired: false, notFound: false };
+    const boton = flags.boton ?? flags.button ?? (parts[3] || null);
+    return { values: { canal, titulo, descripcion, categoria, boton }, missingRequired: false, notFound: false };
   }
 
   if (slashKey === "auto/cmdadd") {

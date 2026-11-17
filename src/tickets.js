@@ -1,10 +1,15 @@
 const {
   AttachmentBuilder,
   ChannelType,
+  LabelBuilder,
+  MessageFlags,
+  ModalBuilder,
   PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
 } = require("discord.js");
 const mongoose = require("mongoose");
-const { ComponentsV2Builder, V2Text } = require("gralonium");
+const { ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("./config");
 const { GuildConfig, Ticket } = require("./database");
 const { getCurrentLang } = require("./i18n");
@@ -51,21 +56,36 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-function buildTicketPanelPayload({ title = null, description = null, category = "General", lang = "es" } = {}) {
+function buildTicketPanelPayload({
+  title = null,
+  description = null,
+  category = "General",
+  buttonLabel = null,
+  lang = "es",
+} = {}) {
   const isEn = lang === "en";
-  const resolvedTitle = title || (isEn ? "Support Tickets" : "Soporte y Tickets");
+  const resolvedTitle = title || (isEn ? "Support" : "Soporte");
   const resolvedDesc = description || (isEn
-    ? "Press the button below to open a private ticket with our staff team."
-    : "Pulsa el botón de abajo para abrir un canal privado con el equipo de soporte.");
+    ? "Press the button below to open a private ticket with our team."
+    : "Pulsa el botón para abrir un ticket privado con el equipo.");
+  const resolvedCategory = String(category || "General").trim().slice(0, 40) || "General";
+  const resolvedButton = String(buttonLabel || (isEn ? "Open ticket" : "Abrir ticket")).trim().slice(0, 80);
 
   const builder = new ComponentsV2Builder({ color: RED })
-    .addText(`${V2Text.heading(resolvedTitle, 3, 200)}\n${resolvedDesc}`)
+    .addText(V2Text.heading(resolvedTitle, 3, 200))
+    .addSeparator("small")
+    .addText(resolvedDesc);
+
+  if (resolvedCategory.toLowerCase() !== "general") {
+    builder.addText(V2Text.subtext(isEn ? `Category: ${resolvedCategory}` : `Categoría: ${resolvedCategory}`, 120));
+  }
+
+  builder
     .addSpacer("small")
     .addButtonsRow([
       {
-        customId: `tkt:open:${String(category || "General").slice(0, 40)}`,
-        emoji: "🎫",
-        label: isEn ? "Open ticket" : "Abrir ticket",
+        customId: `tkt:open:${resolvedCategory}`,
+        label: resolvedButton,
         style: "danger",
       },
     ]);
@@ -73,38 +93,350 @@ function buildTicketPanelPayload({ title = null, description = null, category = 
   return builder.toPayload();
 }
 
-function buildTicketControlCard({ ticket, openerUser, category, welcomeMsg, lang = "es" }) {
+function buildTicketControlCard({
+  ticket,
+  openerUser = null,
+  openerId = null,
+  category = "General",
+  welcomeMsg,
+  claimedById = null,
+  lang = "es",
+}) {
   const isEn = lang === "en";
+  const resolvedOpenerId = openerUser?.id ?? openerId ?? ticket?.openerId;
+  const resolvedClaimedId = claimedById ?? ticket?.claimedBy ?? null;
+  const resolvedCategory = category || ticket?.category || "General";
+  const DEFAULT_ES_WELCOME = "Describe tu consulta y un miembro del equipo te atenderá pronto.";
+  const resolvedWelcome = (!welcomeMsg || (isEn && welcomeMsg === DEFAULT_ES_WELCOME))
+    ? (isEn ? "Describe your question and a staff member will assist you shortly." : DEFAULT_ES_WELCOME)
+    : welcomeMsg;
+
   const builder = new ComponentsV2Builder({ color: RED })
     .addText(
-      `${V2Text.heading(`Ticket #${String(ticket.number).padStart(4, "0")}`, 3)}\n` +
-      `${V2Text.subtext(`${category} · <@${openerUser.id}>`)}`
+      `${V2Text.heading(`Ticket #${String(ticket?.number ?? 1).padStart(4, "0")}`, 3)}\n` +
+      V2Text.subtext(resolvedCategory, 120)
     )
     .addSeparator("small")
-    .addText(welcomeMsg)
+    .addText(resolvedWelcome)
+    .addSeparator("small")
+    .addFields([
+      [isEn ? "User" : "Usuario", `<@${resolvedOpenerId}>`],
+      [isEn ? "Status" : "Estado", V2Text.code(resolvedClaimedId ? (isEn ? "Claimed" : "Reclamado") : (isEn ? "Open" : "Abierto"))],
+      resolvedClaimedId ? [isEn ? "Claimed by" : "Atendido por", `<@${resolvedClaimedId}>`] : null,
+    ].filter(Boolean))
     .addSpacer("small")
     .addButtonsRow([
       {
         customId: "tkt:claim",
-        emoji: "🙋",
-        label: isEn ? "Claim" : "Reclamar",
+        label: resolvedClaimedId ? (isEn ? "Claimed" : "Reclamado") : (isEn ? "Claim" : "Reclamar"),
         style: "secondary",
+        disabled: Boolean(resolvedClaimedId),
       },
       {
         customId: "tkt:transcript",
-        emoji: "📄",
         label: isEn ? "Transcript" : "Transcripción",
         style: "secondary",
       },
       {
         customId: "tkt:close",
-        emoji: "🔒",
         label: isEn ? "Close" : "Cerrar",
         style: "danger",
       },
     ]);
   builder._i18nLang = lang;
   return builder;
+}
+
+function buildTicketSetupCard({ guild, cfg, lang = "es", view = null, isEnded = false }) {
+  const isEn = lang === "en";
+  const builder = new ComponentsV2Builder({ color: RED })
+    .addSection(
+      [
+        V2Text.heading(isEn ? "Ticket configuration" : "Configuración de tickets", 3, 200),
+        V2Text.subtext(guild.name, 120),
+      ],
+      { thumbnail: guild.iconURL({ size: 256 }), fallbackToText: true }
+    )
+    .addSeparator("small")
+    .addFields([
+      [isEn ? "Status" : "Estado", V2Text.code(cfg.enabled ? (isEn ? "Enabled" : "Activado") : (isEn ? "Disabled" : "Desactivado"))],
+      [isEn ? "Category" : "Categoría", cfg.categoryId ? `<#${cfg.categoryId}>` : (isEn ? "No category" : "Sin categoría")],
+      [isEn ? "Logs / Transcripts" : "Logs / Transcripciones", cfg.logChannelId ? `<#${cfg.logChannelId}>` : (isEn ? "Disabled" : "Desactivado")],
+      [isEn ? "Support role" : "Rol soporte", cfg.supportRoleId ? `<@&${cfg.supportRoleId}>` : (isEn ? "Admins only" : "Solo administradores")],
+      [isEn ? "Welcome message" : "Mensaje inicial", V2Text.clip(cfg.welcomeMessage, 140)],
+    ]);
+
+  if (!isEnded && view) {
+    const hasSelection = Boolean(cfg.categoryId || cfg.logChannelId || cfg.supportRoleId);
+    builder
+      .addSpacer("small")
+      .addChannelSelectMenu({
+        customId: view.id("category"),
+        placeholder: isEn ? "Select category for new tickets..." : "Seleccionar categoría para tickets...",
+        channelTypes: [ChannelType.GuildCategory],
+        ...(cfg.categoryId ? { defaultChannels: [cfg.categoryId] } : {}),
+      })
+      .addSpacer("small")
+      .addChannelSelectMenu({
+        customId: view.id("logs"),
+        placeholder: isEn ? "Select logs & transcripts channel..." : "Seleccionar canal de logs y transcripciones...",
+        channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+        ...(cfg.logChannelId ? { defaultChannels: [cfg.logChannelId] } : {}),
+      })
+      .addSpacer("small")
+      .addRoleSelectMenu({
+        customId: view.id("role"),
+        placeholder: isEn ? "Select support team role..." : "Seleccionar rol del equipo de soporte...",
+        ...(cfg.supportRoleId ? { defaultRoles: [cfg.supportRoleId] } : {}),
+      })
+      .addSpacer("small")
+      .addButtonsRow([
+        {
+          customId: view.id("welcome"),
+          label: isEn ? "Welcome message" : "Mensaje inicial",
+          style: "danger",
+        },
+        {
+          customId: view.id("panel"),
+          label: isEn ? "Publish panel" : "Publicar panel",
+          style: "secondary",
+        },
+        {
+          customId: view.id("toggle"),
+          label: cfg.enabled ? (isEn ? "Disable" : "Desactivar") : (isEn ? "Enable" : "Activar"),
+          style: cfg.enabled ? "secondary" : "danger",
+        },
+        {
+          customId: view.id("clear"),
+          label: isEn ? "Clear selection" : "Limpiar selección",
+          style: "secondary",
+          disabled: !hasSelection,
+        },
+      ]);
+  }
+
+  builder._i18nLang = lang;
+  return builder;
+}
+
+function buildTicketWelcomeModal(customId, currentMessage, lang = "es") {
+  const isEn = lang === "en";
+  const input = new TextInputBuilder()
+    .setCustomId("welcome")
+    .setStyle(TextInputStyle.Paragraph)
+    .setMinLength(1)
+    .setMaxLength(1500)
+    .setRequired(true)
+    .setPlaceholder(
+      isEn
+        ? "Message shown inside newly opened tickets..."
+        : "Mensaje que se enviará al abrir un nuevo ticket..."
+    );
+  if (currentMessage) input.setValue(String(currentMessage).slice(0, 1500));
+
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(isEn ? "Ticket welcome message" : "Mensaje inicial del ticket")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel(isEn ? "Message inside the ticket" : "Mensaje dentro del ticket")
+        .setTextInputComponent(input)
+    );
+}
+
+function buildTicketPanelModal(customId, lang = "es") {
+  const isEn = lang === "en";
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(isEn ? "Publish ticket panel" : "Publicar panel de tickets")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel(isEn ? "Panel title" : "Título del panel")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("title")
+            .setStyle(TextInputStyle.Short)
+            .setMinLength(1)
+            .setMaxLength(100)
+            .setRequired(true)
+            .setValue(isEn ? "Support" : "Soporte")
+        ),
+      new LabelBuilder()
+        .setLabel(isEn ? "Description" : "Descripción")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("description")
+            .setStyle(TextInputStyle.Paragraph)
+            .setMinLength(1)
+            .setMaxLength(1000)
+            .setRequired(true)
+            .setValue(
+              isEn
+                ? "Press the button below to open a private ticket with our team."
+                : "Pulsa el botón para abrir un ticket privado con el equipo."
+            )
+        ),
+      new LabelBuilder()
+        .setLabel(isEn ? "Category / reason tag" : "Categoría / motivo")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("category")
+            .setStyle(TextInputStyle.Short)
+            .setMinLength(1)
+            .setMaxLength(40)
+            .setRequired(false)
+            .setValue("General")
+        ),
+      new LabelBuilder()
+        .setLabel(isEn ? "Button text" : "Texto del botón")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("button")
+            .setStyle(TextInputStyle.Short)
+            .setMinLength(1)
+            .setMaxLength(80)
+            .setRequired(false)
+            .setValue(isEn ? "Open ticket" : "Abrir ticket")
+        )
+    );
+}
+
+async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
+  const guild = ctx.guild;
+  const author = ctx.user;
+  const lang = await require("./guild").getLang(guild.id).catch(() => getCurrentLang());
+  const isEn = lang === "en";
+  const cfg = initialCfg ?? await getTicketConfig(guild.id);
+
+  const view = new V2View({
+    authorId: author.id,
+    timeout: 3 * 60_000,
+    thirdPartyMode: "reject",
+    thirdPartyMessage: isEn ? "You cannot use this menu" : "No puedes usar este menú",
+    onEnd: "static",
+    state: { cfg, lang },
+    render: ({ state, view: activeView, isEnded }) =>
+      buildTicketSetupCard({ guild, cfg: state.cfg, lang: state.lang, view: activeView, isEnded }),
+    renderStatic: ({ state }) =>
+      buildTicketSetupCard({ guild, cfg: state.cfg, lang: state.lang, isEnded: true }),
+    actions: {
+      category: async ({ values, interaction, setState }) => {
+        const categoryId = values[0];
+        if (!categoryId) return false;
+        const ch = guild.channels.cache.get(categoryId) ?? await guild.channels.fetch(categoryId).catch(() => null);
+        if (!ch || ch.type !== ChannelType.GuildCategory) {
+          await interaction.reply({
+            content: isEn ? "Please select a valid category channel." : "Debes seleccionar una categoría válida.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return false;
+        }
+        const nextCfg = await updateTicketConfig(guild.id, { enabled: true, categoryId });
+        if (nextCfg) setState({ cfg: nextCfg });
+      },
+      logs: async ({ values, interaction, setState }) => {
+        const logChannelId = values[0];
+        if (!logChannelId) return false;
+        const ch = guild.channels.cache.get(logChannelId) ?? await guild.channels.fetch(logChannelId).catch(() => null);
+        if (!ch?.isTextBased?.()) {
+          await interaction.reply({
+            content: isEn ? "The logs channel must be a text channel." : "El canal de logs debe ser de texto.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return false;
+        }
+        const nextCfg = await updateTicketConfig(guild.id, { enabled: true, logChannelId });
+        if (nextCfg) setState({ cfg: nextCfg });
+      },
+      role: async ({ values, interaction, setState }) => {
+        const supportRoleId = values[0];
+        if (!supportRoleId) return false;
+        if (supportRoleId === guild.id) {
+          await interaction.reply({
+            content: isEn ? "You cannot select `@everyone` as support role." : "No puedes seleccionar `@everyone` como rol de soporte.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return false;
+        }
+        const nextCfg = await updateTicketConfig(guild.id, { enabled: true, supportRoleId });
+        if (nextCfg) setState({ cfg: nextCfg });
+      },
+      toggle: async ({ state, setState }) => {
+        const nextCfg = await updateTicketConfig(guild.id, { enabled: !state.cfg.enabled });
+        if (nextCfg) setState({ cfg: nextCfg });
+      },
+      clear: async ({ setState }) => {
+        const nextCfg = await updateTicketConfig(guild.id, {
+          categoryId: null,
+          logChannelId: null,
+          supportRoleId: null,
+        });
+        if (nextCfg) setState({ cfg: nextCfg });
+      },
+      welcome: async ({ interaction, state, view: activeView }) => {
+        const modalId = activeView.id("tkt_welcome", Date.now().toString(36));
+        await interaction.showModal(buildTicketWelcomeModal(modalId, state.cfg.welcomeMessage, state.lang));
+
+        const submitted = await interaction.awaitModalSubmit({
+          time: 3 * 60_000,
+          filter: (i) => i.customId === modalId && i.user.id === author.id,
+        }).catch(() => null);
+        if (!submitted) return false;
+
+        const msg = submitted.fields.getTextInputValue("welcome")?.trim().slice(0, 1500);
+        if (!msg) return false;
+
+        const nextCfg = await updateTicketConfig(guild.id, { enabled: true, welcomeMessage: msg });
+        await submitted.deferUpdate().catch(() => {});
+        if (nextCfg) activeView.setState({ cfg: nextCfg });
+        if (activeView.message?.editable) {
+          await activeView.message.edit(activeView.toPayload()).catch(() => {});
+        }
+        return false;
+      },
+      panel: async ({ interaction, state, view: activeView }) => {
+        const modalId = activeView.id("tkt_panel", Date.now().toString(36));
+        await interaction.showModal(buildTicketPanelModal(modalId, state.lang));
+
+        const submitted = await interaction.awaitModalSubmit({
+          time: 3 * 60_000,
+          filter: (i) => i.customId === modalId && i.user.id === author.id,
+        }).catch(() => null);
+        if (!submitted) return false;
+
+        const title = submitted.fields.getTextInputValue("title")?.trim();
+        const description = submitted.fields.getTextInputValue("description")?.trim();
+        const category = submitted.fields.getTextInputValue("category")?.trim() || "General";
+        const buttonLabel = submitted.fields.getTextInputValue("button")?.trim() || null;
+
+        const targetChannel = ctx.channel;
+        if (!targetChannel?.isTextBased?.()) {
+          await submitted.reply({
+            content: isEn ? "Could not send the panel to this channel." : "No pude enviar el panel en este canal.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return false;
+        }
+
+        await updateTicketConfig(guild.id, { enabled: true });
+        const payload = buildTicketPanelPayload({
+          title,
+          description,
+          category,
+          buttonLabel,
+          lang: state.lang,
+        });
+        await targetChannel.send(payload);
+        await submitted.reply({
+          content: isEn ? `Ticket panel published in ${targetChannel}.` : `Panel de tickets publicado en ${targetChannel}.`,
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => {});
+        return false;
+      },
+    },
+  });
+
+  await view.send(ctx);
 }
 
 async function openTicket({ guild, user, category = "General" }) {
@@ -311,6 +643,8 @@ module.exports = {
   updateTicketConfig,
   buildTicketPanelPayload,
   buildTicketControlCard,
+  buildTicketSetupCard,
+  sendTicketSetupPanel,
   openTicket,
   generateTicketTranscript,
   closeTicketChannel,

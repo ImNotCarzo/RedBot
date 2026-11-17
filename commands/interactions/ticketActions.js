@@ -5,6 +5,7 @@ const { Ticket } = require("../../src/database");
 const { getLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
 const {
+  buildTicketControlCard,
   closeTicketChannel,
   generateTicketTranscript,
   getTicketConfig,
@@ -77,6 +78,21 @@ const data = {
           }).catch(() => {});
         }
         await Ticket.updateOne({ channelId: interaction.channelId }, { $set: { claimedBy: interaction.user.id } }).catch(() => {});
+        const updatedCard = buildTicketControlCard({
+          ticket,
+          openerId: ticket.openerId,
+          category: ticket.category,
+          welcomeMsg: cfg.welcomeMessage,
+          claimedById: interaction.user.id,
+          lang,
+        });
+        let updated = false;
+        await interaction.update(updatedCard.toPayload()).then(() => { updated = true; }).catch(() => {});
+        if (updated) {
+          return interaction.followUp({
+            content: isEn ? `Ticket claimed by <@${interaction.user.id}>.` : `Ticket reclamado por <@${interaction.user.id}>.`,
+          }).catch(() => {});
+        }
         return interaction.reply({
           content: isEn ? `Ticket claimed by <@${interaction.user.id}>.` : `Ticket reclamado por <@${interaction.user.id}>.`,
         }).catch(() => {});
