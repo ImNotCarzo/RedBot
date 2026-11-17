@@ -53,7 +53,7 @@ function wait(ms) {
 
 function redactSecrets(text) {
   let out = String(text ?? "");
-  for (const envKey of ["TOKEN", "MONGO", "GEMINI", "GEMINI2", "GROQ", "CLIENT_SECRET", "API_KEY"]) {
+  for (const envKey of ["TOKEN", "MONGO", "GEMINI", "GEMINI2", "GEMINI3", "GROQ", "CLIENT_SECRET", "API_KEY", "SESSION_SECRET"]) {
     const val = process.env[envKey];
     if (val && val.length >= 6) {
       out = out.split(val).join(`[REDACTED_${envKey}]`);

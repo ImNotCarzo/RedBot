@@ -17,6 +17,7 @@ function validateEnv() {
     NODE_ENV: process.env.NODE_ENV || "development",
     GEMINI: process.env.GEMINI,
     GEMINI2: process.env.GEMINI2,
+    GEMINI3: process.env.GEMINI3,
     GROQ: process.env.GROQ,
     API_PORT: process.env.API_PORT || "3000",
     API_HOST: process.env.API_HOST || "",

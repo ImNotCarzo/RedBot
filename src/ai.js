@@ -6,7 +6,7 @@ const { Logger, wait } = require("./runtime");
 const { fetchPublic, readBodyLimited, readTextLimited } = require("./security");
 
 const log = new Logger("AI_SERVICE");
-const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2].filter(Boolean);
+const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2, process.env.GEMINI3].filter(Boolean);
 const aiClients = new Map();
 let currentKey = 0;
 
