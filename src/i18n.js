@@ -1592,6 +1592,8 @@ const COMMAND_DESCRIPTION_ES_TO_EN = {
   "Título del panel": "Panel title",
   "Descripción del panel": "Panel description",
   "Etiqueta o motivo del botón (ej: Soporte)": "Button label or category (e.g. Support)",
+  "Texto del botón o placeholder del menú": "Button text or menu placeholder",
+  "Opciones del menú separadas por ; (emoji|Nombre|Subtexto|Detalle)": "Dropdown options separated by ; (emoji|Name|Subtext|Detail)",
   "Abre un ticket de soporte": "Open a support ticket",
   "Motivo o categoría (opcional)": "Reason or category (optional)",
   "Cierra el ticket actual y guarda su transcripción": "Close the current ticket and save its transcript",

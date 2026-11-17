@@ -12,7 +12,37 @@ const {
   openTicket,
 } = require("../../src/tickets");
 
-const data = {
+async function handleOpenTicketInteraction(interaction, categoryKey, lang) {
+  const isEn = lang === "en";
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+  const res = await openTicket({
+    guild: interaction.guild,
+    user: interaction.user,
+    category: categoryKey || "General",
+  }).catch(() => ({ error: "perm" }));
+
+  if (res.error === "already_open") {
+    return interaction.editReply({
+      content: isEn
+        ? `You already have an open ticket in <#${res.channelId}>.`
+        : `Ya tienes un ticket abierto en <#${res.channelId}>.`,
+    }).catch(() => {});
+  }
+  if (!res.ok) {
+    return interaction.editReply({
+      content: isEn
+        ? "Could not create the ticket. Check my channel permissions."
+        : "No pude crear el ticket. Revisa mis permisos para crear canales.",
+    }).catch(() => {});
+  }
+  return interaction.editReply({
+    content: isEn
+      ? `Ticket created: <#${res.channel.id}>`
+      : `Ticket creado: <#${res.channel.id}>`,
+  }).catch(() => {});
+}
+
+const buttonData = {
   data: new InteractionBuilder({
     name: "ticketActions",
     type: Interactions.Button,
@@ -29,32 +59,7 @@ const data = {
       const isEn = lang === "en";
 
       if (action === "open") {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-        const res = await openTicket({
-          guild: interaction.guild,
-          user: interaction.user,
-          category: extra || "General",
-        }).catch(() => ({ error: "perm" }));
-
-        if (res.error === "already_open") {
-          return interaction.editReply({
-            content: isEn
-              ? `You already have an open ticket in <#${res.channelId}>.`
-              : `Ya tienes un ticket abierto en <#${res.channelId}>.`,
-          }).catch(() => {});
-        }
-        if (!res.ok) {
-          return interaction.editReply({
-            content: isEn
-              ? "Could not create the ticket. Check my channel permissions."
-              : "No pude crear el ticket. Revisa mis permisos para crear canales.",
-          }).catch(() => {});
-        }
-        return interaction.editReply({
-          content: isEn
-            ? `Ticket created: <#${res.channel.id}>`
-            : `Ticket creado: <#${res.channel.id}>`,
-        }).catch(() => {});
+        return handleOpenTicketInteraction(interaction, extra || "General", lang);
       }
 
       const ticket = await Ticket.findOne({ channelId: interaction.channelId, status: "open" }).lean().catch(() => null);
@@ -151,4 +156,22 @@ const data = {
   },
 };
 
-module.exports = { data };
+const selectData = {
+  data: new InteractionBuilder({
+    name: "ticketSelect",
+    type: Interactions.StringSelectMenu,
+    prefix: "tkt:select",
+    description: "Abre tickets desde menú desplegable",
+    as_command: false,
+  }),
+  async code(_bot, interaction) {
+    if (!interaction?.guildId || !interaction.guild) return;
+    const selectedCategory = interaction.values?.[0] || "General";
+    const lang = await getLang(interaction.guildId).catch(() => "es");
+
+    await interaction.message?.edit?.({ components: interaction.message.components }).catch(() => {});
+    return runWithLang(lang, () => handleOpenTicketInteraction(interaction, selectedCategory, lang));
+  },
+};
+
+module.exports = { data: [buttonData, selectData] };

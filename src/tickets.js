@@ -24,6 +24,8 @@ async function getTicketConfig(guildId) {
     logChannelId: null,
     supportRoleId: null,
     welcomeMessage: "Describe tu consulta y un miembro del equipo te atenderá pronto.",
+    panelPlaceholder: "Abrir Tickets",
+    categories: [],
     counter: 0,
   };
   if (!guildId || mongoose.connection.readyState !== 1) return defaults;
@@ -56,15 +58,180 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
+function isValidMenuEmoji(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return false;
+  if (/^<(a)?:[a-zA-Z0-9_~]+:\d{15,22}>$/.test(s)) return true;
+  if (/^(?:a:)?[a-zA-Z0-9_~]+:\d{15,22}$/.test(s)) return true;
+  if (s.length <= 16 && /\p{Extended_Pictographic}/u.test(s) && !/[a-zA-Z0-9]/.test(s)) return true;
+  return false;
+}
+
+function makeUniqueCategoryId(label, idx, usedIds) {
+  const base = String(label || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || `opt-${idx + 1}`;
+  let candidate = base;
+  let n = 2;
+  while (usedIds.has(candidate)) {
+    candidate = `${base.slice(0, 28)}-${n++}`;
+  }
+  usedIds.add(candidate);
+  return candidate;
+}
+
+function parseTicketMenuOptions(rawInput) {
+  if (!rawInput) return [];
+  const entries = Array.isArray(rawInput)
+    ? rawInput
+    : String(rawInput)
+        .split(/\r?\n|;/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+  const parsed = [];
+  const usedIds = new Set();
+
+  for (let i = 0; i < entries.length && parsed.length < 25; i++) {
+    const item = entries[i];
+    let emoji = null;
+    let label = "";
+    let description = "";
+    let bodyText = "";
+    let categoryId = null;
+    let supportRoleId = null;
+    let customId = null;
+
+    if (item && typeof item === "object") {
+      emoji = isValidMenuEmoji(item.emoji) ? String(item.emoji).trim() : null;
+      label = String(item.label ?? "").trim().slice(0, 80);
+      description = String(item.description ?? "").trim().slice(0, 100);
+      bodyText = String(item.bodyText ?? "").trim().slice(0, 300);
+      categoryId = item.categoryId ? String(item.categoryId).trim() : null;
+      supportRoleId = item.supportRoleId ? String(item.supportRoleId).trim() : null;
+      customId = item.id ? String(item.id).trim().slice(0, 64) : null;
+    } else {
+      const line = String(item ?? "").trim();
+      if (!line) continue;
+      if (line.includes("|")) {
+        const parts = line.split("|").map((p) => p.trim());
+        let cursor = 0;
+        if (parts.length >= 2 && isValidMenuEmoji(parts[0])) {
+          emoji = parts[0];
+          cursor = 1;
+        }
+        label = (parts[cursor] || "").slice(0, 80);
+        const seg1 = (parts[cursor + 1] || "").trim();
+        const seg2 = (parts[cursor + 2] || "").trim();
+        if (seg2) {
+          description = seg1.slice(0, 100);
+          bodyText = seg2.slice(0, 300);
+        } else if (seg1) {
+          description = seg1.slice(0, 100);
+          bodyText = seg1.slice(0, 300);
+        }
+      } else if (line.includes(":")) {
+        const idx = line.indexOf(":");
+        label = line.slice(0, idx).trim().slice(0, 80);
+        const detail = line.slice(idx + 1).trim();
+        description = detail.slice(0, 100);
+        bodyText = detail.slice(0, 300);
+      } else {
+        label = line.slice(0, 80);
+      }
+    }
+
+    if (!label) continue;
+    const id = customId && !usedIds.has(customId)
+      ? (usedIds.add(customId), customId)
+      : makeUniqueCategoryId(label, parsed.length, usedIds);
+
+    parsed.push({
+      id,
+      label,
+      description,
+      bodyText,
+      emoji,
+      categoryId: categoryId || null,
+      supportRoleId: supportRoleId || null,
+    });
+  }
+
+  return parsed;
+}
+
+function formatTicketMenuOptionsText(categories) {
+  if (!Array.isArray(categories) || !categories.length) return "";
+  return categories
+    .map((c) => {
+      const cols = [];
+      if (c.emoji) cols.push(c.emoji);
+      cols.push(c.label);
+      if (c.description && c.bodyText && c.description !== c.bodyText) {
+        cols.push(c.description, c.bodyText);
+      } else if (c.bodyText || c.description) {
+        cols.push(c.bodyText || c.description);
+      }
+      return cols.join(" | ");
+    })
+    .join("\n")
+    .slice(0, 4000);
+}
+
 function buildTicketPanelPayload({
   title = null,
   description = null,
   category = "General",
   buttonLabel = null,
+  placeholder = null,
+  options = null,
   lang = "es",
 } = {}) {
   const isEn = lang === "en";
   const resolvedTitle = title || (isEn ? "Support" : "Soporte");
+  const parsedOptions = parseTicketMenuOptions(options);
+
+  if (parsedOptions.length > 0) {
+    const optionLines = parsedOptions
+      .filter((opt) => opt.bodyText || opt.description)
+      .map((opt) => `» ${opt.emoji ? `${opt.emoji} ` : ""}**${opt.label}:** *${opt.bodyText || opt.description}*`);
+
+    const intro = description ? String(description).trim() : "";
+    const defaultIntro = isEn
+      ? "Select a category below to open a private ticket with our team."
+      : "Selecciona una categoría abajo para abrir un ticket privado con el equipo.";
+    const bodyParts = [];
+    if (intro) bodyParts.push(intro);
+    if (optionLines.length) bodyParts.push(optionLines.join("\n\n"));
+    const bodyText = bodyParts.length ? bodyParts.join("\n\n") : defaultIntro;
+
+    const menuPlaceholder = String(
+      placeholder || buttonLabel || (isEn ? "Open Tickets" : "Abrir Tickets")
+    ).trim().slice(0, 100) || (isEn ? "Open Tickets" : "Abrir Tickets");
+
+    const builder = new ComponentsV2Builder({ color: RED })
+      .addText(V2Text.heading(resolvedTitle, 3, 200))
+      .addSeparator("small")
+      .addText(V2Text.clip(bodyText, 3800))
+      .addSpacer("small")
+      .addSelectMenu({
+        customId: "tkt:select",
+        placeholder: menuPlaceholder,
+        options: parsedOptions.map((opt, idx) => ({
+          label: opt.label.slice(0, 80),
+          value: (opt.id || opt.label || `opt_${idx}`).slice(0, 80),
+          ...(opt.description ? { description: opt.description.slice(0, 100) } : {}),
+          ...(opt.emoji ? { emoji: opt.emoji } : {}),
+        })),
+      });
+    builder._i18nLang = lang;
+    return builder.toPayload();
+  }
+
   const resolvedDesc = description || (isEn
     ? "Press the button below to open a private ticket with our team."
     : "Pulsa el botón para abrir un ticket privado con el equipo.");
@@ -163,8 +330,11 @@ function buildTicketSetupCard({ guild, cfg, lang = "es", view = null, isEnded = 
       [isEn ? "Category" : "Categoría", cfg.categoryId ? `<#${cfg.categoryId}>` : (isEn ? "No category" : "Sin categoría")],
       [isEn ? "Logs / Transcripts" : "Logs / Transcripciones", cfg.logChannelId ? `<#${cfg.logChannelId}>` : (isEn ? "Disabled" : "Desactivado")],
       [isEn ? "Support role" : "Rol soporte", cfg.supportRoleId ? `<@&${cfg.supportRoleId}>` : (isEn ? "Admins only" : "Solo administradores")],
+      cfg.categories?.length
+        ? [isEn ? "Menu options" : "Opciones del menú", V2Text.code(`${cfg.categories.length}`)]
+        : null,
       [isEn ? "Welcome message" : "Mensaje inicial", V2Text.clip(cfg.welcomeMessage, 140)],
-    ]);
+    ].filter(Boolean));
 
   if (!isEnded && view) {
     const hasSelection = Boolean(cfg.categoryId || cfg.logChannelId || cfg.supportRoleId);
@@ -244,8 +414,22 @@ function buildTicketWelcomeModal(customId, currentMessage, lang = "es") {
     );
 }
 
-function buildTicketPanelModal(customId, lang = "es") {
+function buildTicketPanelModal(customId, cfg = null, lang = "es") {
   const isEn = lang === "en";
+  const optionsText = formatTicketMenuOptionsText(cfg?.categories);
+  const optionsInput = new TextInputBuilder()
+    .setCustomId("options")
+    .setStyle(TextInputStyle.Paragraph)
+    .setMinLength(0)
+    .setMaxLength(4000)
+    .setRequired(false)
+    .setPlaceholder(
+      isEn
+        ? "One per line: ⛔ | Reports | Subtext | Panel description\nLeave empty for single button"
+        : "Una por línea: ⛔ | Reportes | Subtexto | Descripción\nVacío = botón simple"
+    );
+  if (optionsText) optionsInput.setValue(optionsText);
+
   return new ModalBuilder()
     .setCustomId(customId)
     .setTitle(isEn ? "Publish ticket panel" : "Publicar panel de tickets")
@@ -262,33 +446,25 @@ function buildTicketPanelModal(customId, lang = "es") {
             .setValue(isEn ? "Support" : "Soporte")
         ),
       new LabelBuilder()
-        .setLabel(isEn ? "Description" : "Descripción")
+        .setLabel(isEn ? "Intro description (optional)" : "Descripción inicial (opcional)")
         .setTextInputComponent(
           new TextInputBuilder()
             .setCustomId("description")
             .setStyle(TextInputStyle.Paragraph)
-            .setMinLength(1)
+            .setMinLength(0)
             .setMaxLength(1000)
-            .setRequired(true)
-            .setValue(
+            .setRequired(false)
+            .setPlaceholder(
               isEn
-                ? "Press the button below to open a private ticket with our team."
-                : "Pulsa el botón para abrir un ticket privado con el equipo."
+                ? "Optional header text above the categories list..."
+                : "Texto opcional arriba de las categorías..."
             )
         ),
       new LabelBuilder()
-        .setLabel(isEn ? "Category / reason tag" : "Categoría / motivo")
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId("category")
-            .setStyle(TextInputStyle.Short)
-            .setMinLength(1)
-            .setMaxLength(40)
-            .setRequired(false)
-            .setValue("General")
-        ),
+        .setLabel(isEn ? "Dropdown options (optional)" : "Opciones de menú (emoji|Nombre|Subtexto|Detalle)")
+        .setTextInputComponent(optionsInput),
       new LabelBuilder()
-        .setLabel(isEn ? "Button text" : "Texto del botón")
+        .setLabel(isEn ? "Menu placeholder / button text" : "Placeholder del menú o texto del botón")
         .setTextInputComponent(
           new TextInputBuilder()
             .setCustomId("button")
@@ -296,7 +472,7 @@ function buildTicketPanelModal(customId, lang = "es") {
             .setMinLength(1)
             .setMaxLength(80)
             .setRequired(false)
-            .setValue(isEn ? "Open ticket" : "Abrir ticket")
+            .setValue(cfg?.panelPlaceholder || (isEn ? "Open Tickets" : "Abrir Tickets"))
         )
     );
 }
@@ -396,7 +572,7 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
       },
       panel: async ({ interaction, state, view: activeView }) => {
         const modalId = activeView.id("tkt_panel", Date.now().toString(36));
-        await interaction.showModal(buildTicketPanelModal(modalId, state.lang));
+        await interaction.showModal(buildTicketPanelModal(modalId, state.cfg, state.lang));
 
         const submitted = await interaction.awaitModalSubmit({
           time: 3 * 60_000,
@@ -405,10 +581,11 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
         if (!submitted) return false;
 
         const title = submitted.fields.getTextInputValue("title")?.trim();
-        const description = submitted.fields.getTextInputValue("description")?.trim();
-        const category = submitted.fields.getTextInputValue("category")?.trim() || "General";
-        const buttonLabel = submitted.fields.getTextInputValue("button")?.trim() || null;
+        const description = submitted.fields.getTextInputValue("description")?.trim() || null;
+        const optionsRaw = submitted.fields.getTextInputValue("options")?.trim() || "";
+        const buttonOrPlaceholder = submitted.fields.getTextInputValue("button")?.trim() || null;
 
+        const parsedOptions = parseTicketMenuOptions(optionsRaw);
         const targetChannel = ctx.channel;
         if (!targetChannel?.isTextBased?.()) {
           await submitted.reply({
@@ -418,12 +595,29 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
           return false;
         }
 
-        await updateTicketConfig(guild.id, { enabled: true });
+        const cfgPatch = { enabled: true };
+        if (parsedOptions.length) {
+          cfgPatch.categories = parsedOptions;
+          if (buttonOrPlaceholder) cfgPatch.panelPlaceholder = buttonOrPlaceholder.slice(0, 100);
+        } else if (optionsRaw === "" && state.cfg.categories?.length) {
+          cfgPatch.categories = [];
+        }
+
+        const nextCfg = await updateTicketConfig(guild.id, cfgPatch);
+        if (nextCfg) {
+          activeView.setState({ cfg: nextCfg });
+          if (activeView.message?.editable) {
+            await activeView.message.edit(activeView.toPayload()).catch(() => {});
+          }
+        }
+
         const payload = buildTicketPanelPayload({
           title,
           description,
-          category,
-          buttonLabel,
+          category: "General",
+          buttonLabel: parsedOptions.length ? null : buttonOrPlaceholder,
+          placeholder: parsedOptions.length ? buttonOrPlaceholder : null,
+          options: parsedOptions.length ? parsedOptions : null,
           lang: state.lang,
         });
         await targetChannel.send(payload);
@@ -439,7 +633,7 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
   await view.send(ctx);
 }
 
-async function openTicket({ guild, user, category = "General" }) {
+async function openTicket({ guild, user, category = "General", categoryChannelId = null, supportRoleId = null }) {
   if (!guild?.id || !user?.id || mongoose.connection.readyState !== 1) return { error: "unavailable" };
 
   const existing = await Ticket.findOne({ guildId: guild.id, openerId: user.id, status: "open" }).lean().catch(() => null);
@@ -456,6 +650,16 @@ async function openTicket({ guild, user, category = "General" }) {
   ).lean();
 
   const cfg = updatedGuild?.ticketConfig ?? {};
+  const catList = Array.isArray(cfg.categories) ? cfg.categories : [];
+  const rawCat = String(category || "General").trim();
+  const matchedCat = catList.find(
+    (c) => c.id === rawCat || String(c.label || "").toLowerCase() === rawCat.toLowerCase()
+  ) ?? null;
+
+  const resolvedCategoryLabel = String(matchedCat?.label || rawCat || "General").slice(0, 80);
+  const resolvedParentId = categoryChannelId || matchedCat?.categoryId || cfg.categoryId || null;
+  const resolvedSupportRoleId = supportRoleId || matchedCat?.supportRoleId || cfg.supportRoleId || null;
+
   const ticketNum = cfg.counter || 1;
   const safeUser = String(user.username || "user").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 14) || "user";
   const channelName = `ticket-${String(ticketNum).padStart(4, "0")}-${safeUser}`;
@@ -486,9 +690,9 @@ async function openTicket({ guild, user, category = "General" }) {
       ],
     });
   }
-  if (cfg.supportRoleId && guild.roles.cache.has(cfg.supportRoleId)) {
+  if (resolvedSupportRoleId && guild.roles.cache.has(resolvedSupportRoleId)) {
     overwrites.push({
-      id: cfg.supportRoleId,
+      id: resolvedSupportRoleId,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -498,7 +702,7 @@ async function openTicket({ guild, user, category = "General" }) {
     });
   }
 
-  const parent = cfg.categoryId && guild.channels.cache.has(cfg.categoryId) ? cfg.categoryId : undefined;
+  const parent = resolvedParentId && guild.channels.cache.has(resolvedParentId) ? resolvedParentId : undefined;
   const channel = await guild.channels.create({
     name: channelName,
     type: ChannelType.GuildText,
@@ -512,7 +716,7 @@ async function openTicket({ guild, user, category = "General" }) {
     channelId: channel.id,
     openerId: user.id,
     number: ticketNum,
-    category: String(category || "General").slice(0, 80),
+    category: resolvedCategoryLabel,
     status: "open",
   });
 
@@ -525,9 +729,9 @@ async function openTicket({ guild, user, category = "General" }) {
     lang,
   });
 
-  const mentionPing = cfg.supportRoleId ? `<@${user.id}> <@&${cfg.supportRoleId}>` : `<@${user.id}>`;
+  const mentionPing = resolvedSupportRoleId ? `<@${user.id}> <@&${resolvedSupportRoleId}>` : `<@${user.id}>`;
   await channel.send(controlCard.toPayload()).catch(() => {});
-  await channel.send({ content: mentionPing, allowedMentions: { users: [user.id], roles: cfg.supportRoleId ? [cfg.supportRoleId] : [] } }).catch(() => {});
+  await channel.send({ content: mentionPing, allowedMentions: { users: [user.id], roles: resolvedSupportRoleId ? [resolvedSupportRoleId] : [] } }).catch(() => {});
 
   return { ok: true, channel, ticket };
 }
@@ -641,6 +845,8 @@ async function closeTicketChannel({ channel, closedByUser, reason = null }) {
 module.exports = {
   getTicketConfig,
   updateTicketConfig,
+  parseTicketMenuOptions,
+  formatTicketMenuOptionsText,
   buildTicketPanelPayload,
   buildTicketControlCard,
   buildTicketSetupCard,

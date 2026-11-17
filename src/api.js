@@ -40,19 +40,19 @@ function checkRate(ip) {
   };
 }
 
-function json(res, status, data) {
+function json(res, status, data, { noStore = false } = {}) {
   const body = JSON.stringify(data);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Content-Length": Buffer.byteLength(body),
-    "Cache-Control": status === 200 ? "public, max-age=15" : "no-store",
+    "Cache-Control": (status === 200 && !noStore) ? "public, max-age=15" : "no-store",
   });
   res.end(body);
 }
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", apiConfig?.API_CORS_ORIGIN || "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.setHeader("Access-Control-Max-Age", "86400");
   res.setHeader("Vary", "Origin");
@@ -170,6 +170,9 @@ function handleRoot() {
       { path: "/api/health", description: "Estado de salud del sistema" },
       { path: "/api/invite", description: "Redirección OAuth2 con detección automática de idioma" },
       { path: "/api/oauth/callback", description: "Callback OAuth2 de Discord para detectar idioma inicial" },
+      { path: "/api/tickets/:guildId", description: "Configuración, canales, roles y métricas de tickets" },
+      { path: "/api/tickets/:guildId/config", description: "Actualiza configuración y categorías de tickets" },
+      { path: "/api/tickets/:guildId/panel", description: "Publica o edita un panel o menú de tickets en Discord" },
     ],
   };
 }
@@ -555,6 +558,269 @@ async function handleOAuthCallback(req, res, urlObj) {
   }
 }
 
+function readJsonBody(req, maxBytes = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    let settled = false;
+
+    req.on("data", (chunk) => {
+      if (settled) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        settled = true;
+        const err = new Error("Payload too large");
+        err.statusCode = 413;
+        reject(err);
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      if (settled) return;
+      settled = true;
+      if (!total) return resolve({});
+      try {
+        const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        resolve(parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {});
+      } catch {
+        const err = new Error("Invalid JSON body");
+        err.statusCode = 400;
+        reject(err);
+      }
+    });
+
+    req.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+  });
+}
+
+async function handleTicketsRoute(req, res, pathname) {
+  const match = pathname.match(/^\/api\/tickets\/(\d{17,22})(?:\/(config|panel))?$/);
+  if (!match) return false;
+
+  const guildId = match[1];
+  const sub = match[2] || "";
+  const guild = botClient?.guilds?.cache?.get(guildId) ?? null;
+
+  if (!sub) {
+    if (req.method !== "GET") {
+      json(res, 405, { error: "Method not allowed" });
+      return true;
+    }
+    if (!guild) {
+      json(res, 404, { error: "Guild not found" });
+      return true;
+    }
+
+    const { getTicketConfig } = require("./tickets");
+    const { Ticket } = require("./database");
+    const cfg = await getTicketConfig(guildId);
+    let open = 0;
+    let closed = 0;
+    if (mongoose.connection.readyState === 1) {
+      [open, closed] = await Promise.all([
+        Ticket.countDocuments({ guildId, status: "open" }).catch(() => 0),
+        Ticket.countDocuments({ guildId, status: "closed" }).catch(() => 0),
+      ]);
+    }
+
+    const allChannels = [...(guild.channels?.cache?.values?.() ?? [])];
+    const categories = allChannels
+      .filter((c) => c.type === ChannelType.GuildCategory)
+      .map((c) => ({ id: c.id, name: c.name }));
+    const textChannels = allChannels
+      .filter((c) => c.isTextBased?.() && c.type !== ChannelType.GuildCategory)
+      .map((c) => ({ id: c.id, name: c.name, parentId: c.parentId ?? null }));
+    const roles = [...(guild.roles?.cache?.values?.() ?? [])]
+      .filter((r) => r.id !== guild.id && !r.managed)
+      .sort((a, b) => (b.position ?? 0) - (a.position ?? 0))
+      .map((r) => ({ id: r.id, name: r.name, color: r.hexColor ?? "#99aab5" }));
+
+    json(
+      res,
+      200,
+      {
+        guild: { id: guild.id, name: guild.name, icon: guild.iconURL?.({ size: 256 }) ?? null },
+        ticketConfig: cfg,
+        stats: { open, closed },
+        channels: { categories, text: textChannels },
+        roles,
+      },
+      { noStore: true }
+    );
+    return true;
+  }
+
+  if (sub === "config") {
+    if (req.method !== "PUT" && req.method !== "POST") {
+      json(res, 405, { error: "Method not allowed" });
+      return true;
+    }
+    if (!guild) {
+      json(res, 404, { error: "Guild not found" });
+      return true;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch (err) {
+      json(res, err?.statusCode || 400, { error: err?.message || "Invalid JSON" });
+      return true;
+    }
+
+    const { getTicketConfig, parseTicketMenuOptions, updateTicketConfig } = require("./tickets");
+    const patch = {};
+    if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
+    if (body.categoryId !== undefined) {
+      if (body.categoryId === null || body.categoryId === "") {
+        patch.categoryId = null;
+      } else {
+        const ch = guild.channels?.cache?.get(String(body.categoryId));
+        if (!ch || ch.type !== ChannelType.GuildCategory) {
+          json(res, 400, { error: "Invalid categoryId" });
+          return true;
+        }
+        patch.categoryId = ch.id;
+      }
+    }
+    if (body.logChannelId !== undefined) {
+      if (body.logChannelId === null || body.logChannelId === "") {
+        patch.logChannelId = null;
+      } else {
+        const ch = guild.channels?.cache?.get(String(body.logChannelId));
+        if (!ch?.isTextBased?.()) {
+          json(res, 400, { error: "Invalid logChannelId" });
+          return true;
+        }
+        patch.logChannelId = ch.id;
+      }
+    }
+    if (body.supportRoleId !== undefined) {
+      if (body.supportRoleId === null || body.supportRoleId === "") {
+        patch.supportRoleId = null;
+      } else {
+        const role = guild.roles?.cache?.get(String(body.supportRoleId));
+        if (!role || role.id === guild.id) {
+          json(res, 400, { error: "Invalid supportRoleId" });
+          return true;
+        }
+        patch.supportRoleId = role.id;
+      }
+    }
+    if (typeof body.welcomeMessage === "string" && body.welcomeMessage.trim()) {
+      patch.welcomeMessage = body.welcomeMessage.trim().slice(0, 1500);
+    }
+    if (typeof body.panelPlaceholder === "string" && body.panelPlaceholder.trim()) {
+      patch.panelPlaceholder = body.panelPlaceholder.trim().slice(0, 100);
+    }
+    if (body.categories !== undefined) {
+      patch.categories = parseTicketMenuOptions(body.categories);
+    }
+
+    const updated = Object.keys(patch).length
+      ? await updateTicketConfig(guildId, patch)
+      : await getTicketConfig(guildId);
+    if (!updated) {
+      json(res, 503, { error: "Database unavailable" });
+      return true;
+    }
+
+    json(res, 200, { ok: true, ticketConfig: updated }, { noStore: true });
+    return true;
+  }
+
+  if (sub === "panel") {
+    if (req.method !== "POST") {
+      json(res, 405, { error: "Method not allowed" });
+      return true;
+    }
+    if (!guild) {
+      json(res, 404, { error: "Guild not found" });
+      return true;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch (err) {
+      json(res, err?.statusCode || 400, { error: err?.message || "Invalid JSON" });
+      return true;
+    }
+
+    const channelId = String(body.channelId ?? "").trim();
+    const targetCh = channelId
+      ? (guild.channels?.cache?.get(channelId) ?? await guild.channels?.fetch?.(channelId).catch(() => null))
+      : null;
+    if (!targetCh?.isTextBased?.()) {
+      json(res, 400, { error: "Invalid text channelId" });
+      return true;
+    }
+
+    const { getTicketConfig, parseTicketMenuOptions, updateTicketConfig, buildTicketPanelPayload } = require("./tickets");
+    const { getLang } = require("./guild");
+    const lang = body.lang === "en" || body.lang === "es"
+      ? body.lang
+      : await getLang(guildId).catch(() => "es");
+
+    const parsedOptions = body.options !== undefined
+      ? parseTicketMenuOptions(body.options)
+      : (body.categories !== undefined ? parseTicketMenuOptions(body.categories) : null);
+
+    let effectiveOptions = parsedOptions;
+    if (effectiveOptions === null && body.useStoredCategories !== false) {
+      const stored = await getTicketConfig(guildId);
+      if (stored?.categories?.length && body.mode !== "button") {
+        effectiveOptions = stored.categories;
+      }
+    }
+
+    if (body.saveConfig !== false) {
+      const savePatch = { enabled: true };
+      if (Array.isArray(effectiveOptions) && effectiveOptions.length) {
+        savePatch.categories = effectiveOptions;
+      }
+      if (typeof body.placeholder === "string" && body.placeholder.trim()) {
+        savePatch.panelPlaceholder = body.placeholder.trim().slice(0, 100);
+      }
+      await updateTicketConfig(guildId, savePatch).catch(() => {});
+    }
+
+    const payload = buildTicketPanelPayload({
+      title: body.title ? String(body.title).slice(0, 100) : null,
+      description: body.description ? String(body.description).slice(0, 2000) : null,
+      category: body.category ? String(body.category).slice(0, 40) : "General",
+      buttonLabel: body.buttonLabel ? String(body.buttonLabel).slice(0, 80) : null,
+      placeholder: body.placeholder ? String(body.placeholder).slice(0, 100) : null,
+      options: effectiveOptions?.length ? effectiveOptions : null,
+      lang,
+    });
+
+    const editMessageId = body.messageId && /^\d{17,22}$/.test(String(body.messageId)) ? String(body.messageId) : null;
+    let sent = null;
+    if (editMessageId && targetCh.messages?.fetch) {
+      const existingMsg = await targetCh.messages.fetch(editMessageId).catch(() => null);
+      if (existingMsg?.editable) {
+        sent = await existingMsg.edit(payload).catch(() => null);
+      }
+    }
+    if (!sent) {
+      sent = await targetCh.send(payload);
+    }
+
+    json(res, 200, { ok: true, channelId: targetCh.id, messageId: sent?.id ?? null }, { noStore: true });
+    return true;
+  }
+
+  return false;
+}
+
 const routes = new Map([
   ["/api", handleRoot],
   ["/api/stats", handleStats],
@@ -571,7 +837,20 @@ async function handleRequest(req, res) {
     return res.end();
   }
 
-  if (req.method !== "GET") {
+  let urlObj;
+  try {
+    urlObj = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+  } catch {
+    urlObj = new URL("http://localhost/");
+  }
+  let pathname = urlObj.pathname.replace(/\/+$/, "") || "/api";
+  if (pathname === "/") pathname = "/api";
+
+  const isTicketRoute = pathname.startsWith("/api/tickets/");
+  if (!isTicketRoute && req.method !== "GET") {
+    return json(res, 405, { error: "Method not allowed" });
+  }
+  if (isTicketRoute && !["GET", "POST", "PUT"].includes(req.method)) {
     return json(res, 405, { error: "Method not allowed" });
   }
 
@@ -588,17 +867,18 @@ async function handleRequest(req, res) {
     return json(res, 429, { error: "Too many requests", retryAfter: 60 });
   }
 
-  let urlObj;
-  try {
-    urlObj = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
-  } catch {
-    urlObj = new URL("http://localhost/");
-  }
-  let pathname = urlObj.pathname.replace(/\/+$/, "") || "/api";
-  if (pathname === "/") pathname = "/api";
-
   if (!PUBLIC_BROWSER_ROUTES.has(pathname) && !isAuthorized(req)) {
     return json(res, 401, { error: "Unauthorized" });
+  }
+
+  if (isTicketRoute) {
+    try {
+      const handled = await handleTicketsRoute(req, res, pathname);
+      if (handled) return;
+    } catch (err) {
+      log?.error("Error en endpoint de tickets", { endpoint: pathname, err: err?.message ?? String(err) });
+      return json(res, 500, { error: "Internal server error" });
+    }
   }
 
   if (pathname === "/invite" || pathname === "/api/invite") {
@@ -612,7 +892,7 @@ async function handleRequest(req, res) {
   if (!handler) {
     return json(res, 404, {
       error: "Endpoint not found",
-      endpoints: [...routes.keys(), "/api/invite", "/api/oauth/callback"],
+      endpoints: [...routes.keys(), "/api/invite", "/api/oauth/callback", "/api/tickets/:guildId", "/api/tickets/:guildId/config", "/api/tickets/:guildId/panel"],
     });
   }
 

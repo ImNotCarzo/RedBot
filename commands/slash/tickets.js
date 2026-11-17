@@ -10,6 +10,7 @@ const {
   generateTicketTranscript,
   getTicketConfig,
   openTicket,
+  parseTicketMenuOptions,
   sendTicketSetupPanel,
   updateTicketConfig,
 } = require("../../src/tickets");
@@ -69,17 +70,30 @@ const data = {
         .addString({ name: "titulo", description: "Título del panel", required: false })
         .addString({ name: "descripcion", description: "Descripción del panel", required: false })
         .addString({ name: "categoria", description: "Etiqueta o motivo del botón (ej: Soporte)", required: false })
-        .addString({ name: "boton", description: "Texto del botón de apertura", required: false }),
+        .addString({ name: "boton", description: "Texto del botón o placeholder del menú", required: false })
+        .addString({ name: "opciones", description: "Opciones del menú separadas por ; (emoji|Nombre|Subtexto|Detalle)", required: false }),
       plugins: [...ADMIN_PLUGINS, Plugins.hasBotPerms("ManageChannels")],
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const ch = ctx.get("canal") ?? ctx.channel;
         if (!ch?.isTextBased?.()) return ctx.ephemeral("Canal inválido");
+        const opcionesRaw = ctx.get("opciones");
+        const parsedOptions = parseTicketMenuOptions(opcionesRaw);
+        const buttonOrPlaceholder = ctx.get("boton");
+        if (parsedOptions.length) {
+          await updateTicketConfig(ctx.guild.id, {
+            enabled: true,
+            categories: parsedOptions,
+            ...(buttonOrPlaceholder ? { panelPlaceholder: String(buttonOrPlaceholder).slice(0, 100) } : {}),
+          });
+        }
         const payload = buildTicketPanelPayload({
           title: ctx.get("titulo"),
           description: ctx.get("descripcion"),
           category: ctx.get("categoria") || "General",
-          buttonLabel: ctx.get("boton"),
+          buttonLabel: parsedOptions.length ? null : buttonOrPlaceholder,
+          placeholder: parsedOptions.length ? buttonOrPlaceholder : null,
+          options: parsedOptions.length ? parsedOptions : null,
           lang: getCurrentLang(),
         });
         await ch.send(payload);
