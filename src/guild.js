@@ -71,7 +71,11 @@ async function getLang(guildId) {
   if (cached) return cached;
   if (GuildConfig.db?.readyState !== 1) return "es";
   try {
-    const doc = await GuildConfig.findOne({ guildId }).select("lang langSource").lean();
+    const doc = await withTimeout(
+      GuildConfig.findOne({ guildId }).select("lang langSource").lean(),
+      PREFIX_QUERY_TIMEOUT_MS,
+      "Lectura de idioma de servidor"
+    );
     const lang = doc?.lang === "en" ? "en" : "es";
     if (doc?.lang === "es" || doc?.lang === "en") {
       langCache.set(guildId, lang);
@@ -174,7 +178,11 @@ async function getUserLang(userId) {
   if (cached) return cached;
   if (UserConfig.db?.readyState !== 1) return null;
   try {
-    const doc = await UserConfig.findOne({ userId }).select("lang").lean();
+    const doc = await withTimeout(
+      UserConfig.findOne({ userId }).select("lang").lean(),
+      PREFIX_QUERY_TIMEOUT_MS,
+      "Lectura de idioma de usuario"
+    );
     if (doc?.lang === "es" || doc?.lang === "en") {
       userLangCache.set(userId, doc.lang);
       return doc.lang;
@@ -287,7 +295,7 @@ async function getPrefix(guildId) {
       PREFIX_QUERY_TIMEOUT_MS,
       "Lectura de prefijo de servidor"
     );
-    const prefix = doc?.prefix ?? DEFAULT_PREFIX;
+    const prefix = doc?.prefix || DEFAULT_PREFIX;
     prefixCache.set(guildId, prefix);
     return prefix;
   } catch {

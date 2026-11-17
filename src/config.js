@@ -1,4 +1,4 @@
-const { ApplicationIntegrationType, GatewayIntentBits, InteractionContextType, Partials } = require("discord.js");
+const { ActivityType, ApplicationIntegrationType, GatewayIntentBits, InteractionContextType, Partials } = require("discord.js");
 
 const REQUIRED_ENV = ["TOKEN", "MONGO", "CLIENT_ID"];
 
@@ -45,6 +45,10 @@ const botOptions = {
     GatewayIntentBits.GuildInvites,
   ],
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
+  presence: {
+    status: "dnd",
+    activities: [{ name: "/help", type: ActivityType.Watching }],
+  },
   guildOnly: false,
   replyOnPrefix: true,
   bindProcessHandlers: false,

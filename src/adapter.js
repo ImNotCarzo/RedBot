@@ -927,6 +927,8 @@ function wrapSingleCommand(command, file, log) {
         if (err && typeof err === "object" && !err.ctx) err.ctx = ctx;
         const { Errors } = require("gralonium");
         const isExpectedFrameworkError =
+          (Errors?.MissingPermission && err instanceof Errors.MissingPermission) ||
+          (Errors?.MissingBotPermission && err instanceof Errors.MissingBotPermission) ||
           (Errors?.CommandMissingPermissions && err instanceof Errors.CommandMissingPermissions) ||
           (Errors?.CommandMissingBotPermissions && err instanceof Errors.CommandMissingBotPermissions) ||
           (Errors?.CommandInCooldown && err instanceof Errors.CommandInCooldown) ||

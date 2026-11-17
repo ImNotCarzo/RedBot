@@ -208,10 +208,11 @@ function createBot() {
 
 async function initializeBot(bot, config, log) {
   const { wrapPrefixedCommands } = require("./adapter");
-  await bot.load("commands");
+  await bot.load(path.join(__dirname, "../commands"));
   wrapPrefixedCommands(log);
   loadAndRegisterEvents(bot, log);
   await bot.login(config.TOKEN);
+  await require("../events/ready").ensureReadyRan?.(bot);
 }
 
 function registerProcessErrorHandlers(log = new Logger("PROCESS")) {

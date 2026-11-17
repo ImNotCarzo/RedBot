@@ -18,6 +18,7 @@ const READY_RETRY_MAX_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_MAX_DE
 const READY_API_TIMEOUT_MS = parsePositiveInt(process.env.READY_API_TIMEOUT_MS, 45000);
 
 let presenceInterval = null;
+let didRunReady = false;
 
 async function restoreTempBans(client) {
   try {
@@ -83,8 +84,9 @@ function startPresenceRotation(client) {
   ];
 
   let i = 0;
-  presenceInterval = setInterval(() => {
+  const applyPresence = () => {
     try {
+      if (!client?.user) return;
       const activities = getActivities();
       client.user.setPresence({
         activities: [{ name: activities[i], type: ActivityType.Watching }],
@@ -96,15 +98,29 @@ function startPresenceRotation(client) {
       if (presenceInterval) clearInterval(presenceInterval);
       presenceInterval = null;
     }
-  }, 10000);
+  };
+
+  applyPresence();
+  presenceInterval = setInterval(applyPresence, 10000);
+  presenceInterval.unref?.();
 }
 
-const event = {
+const READY_RESTORE_TIMEOUT_MS = parsePositiveInt(process.env.READY_RESTORE_TIMEOUT_MS, 15000);
+
+const runRestoreStep = (label, fn) =>
+  withTimeout(Promise.resolve().then(fn), READY_RESTORE_TIMEOUT_MS, label).catch((err) => {
+    log.warn(`Paso de arranque omitido (${label})`, { err: err?.message ?? String(err) });
+  });
+
+const readyEvent = {
   name: "clientReady",
   once: true,
   async code(bot, readyBot) {
+    if (didRunReady) return;
+    didRunReady = true;
     const client = readyBot ?? bot;
     if (!client?.user) {
+      didRunReady = false;
       log.warn("clientReady sin usuario inicializado");
       return;
     }
@@ -113,17 +129,23 @@ const event = {
       guilds: client.guilds?.cache?.size ?? 0,
     });
 
-    await restoreTempBans(client);
-    await restoreReminders(client);
-    await restoreTempRoles(client);
-    await restoreTempChannels(client);
-    await hydrateAiSessions();
-    await snapshotAllInvites(client).catch(() => {});
+    startPresenceRotation(client);
     startChannelsWorkers(client);
     startAutomationWorkers(client);
     startSocialFeedWorker(client);
     startCommunityWorkers(client);
-    startPresenceRotation(client);
+
+    await Promise.allSettled([
+      runRestoreStep("tempbans", () => restoreTempBans(client)),
+      runRestoreStep("reminders", () => restoreReminders(client)),
+      runRestoreStep("temproles", () => restoreTempRoles(client)),
+      runRestoreStep("tempchannels", () => restoreTempChannels(client)),
+      runRestoreStep("aisessions", () => hydrateAiSessions()),
+    ]);
+
+    snapshotAllInvites(client).catch((err) => {
+      log.warn("Error al indexar invitaciones en segundo plano", { err: err?.message ?? String(err) });
+    });
 
     try {
       await syncSlashAndContexts(client);
@@ -133,4 +155,12 @@ const event = {
   },
 };
 
-module.exports = { data: event };
+const shardResumeEvent = {
+  name: "shardResume",
+  once: false,
+  async code(bot) {
+    if (bot?.user) startPresenceRotation(bot);
+  },
+};
+
+module.exports = { data: [readyEvent, shardResumeEvent], ensureReadyRan: (bot) => !didRunReady && bot?.isReady?.() ? readyEvent.code(bot, bot) : null };
