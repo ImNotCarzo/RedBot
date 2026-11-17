@@ -13,12 +13,24 @@ let log = null;
 
 const rateStore = new Map();
 const oauthStates = new Map();
+const dashboardSessions = new Map();
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 30;
 const MAX_RATE_ENTRIES = 5000;
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 const MAX_OAUTH_STATES = 2000;
-const PUBLIC_BROWSER_ROUTES = new Set(["/invite", "/api/invite", "/oauth/callback", "/api/oauth/callback"]);
+const DASHBOARD_SESSION_TTL_MS = 24 * 60 * 60_000;
+const MAX_DASHBOARD_SESSIONS = 2000;
+const PUBLIC_BROWSER_ROUTES = new Set([
+  "/invite",
+  "/api/invite",
+  "/oauth/callback",
+  "/api/oauth/callback",
+  "/auth/login",
+  "/api/auth/login",
+  "/auth/logout",
+  "/api/auth/logout",
+]);
 let ratePruneTimer = null;
 
 function checkRate(ip) {
@@ -169,7 +181,11 @@ function handleRoot() {
       { path: "/api/bot", description: "Perfil e identidad del bot" },
       { path: "/api/health", description: "Estado de salud del sistema" },
       { path: "/api/invite", description: "Redirección OAuth2 con detección automática de idioma" },
-      { path: "/api/oauth/callback", description: "Callback OAuth2 de Discord para detectar idioma inicial" },
+      { path: "/api/oauth/callback", description: "Callback OAuth2 de Discord para detectar idioma inicial o iniciar sesión en el panel" },
+      { path: "/api/auth/login", description: "Inicio de sesión OAuth2 para el panel web" },
+      { path: "/api/auth/me", description: "Perfil autenticado y servidores administrables del panel" },
+      { path: "/api/auth/logout", description: "Cierra la sesión del panel web" },
+      { path: "/api/dashboard/guilds", description: "Lista de servidores administrables para el panel web" },
       { path: "/api/tickets/:guildId", description: "Configuración, canales, roles y métricas de tickets" },
       { path: "/api/tickets/:guildId/config", description: "Actualiza configuración y categorías de tickets" },
       { path: "/api/tickets/:guildId/panel", description: "Publica o edita un panel o menú de tickets en Discord" },
@@ -346,11 +362,12 @@ function handleHealth() {
   };
 }
 
-function issueOAuthState() {
+function issueOAuthState(meta = null) {
   const now = Date.now();
   if (oauthStates.size >= MAX_OAUTH_STATES) {
-    for (const [key, exp] of oauthStates) {
-      if (exp <= now) oauthStates.delete(key);
+    for (const [key, entry] of oauthStates) {
+      const exp = typeof entry === "number" ? entry : entry?.exp;
+      if (!exp || exp <= now) oauthStates.delete(key);
     }
     while (oauthStates.size >= MAX_OAUTH_STATES) {
       const oldest = oauthStates.keys().next().value;
@@ -358,17 +375,176 @@ function issueOAuthState() {
       else break;
     }
   }
-  const state = crypto.randomBytes(24).toString("hex");
-  oauthStates.set(state, now + OAUTH_STATE_TTL_MS);
+  const raw = crypto.randomBytes(24).toString("hex");
+  const state = meta?.mode === "dashboard" ? `dash_${raw}` : raw;
+  oauthStates.set(state, {
+    exp: now + OAUTH_STATE_TTL_MS,
+    ...(meta && typeof meta === "object" ? meta : {}),
+  });
   return state;
 }
 
-function consumeOAuthState(state) {
-  if (!state || typeof state !== "string") return false;
-  const exp = oauthStates.get(state);
-  if (!exp) return false;
+function consumeOAuthStateEntry(state) {
+  if (!state || typeof state !== "string") return null;
+  const rawEntry = oauthStates.get(state);
+  if (!rawEntry) return null;
   oauthStates.delete(state);
-  return exp > Date.now();
+  const entry = typeof rawEntry === "number" ? { exp: rawEntry } : rawEntry;
+  if (!entry || !entry.exp || entry.exp <= Date.now()) return null;
+  return entry;
+}
+
+function consumeOAuthState(state) {
+  return Boolean(consumeOAuthStateEntry(state));
+}
+
+function getSessionSecret() {
+  return (
+    apiConfig?.SESSION_SECRET ||
+    process.env.SESSION_SECRET ||
+    apiConfig?.CLIENT_SECRET ||
+    process.env.CLIENT_SECRET ||
+    apiConfig?.API_KEY ||
+    process.env.API_KEY ||
+    apiConfig?.TOKEN ||
+    process.env.TOKEN ||
+    "redbot-local-session-secret"
+  );
+}
+
+function hasManageGuildBits(permissionsStr, isOwner = false) {
+  if (isOwner === true) return true;
+  try {
+    const perms = BigInt(permissionsStr || "0");
+    const ADMINISTRATOR = 1n << 3n;
+    const MANAGE_GUILD = 1n << 5n;
+    return (perms & (ADMINISTRATOR | MANAGE_GUILD)) !== 0n;
+  } catch {
+    return false;
+  }
+}
+
+function createDashboardSession({ user, guilds }) {
+  const now = Date.now();
+  const manageableGuilds = (Array.isArray(guilds) ? guilds : []).filter((g) =>
+    g?.id && hasManageGuildBits(g.permissions, g.owner)
+  );
+  if (dashboardSessions.size >= MAX_DASHBOARD_SESSIONS) {
+    for (const [k, s] of dashboardSessions) {
+      if (!s || s.exp <= now) dashboardSessions.delete(k);
+    }
+    while (dashboardSessions.size >= MAX_DASHBOARD_SESSIONS) {
+      const oldest = dashboardSessions.keys().next().value;
+      if (oldest !== undefined) dashboardSessions.delete(oldest);
+      else break;
+    }
+  }
+  const sid = crypto.randomBytes(16).toString("hex");
+  const exp = now + DASHBOARD_SESSION_TTL_MS;
+  dashboardSessions.set(sid, { user, guilds: manageableGuilds, exp });
+
+  const payload = {
+    sid,
+    uid: String(user.id),
+    username: String(user.username || ""),
+    globalName: user.globalName ? String(user.globalName) : null,
+    avatar: user.avatar || null,
+    adminGuildIds: manageableGuilds.map((g) => String(g.id)).slice(0, 200),
+    exp,
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const sig = crypto
+    .createHmac("sha256", getSessionSecret())
+    .update(payloadB64)
+    .digest("base64url");
+  return `${payloadB64}.${sig}`;
+}
+
+function verifyDashboardSessionToken(rawToken) {
+  if (!rawToken || typeof rawToken !== "string") return null;
+  const dotIdx = rawToken.indexOf(".");
+  if (dotIdx <= 0) return null;
+  const payloadB64 = rawToken.slice(0, dotIdx);
+  const sig = rawToken.slice(dotIdx + 1);
+  if (!payloadB64 || !sig) return null;
+
+  const expectedSig = crypto
+    .createHmac("sha256", getSessionSecret())
+    .update(payloadB64)
+    .digest("base64url");
+  if (!safeEqualString(sig, expectedSig)) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+    if (!payload || typeof payload !== "object" || !payload.uid || !payload.exp) return null;
+    if (Number(payload.exp) <= Date.now()) return null;
+    const cachedRaw = payload.sid ? dashboardSessions.get(payload.sid) : null;
+    const cached = cachedRaw && cachedRaw.exp > Date.now() ? cachedRaw : null;
+    return { ...payload, cached };
+  } catch {
+    return null;
+  }
+}
+
+function getRequestSession(req) {
+  const auth = req.headers?.authorization ?? "";
+  const spaceIdx = auth.indexOf(" ");
+  if (spaceIdx > 0) {
+    const scheme = auth.slice(0, spaceIdx);
+    const token = auth.slice(spaceIdx + 1).trim();
+    if (scheme.toLowerCase() === "bearer" && token) {
+      const fromHeader = verifyDashboardSessionToken(token);
+      if (fromHeader) return fromHeader;
+    }
+  }
+  const cookieToken = parseCookies(req).redbot_session;
+  if (cookieToken) {
+    return verifyDashboardSessionToken(cookieToken);
+  }
+  return null;
+}
+
+function canManageGuild(session, guildId, guild = null) {
+  if (!session) return false;
+  const gid = String(guildId);
+  if (Array.isArray(session.adminGuildIds) && session.adminGuildIds.includes(gid)) return true;
+  if (guild && String(guild.ownerId) === String(session.uid)) return true;
+  const member = guild?.members?.cache?.get?.(String(session.uid));
+  if (member?.permissions?.has?.(["ManageGuild"]) || member?.permissions?.has?.(["Administrator"])) {
+    return true;
+  }
+  return false;
+}
+
+function resolveSafeReturnUrl(rawUrl) {
+  const fallback = apiConfig?.DASHBOARD_URL || process.env.DASHBOARD_URL || "https://redbot.me/tickets";
+  if (!rawUrl || typeof rawUrl !== "string") return fallback;
+  try {
+    const parsed = new URL(rawUrl);
+    const isProdOrigin = parsed.protocol === "https:" && (parsed.hostname === "redbot.me" || parsed.hostname === "www.redbot.me");
+    const isLocalOrigin = parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1");
+    if (!isProdOrigin && !isLocalOrigin) return fallback;
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return fallback;
+  }
+}
+
+function resolveEffectiveRedirectUri(urlObj) {
+  const candidate = urlObj.searchParams.get("redirect_uri");
+  if (candidate && typeof candidate === "string") {
+    try {
+      const parsed = new URL(candidate);
+      if (
+        (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+        (parsed.pathname.endsWith("/api/oauth/callback") || parsed.pathname.endsWith("/oauth/callback"))
+      ) {
+        return parsed.toString();
+      }
+    } catch {}
+  }
+  return getOAuthSettings().redirectUri;
 }
 
 function isSecureRequest(req, redirectUri) {
@@ -449,6 +625,180 @@ async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri 
   };
 }
 
+async function exchangeDiscordDashboardOAuth({ code, clientId, clientSecret, redirectUri }) {
+  const tokenRes = await fetch("https://discord.com/api/v10/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+    }).toString(),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!tokenRes.ok) {
+    throw new Error(`Discord token exchange failed (${tokenRes.status})`);
+  }
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData?.access_token;
+  if (!accessToken) {
+    throw new Error("Discord token exchange missing access_token");
+  }
+
+  const [userRes, guildsRes] = await Promise.all([
+    fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    }),
+    fetch("https://discord.com/api/v10/users/@me/guilds", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10_000),
+    }),
+  ]);
+
+  if (!userRes.ok) {
+    throw new Error(`Discord user profile fetch failed (${userRes.status})`);
+  }
+  if (!guildsRes.ok) {
+    throw new Error(`Discord user guilds fetch failed (${guildsRes.status})`);
+  }
+
+  const [userData, guildsData] = await Promise.all([userRes.json(), guildsRes.json()]);
+  if (!userData?.id) {
+    throw new Error("Discord user profile missing id");
+  }
+
+  return {
+    user: {
+      id: String(userData.id),
+      username: String(userData.username || ""),
+      globalName: userData.global_name ? String(userData.global_name) : (userData.globalName ? String(userData.globalName) : null),
+      avatar: userData.avatar ? String(userData.avatar) : null,
+    },
+    guilds: Array.isArray(guildsData) ? guildsData : [],
+  };
+}
+
+function handleAuthLoginRedirect(req, res, urlObj) {
+  const { clientId, clientSecret } = getOAuthSettings();
+  if (!clientId || !clientSecret) {
+    return sendHtml(
+      res,
+      503,
+      "RedBot Dashboard",
+      "OAuth2 no configurado",
+      "Falta configurar CLIENT_ID o CLIENT_SECRET en el servidor del bot."
+    );
+  }
+
+  const returnTo = resolveSafeReturnUrl(urlObj.searchParams.get("return_to"));
+  const redirectUri = resolveEffectiveRedirectUri(urlObj);
+  const state = issueOAuthState({ mode: "dashboard", returnTo, redirectUri });
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: "code",
+    redirect_uri: redirectUri,
+    scope: "identify guilds",
+    state,
+  });
+
+  const secureAttr = isSecureRequest(req, redirectUri) ? "; Secure" : "";
+  res.writeHead(302, {
+    Location: `https://discord.com/oauth2/authorize?${params.toString()}`,
+    "Cache-Control": "no-store",
+    "Set-Cookie": `redbot_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/; Max-Age=600${secureAttr}`,
+  });
+  res.end();
+}
+
+function handleDashboardGuilds(req, res) {
+  const session = getRequestSession(req);
+  if (!session) {
+    return json(res, 401, { error: "Unauthorized" }, { noStore: true });
+  }
+
+  const byId = new Map();
+  const botGuilds = botClient?.guilds?.cache;
+
+  for (const g of session.cached?.guilds ?? []) {
+    if (!g?.id) continue;
+    const id = String(g.id);
+    const botGuild = botGuilds?.get?.(id) ?? null;
+    byId.set(id, {
+      id,
+      name: botGuild?.name ?? String(g.name || id),
+      icon: botGuild?.iconURL?.({ size: 128 }) ?? (g.icon ? `https://cdn.discordapp.com/icons/${id}/${g.icon}.png?size=128` : null),
+      botPresent: Boolean(botGuild),
+      memberCount: botGuild?.memberCount ?? null,
+    });
+  }
+
+  if (botGuilds) {
+    const adminSet = new Set((session.adminGuildIds || []).map(String));
+    for (const bg of botGuilds.values()) {
+      const id = String(bg.id);
+      if (byId.has(id)) {
+        const existing = byId.get(id);
+        existing.botPresent = true;
+        existing.name = bg.name ?? existing.name;
+        existing.icon = bg.iconURL?.({ size: 128 }) ?? existing.icon;
+        existing.memberCount = bg.memberCount ?? existing.memberCount;
+        continue;
+      }
+      const member = bg.members?.cache?.get?.(String(session.uid));
+      const isAllowed =
+        adminSet.has(id) ||
+        String(bg.ownerId) === String(session.uid) ||
+        Boolean(member?.permissions?.has?.(["ManageGuild"]) || member?.permissions?.has?.(["Administrator"]));
+      if (isAllowed) {
+        byId.set(id, {
+          id,
+          name: bg.name ?? id,
+          icon: bg.iconURL?.({ size: 128 }) ?? null,
+          botPresent: true,
+          memberCount: bg.memberCount ?? null,
+        });
+      }
+    }
+  }
+
+  const guilds = [...byId.values()].sort((a, b) => {
+    if (a.botPresent !== b.botPresent) return a.botPresent ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name));
+  });
+
+  return json(
+    res,
+    200,
+    {
+      authenticated: true,
+      user: {
+        id: session.uid,
+        username: session.username,
+        globalName: session.globalName,
+        avatar: session.avatar,
+      },
+      guilds,
+    },
+    { noStore: true }
+  );
+}
+
+function handleAuthLogout(req, res) {
+  const session = getRequestSession(req);
+  if (session?.sid) {
+    dashboardSessions.delete(session.sid);
+  }
+  const { redirectUri } = getOAuthSettings();
+  const secureAttr = isSecureRequest(req, redirectUri) ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `redbot_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureAttr}`);
+  return json(res, 200, { ok: true }, { noStore: true });
+}
+
 async function handleOAuthCallback(req, res, urlObj) {
   const { clientId, clientSecret, redirectUri, successUrl } = getOAuthSettings();
   const secureAttr = isSecureRequest(req, redirectUri) ? "; Secure" : "";
@@ -491,22 +841,47 @@ async function handleOAuthCallback(req, res, urlObj) {
 
   const stateParam = urlObj.searchParams.get("state") || "";
   const cookieState = parseCookies(req).redbot_oauth_state || "";
+  const isDashboardFlow = stateParam.startsWith("dash_");
   const requireState = apiConfig?.OAUTH_REQUIRE_STATE === true || process.env.OAUTH_REQUIRE_STATE === "true";
-  if (requireState || stateParam || cookieState) {
+
+  let stateEntry = null;
+  if (isDashboardFlow || requireState || stateParam || cookieState) {
     const cookieMatches = !cookieState || safeEqualString(stateParam, cookieState);
-    if (!cookieMatches || !consumeOAuthState(stateParam)) {
+    stateEntry = cookieMatches ? consumeOAuthStateEntry(stateParam) : null;
+    if (!stateEntry || (isDashboardFlow && stateEntry.mode !== "dashboard")) {
       return sendHtml(
         res,
         403,
         "RedBot OAuth2",
         "Estado de seguridad inválido",
-        "La sesión de invitación expiró o no es válida. Vuelve a abrir redbot.me/invite.",
+        isDashboardFlow
+          ? "La sesión de inicio de sesión expiró o no es válida. Vuelve al panel e inténtalo de nuevo."
+          : "La sesión de invitación expiró o no es válida. Vuelve a abrir redbot.me/invite.",
         { "Set-Cookie": clearCookie }
       );
     }
   }
 
   try {
+    if (isDashboardFlow) {
+      const { user, guilds } = await exchangeDiscordDashboardOAuth({
+        code,
+        clientId,
+        clientSecret,
+        redirectUri: stateEntry.redirectUri || redirectUri,
+      });
+      const token = createDashboardSession({ user, guilds });
+      const returnUrl = resolveSafeReturnUrl(stateEntry.returnTo);
+      const location = `${returnUrl.split("#")[0]}#session=${encodeURIComponent(token)}`;
+      const sessionCookie = `redbot_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${secureAttr}`;
+      res.writeHead(302, {
+        Location: location,
+        "Cache-Control": "no-store",
+        "Set-Cookie": [clearCookie, sessionCookie],
+      });
+      return res.end();
+    }
+
     const { userId, locale, tokenGuildId } = await exchangeDiscordOAuth({
       code,
       clientId,
@@ -608,6 +983,21 @@ async function handleTicketsRoute(req, res, pathname) {
   const sub = match[2] || "";
   const guild = botClient?.guilds?.cache?.get(guildId) ?? null;
 
+  const session = getRequestSession(req);
+  const hasApiKey = Boolean(apiConfig?.API_KEY) && isAuthorized(req);
+  if (session) {
+    if (!canManageGuild(session, guildId, guild)) {
+      json(res, 403, { error: "No tienes permisos de administración (ManageGuild) en este servidor." });
+      return true;
+    }
+  } else if (!hasApiKey) {
+    const requireAuth = Boolean(apiConfig?.API_KEY || apiConfig?.CLIENT_SECRET || process.env.CLIENT_SECRET);
+    if (requireAuth) {
+      json(res, 401, { error: "Unauthorized" });
+      return true;
+    }
+  }
+
   if (!sub) {
     if (req.method !== "GET") {
       json(res, 405, { error: "Method not allowed" });
@@ -641,6 +1031,15 @@ async function handleTicketsRoute(req, res, pathname) {
       .filter((r) => r.id !== guild.id && !r.managed)
       .sort((a, b) => (b.position ?? 0) - (a.position ?? 0))
       .map((r) => ({ id: r.id, name: r.name, color: r.hexColor ?? "#99aab5" }));
+    const emojis = [...(guild.emojis?.cache?.values?.() ?? [])]
+      .slice(0, 100)
+      .map((e) => ({
+        id: e.id,
+        name: e.name,
+        animated: Boolean(e.animated),
+        identifier: `<${e.animated ? "a" : ""}:${e.name}:${e.id}>`,
+        url: e.imageURL?.({ size: 64 }) ?? `https://cdn.discordapp.com/emojis/${e.id}.${e.animated ? "gif" : "png"}?size=64`,
+      }));
 
     json(
       res,
@@ -651,6 +1050,7 @@ async function handleTicketsRoute(req, res, pathname) {
         stats: { open, closed },
         channels: { categories, text: textChannels },
         roles,
+        emojis,
       },
       { noStore: true }
     );
@@ -847,10 +1247,16 @@ async function handleRequest(req, res) {
   if (pathname === "/") pathname = "/api";
 
   const isTicketRoute = pathname.startsWith("/api/tickets/");
-  if (!isTicketRoute && req.method !== "GET") {
+  const isLogoutRoute = pathname === "/auth/logout" || pathname === "/api/auth/logout";
+  const isSessionRoute = isTicketRoute || pathname === "/api/auth/me" || pathname === "/api/dashboard/guilds";
+
+  if (isTicketRoute && !["GET", "POST", "PUT"].includes(req.method)) {
     return json(res, 405, { error: "Method not allowed" });
   }
-  if (isTicketRoute && !["GET", "POST", "PUT"].includes(req.method)) {
+  if (isLogoutRoute && !["GET", "POST"].includes(req.method)) {
+    return json(res, 405, { error: "Method not allowed" });
+  }
+  if (!isTicketRoute && !isLogoutRoute && req.method !== "GET") {
     return json(res, 405, { error: "Method not allowed" });
   }
 
@@ -867,7 +1273,8 @@ async function handleRequest(req, res) {
     return json(res, 429, { error: "Too many requests", retryAfter: 60 });
   }
 
-  if (!PUBLIC_BROWSER_ROUTES.has(pathname) && !isAuthorized(req)) {
+  const hasSession = isSessionRoute ? Boolean(getRequestSession(req)) : false;
+  if (!PUBLIC_BROWSER_ROUTES.has(pathname) && !hasSession && !isAuthorized(req)) {
     return json(res, 401, { error: "Unauthorized" });
   }
 
@@ -884,6 +1291,15 @@ async function handleRequest(req, res) {
   if (pathname === "/invite" || pathname === "/api/invite") {
     return handleInviteRedirect(req, res, urlObj);
   }
+  if (pathname === "/auth/login" || pathname === "/api/auth/login") {
+    return handleAuthLoginRedirect(req, res, urlObj);
+  }
+  if (pathname === "/api/auth/me" || pathname === "/api/dashboard/guilds") {
+    return handleDashboardGuilds(req, res);
+  }
+  if (isLogoutRoute) {
+    return handleAuthLogout(req, res);
+  }
   if (pathname === "/oauth/callback" || pathname === "/api/oauth/callback") {
     return handleOAuthCallback(req, res, urlObj);
   }
@@ -892,7 +1308,18 @@ async function handleRequest(req, res) {
   if (!handler) {
     return json(res, 404, {
       error: "Endpoint not found",
-      endpoints: [...routes.keys(), "/api/invite", "/api/oauth/callback", "/api/tickets/:guildId", "/api/tickets/:guildId/config", "/api/tickets/:guildId/panel"],
+      endpoints: [
+        ...routes.keys(),
+        "/api/invite",
+        "/api/oauth/callback",
+        "/api/auth/login",
+        "/api/auth/me",
+        "/api/auth/logout",
+        "/api/dashboard/guilds",
+        "/api/tickets/:guildId",
+        "/api/tickets/:guildId/config",
+        "/api/tickets/:guildId/panel",
+      ],
     });
   }
 
@@ -946,8 +1373,12 @@ function startApi(client, config, logger) {
         for (const [ip, entry] of rateStore) {
           if (now - entry.start > RATE_WINDOW_MS * 2) rateStore.delete(ip);
         }
-        for (const [state, exp] of oauthStates) {
-          if (exp <= now) oauthStates.delete(state);
+        for (const [state, entry] of oauthStates) {
+          const exp = typeof entry === "number" ? entry : entry?.exp;
+          if (!exp || exp <= now) oauthStates.delete(state);
+        }
+        for (const [sid, session] of dashboardSessions) {
+          if (!session || session.exp <= now) dashboardSessions.delete(sid);
         }
       }, 5 * 60_000);
       ratePruneTimer.unref();
@@ -968,6 +1399,7 @@ function stopApi() {
     }
     rateStore.clear();
     oauthStates.clear();
+    dashboardSessions.clear();
 
     if (!server) return resolve();
 

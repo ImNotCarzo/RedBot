@@ -28,6 +28,8 @@ function validateEnv() {
     OAUTH_SUCCESS_URL: process.env.OAUTH_SUCCESS_URL || "",
     OAUTH_REQUIRE_STATE: process.env.OAUTH_REQUIRE_STATE === "true",
     INVITE_PERMISSIONS: process.env.INVITE_PERMISSIONS || "8",
+    SESSION_SECRET: process.env.SESSION_SECRET || "",
+    DASHBOARD_URL: process.env.DASHBOARD_URL || "https://redbot.me/tickets",
   };
 }
 
