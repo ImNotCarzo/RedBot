@@ -44,11 +44,17 @@ async function downloadBackupImage(url) {
   }
 }
 
+const recordingInFlight = new Set();
+
 function extractImageBuffer(raw) {
   if (!raw) return null;
   if (Buffer.isBuffer(raw)) return raw;
   if (raw instanceof Uint8Array) return Buffer.from(raw);
-  if (raw.buffer) return Buffer.from(raw.buffer);
+  if (typeof raw.value === "function") return Buffer.from(raw.value(true));
+  if (raw.buffer) {
+    const len = typeof raw.position === "number" ? raw.position : raw.buffer.length;
+    return Buffer.from(raw.buffer.subarray(0, len));
+  }
   return null;
 }
 
@@ -57,6 +63,10 @@ async function recordImageIfNew(targetType, targetId, url) {
 
   const hash = extractImageHash(url);
   if (!hash) return false;
+
+  const lockKey = `${targetType}:${targetId}:${hash}`;
+  if (recordingInFlight.has(lockKey)) return false;
+  recordingInFlight.add(lockKey);
 
   try {
     const latest = await ImageHistory.findOne({ targetType, targetId })
@@ -87,6 +97,8 @@ async function recordImageIfNew(targetType, targetId, url) {
     return true;
   } catch {
     return false;
+  } finally {
+    recordingInFlight.delete(lockKey);
   }
 }
 
@@ -115,6 +127,7 @@ async function replyWithImageHistory(interaction, { targetType, targetId, title,
     items,
     perPage: 1,
     ownerId: interaction.user?.id,
+    isEphemeral: true,
     thirdPartyMode: "ephemeral-view",
     thirdPartyMessage: "No es tu comando",
     wrap: false,
@@ -156,12 +169,7 @@ async function replyWithImageHistory(interaction, { targetType, targetId, title,
   });
 
   const payload = paginator.toPayload({ ephemeral: true });
-  let replyResult = null;
-  try {
-    replyResult = await interaction.reply({ ...payload, withResponse: true });
-  } catch {
-    replyResult = await interaction.reply(payload).catch(() => null);
-  }
+  const replyResult = await interaction.reply({ ...payload, withResponse: true }).catch(() => null);
 
   const msg = replyResult?.resource?.message ?? replyResult;
   if (items.length > 1 && msg && typeof msg.createMessageComponentCollector === "function") {
@@ -171,8 +179,6 @@ async function replyWithImageHistory(interaction, { targetType, targetId, title,
 }
 
 module.exports = {
-  extractImageHash,
   recordImageIfNew,
-  getImageHistory,
   replyWithImageHistory,
 };

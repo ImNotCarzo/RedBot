@@ -9,7 +9,7 @@ const guildSchema = new Schema({
   langSource:     { type: String, enum: ["auto", "oauth", "manual"], default: "auto" },
   aiContext:      { type: String, default: "", maxlength: 1000 },
   warnThreshold:  { type: Number, default: 0, min: 0, max: 50 },
-  warnMuteMs:     { type: Number, default: 10 * 60 * 1000 },
+  warnMuteMs:     { type: Number, default: 10 * 60 * 1000, min: 60_000, max: 28 * 24 * 60 * 60 * 1000 },
   dramaChannelId: { type: String, default: null },
   voiceHubId:     { type: String, default: null },
   voiceHubCategoryId: { type: String, default: null },
@@ -55,7 +55,7 @@ const guildSchema = new Schema({
     antiMentions:    { type: Boolean, default: false },
     blockedWords:    { type: [String], default: [] },
     action:          { type: String, enum: ["delete", "warn", "mute", "kick"], default: "warn" },
-    muteMs:          { type: Number, default: 5 * 60 * 1000 },
+    muteMs:          { type: Number, default: 5 * 60 * 1000, min: 60_000, max: 28 * 24 * 60 * 60 * 1000 },
     customMessage:   { type: String, default: "", maxlength: 400 },
     ignoredChannels: { type: [String], default: [] },
     ignoredRoles:    { type: [String], default: [] },
@@ -191,7 +191,7 @@ const tempChannelSchema = new Schema({
   expiresAt: { type: Date, default: null },
 }, { timestamps: true });
 tempChannelSchema.index({ guildId: 1 });
-tempChannelSchema.index({ expiresAt: 1 });
+tempChannelSchema.index({ expiresAt: 1 }, { sparse: true });
 
 const voiceLinkSchema = new Schema({
   guildId:        { type: String, required: true },
@@ -218,7 +218,7 @@ const reactionRolePanelSchema = new Schema({
   }],
 }, { timestamps: true });
 reactionRolePanelSchema.index({ guildId: 1, panelId: 1 }, { unique: true });
-reactionRolePanelSchema.index({ messageId: 1 });
+reactionRolePanelSchema.index({ messageId: 1 }, { sparse: true });
 
 const tempRoleSchema = new Schema({
   guildId:   { type: String, required: true },
@@ -367,6 +367,10 @@ const InviteStat        = models.InviteStat        || model("InviteStat", invite
 const InviteJoin        = models.InviteJoin        || model("InviteJoin", inviteJoinSchema);
 const InviteReward      = models.InviteReward      || model("InviteReward", inviteRewardSchema);
 
+function sanitizeDbError(err) {
+  return String(err?.message ?? err ?? "unknown").replace(/(mongodb(?:\+srv)?:\/\/[^:\s]+:)[^@\s]+@/gi, "$1[REDACTED]@");
+}
+
 async function connectDatabase(uri, log) {
   const { retryAttempts, retryDelay, options } = dbOptions;
 
@@ -377,12 +381,12 @@ async function connectDatabase(uri, log) {
       return;
     } catch (err) {
       if (attempt === retryAttempts) {
-        log?.error("No se pudo conectar a la base de datos tras varios intentos", { err: err.message });
+        log?.error("No se pudo conectar a la base de datos tras varios intentos", { err: sanitizeDbError(err) });
         throw err;
       }
       const waitMs = retryDelay * Math.pow(2, attempt - 1);
       log?.warn(`Error conectando a DB (intento ${attempt}/${retryAttempts}), reintentando en ${waitMs}ms`, {
-        err: err.message,
+        err: sanitizeDbError(err),
       });
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
@@ -392,7 +396,7 @@ async function connectDatabase(uri, log) {
 async function closeDatabase(log) {
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.close().catch((err) => {
-      log?.error("Error al cerrar la conexión de base de datos", { err: err.message });
+      log?.error("Error al cerrar la conexión de base de datos", { err: sanitizeDbError(err) });
     });
     log?.info("Conexión de base de datos cerrada");
   }

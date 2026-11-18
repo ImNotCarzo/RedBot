@@ -20,39 +20,52 @@ const data = {
     const lang = await getLang(interaction.guildId).catch(() => "es");
     return runWithLang(lang, async () => {
       const isEn = lang === "en";
-      const modMember = interaction.member ?? await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-      if (!modMember) return;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
-      const res = await executeDramaAction({
-        guild: interaction.guild,
-        modMember,
-        modUser: interaction.user,
-        targetId,
-        action,
-        message: interaction.message,
-      });
+      const replyErr = (content) =>
+        interaction.deferred || interaction.replied
+          ? interaction.editReply({ content }).catch(() => {})
+          : interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
 
-      if (res.error === "no_perm") {
-        return interaction.reply({
-          content: isEn ? "You don't have permission to execute that sanction." : "No tienes permisos para ejecutar esa sanción.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
-      }
-      if (res.error === "not_found") {
-        return interaction.reply({
-          content: isEn ? "That user is no longer in the server." : "Ese usuario ya no está en el servidor.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
-      }
-      if (res.error === "hierarchy" || res.error === "bot_hierarchy") {
-        return interaction.reply({
-          content: isEn ? "Role hierarchy prevents acting on that member." : "La jerarquía de roles impide actuar sobre ese usuario.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
-      }
+      try {
+        const modMember =
+          (interaction.member?.roles?.highest ? interaction.member : null) ??
+          (await interaction.guild.members.fetch(interaction.user.id).catch(() => null));
+        if (!modMember) {
+          return replyErr(isEn ? "Could not verify your server permissions." : "No pude verificar tus permisos en el servidor.");
+        }
 
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.deferUpdate().catch(() => {});
+        const res = await executeDramaAction({
+          guild: interaction.guild,
+          modMember,
+          modUser: interaction.user,
+          targetId,
+          action,
+          message: interaction.message,
+        });
+
+        if (res.error === "no_perm") {
+          return replyErr(isEn ? "You don't have permission to execute that sanction." : "No tienes permisos para ejecutar esa sanción.");
+        }
+        if (res.error === "not_found") {
+          return replyErr(isEn ? "That user is no longer in the server." : "Ese usuario ya no está en el servidor.");
+        }
+        if (res.error === "hierarchy" || res.error === "bot_hierarchy") {
+          return replyErr(isEn ? "Role hierarchy prevents acting on that member." : "La jerarquía de roles impide actuar sobre ese usuario.");
+        }
+        if (res.error === "in_progress") {
+          return replyErr(isEn ? "An action is already being processed on this alert." : "Ya se está procesando una acción en esta alerta.");
+        }
+        if (res.error === "invalid_action") {
+          return replyErr(isEn ? "Invalid action." : "Acción inválida.");
+        }
+        if (!res.ok) {
+          return replyErr(isEn ? "Could not apply the sanction." : "No se pudo aplicar la sanción.");
+        }
+
+        return interaction.deleteReply().catch(() => {});
+      } catch {
+        return replyErr(isEn ? "An error occurred while applying the sanction." : "Ocurrió un error al aplicar la sanción.");
       }
     });
   },

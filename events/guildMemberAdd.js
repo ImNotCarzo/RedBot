@@ -24,14 +24,16 @@ const event = {
 
     const role = member.guild.roles.cache.get(config.roleId);
     if (!role) {
-      await JoinRole.deleteOne({ guildId }).catch((err) => {
-        log.warn("No se pudo limpiar configuración de rol automático inválida", {
-          event: "guildMemberAdd",
-          guildId,
-          roleId: config.roleId,
-          err: err?.message ?? String(err),
+      if (member.guild.available && member.guild.roles.cache.size > 0) {
+        await JoinRole.deleteOne({ guildId }).catch((err) => {
+          log.warn("No se pudo limpiar configuración de rol automático inválida", {
+            event: "guildMemberAdd",
+            guildId,
+            roleId: config.roleId,
+            err: err?.message ?? String(err),
+          });
         });
-      });
+      }
       return;
     }
 

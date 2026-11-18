@@ -15,7 +15,8 @@ const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { generateText, generateVision, transcribeMedia } = require("./ai");
 const { getMessageText } = require("./adapter");
 const { GREEN, RED, YELLOW } = require("./config");
-const { logAction, resolveContextLang } = require("./guild");
+const { getLang, logAction, resolveContextLang } = require("./guild");
+const { getCurrentLang, runWithLang, translatePayload, wrapInteractionForLang } = require("./i18n");
 const {
   addModCase,
   addWarn,
@@ -55,13 +56,15 @@ const formatLang = (code) => {
   return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
 };
 
-function extractContextImage(message) {
-  const sources = [
+function getMessageSources(message) {
+  return [
     message,
     ...(message?.messageSnapshots?.values ? [...message.messageSnapshots.values()] : []),
   ];
+}
 
-  for (const src of sources) {
+function extractContextImage(message) {
+  for (const src of getMessageSources(message)) {
     const atts = [...(src?.attachments?.values?.() ?? [])];
     for (const att of atts) {
       const ct = att?.contentType ?? "";
@@ -79,12 +82,7 @@ function extractContextImage(message) {
 }
 
 function extractContextMedia(message) {
-  const sources = [
-    message,
-    ...(message?.messageSnapshots?.values ? [...message.messageSnapshots.values()] : []),
-  ];
-
-  for (const src of sources) {
+  for (const src of getMessageSources(message)) {
     const atts = [...(src?.attachments?.values?.() ?? [])];
     for (const att of atts) {
       const ct = att?.contentType ?? "";
@@ -106,14 +104,18 @@ function extractContextMedia(message) {
   return null;
 }
 
+const INTERACTION_I18N_WRAPPED = Symbol.for("redbot.interactionI18nWrapped");
+
 async function replyEphemeral(interaction, payload) {
-  const { getCurrentLang, translatePayload } = require("./i18n");
+  const isBuilder = typeof payload?.toPayload === "function";
   const raw = typeof payload === "string"
     ? { content: payload, flags: MessageFlags.Ephemeral }
-    : typeof payload?.toPayload === "function"
+    : isBuilder
       ? payload.toPayload({ ephemeral: true })
       : { ...payload, flags: MessageFlags.Ephemeral };
-  const data = translatePayload(raw, getCurrentLang());
+  const data = isBuilder || interaction?.[INTERACTION_I18N_WRAPPED]
+    ? raw
+    : translatePayload(raw, getCurrentLang());
 
   if (interaction.deferred || interaction.replied) {
     return interaction.editReply(data).catch(() => interaction.followUp(data).catch(() => null));
@@ -372,8 +374,8 @@ const CASE_TYPE_LABELS = {
   unban: "Unban",
 };
 
-function buildDossierPayload({ targetUser, member, cases = [], warns = null, modMember, guild, ids }) {
-  const history = Array.isArray(warns) && !cases.length ? warns : cases;
+function buildDossierPayload({ targetUser, member, cases = [], modMember, guild, ids }) {
+  const history = Array.isArray(cases) ? cases : [];
   const warnsCount = history.filter((c) => !c.type || c.type === "warn").length;
   const createdTs = Math.floor(targetUser.createdTimestamp / 1000);
   const joinedTs = member?.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
@@ -386,7 +388,7 @@ function buildDossierPayload({ targetUser, member, cases = [], warns = null, mod
 
   const recentCases = history.slice(0, 4).map((c) => {
     const ts = Math.floor(new Date(c.createdAt).getTime() / 1000);
-    const idCode = c.caseId ?? c.warnId ?? "N/A";
+    const idCode = c.caseId ?? "N/A";
     const typeLabel = c.type ? (CASE_TYPE_LABELS[c.type] ?? c.type) : "Warn";
     const durSuffix = c.durationMs ? ` ${formatDuration(c.durationMs)}` : "";
     return `• **[${typeLabel}${durSuffix}] \`${idCode}\`** (<t:${ts}:d>): ${V2Text.clip(c.reason, 110, "Sin razón")}`;
@@ -445,7 +447,7 @@ async function handleModDossierContext(interaction) {
       (await guild.members?.fetch?.(targetUser.id).catch(() => null));
 
     const cases = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
-    const session = Date.now().toString(36);
+    const session = interaction.id;
     const ids = {
       warn: `modctx:warn:${session}`,
       mute: `modctx:mute:${session}`,
@@ -463,130 +465,140 @@ async function handleModDossierContext(interaction) {
     });
 
     collector.on("collect", async (btn) => {
-      const { runWithLang, wrapInteractionForLang, getCurrentLang } = require("./i18n");
-      const lang = guild?.id ? await require("./guild").getLang(guild.id).catch(() => getCurrentLang()) : getCurrentLang();
+      const lang = guild?.id ? await getLang(guild.id).catch(() => getCurrentLang()) : getCurrentLang();
       return runWithLang(lang, async () => {
         wrapInteractionForLang(btn, lang);
         try {
-        if (btn.customId === ids.mute) {
-          const me = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
-          if (!me?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-            return btn.reply({ content: "No tengo el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
+          if (btn.customId === ids.mute) {
+            const btnPerms = btn.memberPermissions ?? interaction.member.permissions;
+            if (!btnPerms?.has?.(PermissionFlagsBits.ModerateMembers)) {
+              return btn.reply({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            const me = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+            if (!me?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+              return btn.reply({ content: "No tengo el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            if (!member?.moderatable) {
+              return btn.reply({ content: "No puedo silenciar a este usuario (jerarquía)", flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            await btn.deferUpdate();
+            await member.timeout(10 * 60_000, `Mute rápido desde expediente por ${interaction.user.tag}`);
+            await addModCase({
+              guildId: guild.id,
+              userId: targetUser.id,
+              moderatorId: interaction.user.id,
+              type: "mute",
+              reason: "Mute rápido desde expediente",
+              durationMs: 10 * 60_000,
+            });
+            await logAction(guild, {
+              title: "Usuario silenciado (Expediente)",
+              color: YELLOW,
+              fields: [
+                { name: "Usuario", value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
+                { name: "Moderador", value: interaction.user.tag, inline: true },
+                { name: "Duración", value: "10m", inline: true },
+              ],
+            });
+            const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
+            await btn.editReply(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids }));
+            return;
           }
-          if (!member?.moderatable) {
-            return btn.reply({ content: "No puedo silenciar a este usuario (jerarquía)", flags: MessageFlags.Ephemeral }).catch(() => {});
+
+          const isKick = btn.customId === ids.kick;
+          const modalId = `modctx_modal:${isKick ? "kick" : "warn"}:${btn.id}`;
+          const modal = new ModalBuilder()
+            .setCustomId(modalId)
+            .setTitle(isKick ? `Expulsar a ${V2Text.clip(targetUser.username, 25)}` : `Advertir a ${V2Text.clip(targetUser.username, 25)}`)
+            .addLabelComponents(
+              new LabelBuilder()
+                .setLabel("Razón")
+                .setTextInputComponent(
+                  new TextInputBuilder()
+                    .setCustomId("razon")
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(300)
+                    .setPlaceholder("Escribe el motivo...")
+                )
+            );
+
+          await btn.showModal(modal);
+          const sub = await btn
+            .awaitModalSubmit({
+              time: 2 * 60_000,
+              filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
+            })
+            .catch(() => null);
+          if (!sub) return;
+
+          const reason = sub.fields.getTextInputValue("razon")?.trim() || "Sin razón";
+          const currentPerms = sub.memberPermissions ?? btn.memberPermissions ?? interaction.member.permissions;
+
+          if (isKick) {
+            if (!currentPerms?.has?.(PermissionFlagsBits.KickMembers)) {
+              return sub.reply({ content: "No tienes el permiso `KickMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            if (!member?.kickable) {
+              return sub.reply({ content: "No puedo expulsar a este usuario (jerarquía o permisos)", flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            await sub.deferReply({ flags: MessageFlags.Ephemeral });
+            await member.kick(`${interaction.user.tag}: ${reason}`);
+            await addModCase({
+              guildId: guild.id,
+              userId: targetUser.id,
+              moderatorId: interaction.user.id,
+              type: "kick",
+              reason,
+            });
+            await logAction(guild, {
+              title: "Usuario expulsado (Expediente)",
+              color: RED,
+              fields: [
+                { name: "Usuario", value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
+                { name: "Moderador", value: interaction.user.tag, inline: true },
+                { name: "Razón", value: reason, inline: false },
+              ],
+            });
+            await sub.editReply({ content: `**${targetUser.tag}** fue expulsado.` }).catch(() => {});
+            collector.stop("kicked");
+            return;
           }
-          await member.timeout(10 * 60_000, `Mute rápido desde expediente por ${interaction.user.tag}`);
-          await addModCase({
+
+          if (!currentPerms?.has?.(PermissionFlagsBits.ModerateMembers)) {
+            return sub.reply({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
+          }
+          await sub.deferUpdate().catch(() => {});
+          const warnId = generateId();
+          const { total } = await addWarn({
             guildId: guild.id,
             userId: targetUser.id,
             moderatorId: interaction.user.id,
-            type: "mute",
-            reason: "Mute rápido desde expediente",
-            durationMs: 10 * 60_000,
+            reason,
+            warnId,
           });
+          if (member) await applyWarnEscalation(guild, member, total);
           await logAction(guild, {
-            title: "Usuario silenciado (Expediente)",
+            title: "Usuario Advertido (Expediente)",
             color: YELLOW,
             fields: [
               { name: "Usuario", value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
               { name: "Moderador", value: interaction.user.tag, inline: true },
-              { name: "Duración", value: "10m", inline: true },
-            ],
-          });
-          const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
-          await btn.update(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids }));
-          return;
-        }
-
-        const isKick = btn.customId === ids.kick;
-        const modalId = `modctx_modal:${isKick ? "kick" : "warn"}:${Date.now().toString(36)}`;
-        const modal = new ModalBuilder()
-          .setCustomId(modalId)
-          .setTitle(isKick ? `Expulsar a ${V2Text.clip(targetUser.username, 25)}` : `Advertir a ${V2Text.clip(targetUser.username, 25)}`)
-          .addLabelComponents(
-            new LabelBuilder()
-              .setLabel("Razón")
-              .setTextInputComponent(
-                new TextInputBuilder()
-                  .setCustomId("razon")
-                  .setStyle(TextInputStyle.Paragraph)
-                  .setRequired(true)
-                  .setMaxLength(300)
-                  .setPlaceholder("Escribe el motivo...")
-              )
-          );
-
-        await btn.showModal(modal);
-        const sub = await btn
-          .awaitModalSubmit({
-            time: 2 * 60_000,
-            filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
-          })
-          .catch(() => null);
-        if (!sub) return;
-
-        const reason = sub.fields.getTextInputValue("razon")?.trim() || "Sin razón";
-
-        if (isKick) {
-          if (!interaction.member.permissions.has(PermissionFlagsBits.KickMembers)) {
-            return sub.reply({ content: "No tienes el permiso `KickMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
-          }
-          if (!member?.kickable) {
-            return sub.reply({ content: "No puedo expulsar a este usuario (jerarquía o permisos)", flags: MessageFlags.Ephemeral }).catch(() => {});
-          }
-          await member.kick(`${interaction.user.tag}: ${reason}`);
-          await addModCase({
-            guildId: guild.id,
-            userId: targetUser.id,
-            moderatorId: interaction.user.id,
-            type: "kick",
-            reason,
-          });
-          await logAction(guild, {
-            title: "Usuario expulsado (Expediente)",
-            color: RED,
-            fields: [
-              { name: "Usuario", value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
-              { name: "Moderador", value: interaction.user.tag, inline: true },
+              { name: "ID", value: `\`${warnId}\``, inline: true },
+              { name: "Total warns", value: `${total}`, inline: true },
               { name: "Razón", value: reason, inline: false },
             ],
           });
-          await sub.reply({ content: `**${targetUser.tag}** fue expulsado.`, flags: MessageFlags.Ephemeral }).catch(() => {});
-          collector.stop("kicked");
-          return;
+          const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
+          await sub.editReply(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids })).catch(async () => {
+            await sub.followUp({ content: `Advertencia \`${warnId}\` aplicada (total: \`${total}\`).`, flags: MessageFlags.Ephemeral }).catch(() => {});
+          });
+        } catch (btnErr) {
+          log.error("[ctx mod action]", { err: btnErr?.message ?? String(btnErr) });
+          if (!btn.replied && !btn.deferred) {
+            await btn.reply({ content: "No se pudo ejecutar la acción", flags: MessageFlags.Ephemeral }).catch(() => {});
+          }
         }
-
-        const warnId = generateId();
-        const { total } = await addWarn({
-          guildId: guild.id,
-          userId: targetUser.id,
-          moderatorId: interaction.user.id,
-          reason,
-          warnId,
-        });
-        if (member) await applyWarnEscalation(guild, member, total);
-        await logAction(guild, {
-          title: "Usuario Advertido (Expediente)",
-          color: YELLOW,
-          fields: [
-            { name: "Usuario", value: `${targetUser.tag} (\`${targetUser.id}\`)`, inline: true },
-            { name: "Moderador", value: interaction.user.tag, inline: true },
-            { name: "ID", value: `\`${warnId}\``, inline: true },
-            { name: "Total warns", value: `${total}`, inline: true },
-            { name: "Razón", value: reason, inline: false },
-          ],
-        });
-        const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
-        await sub.update(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids })).catch(async () => {
-          await sub.reply({ content: `Advertencia \`${warnId}\` aplicada (total: \`${total}\`).`, flags: MessageFlags.Ephemeral }).catch(() => {});
-        });
-      } catch (btnErr) {
-        log.error("[ctx mod action]", { err: btnErr?.message ?? String(btnErr) });
-        if (!btn.replied && !btn.deferred) {
-          await btn.reply({ content: "No se pudo ejecutar la acción", flags: MessageFlags.Ephemeral }).catch(() => {});
-        }
-      }
       });
     });
   } catch (err) {
@@ -598,7 +610,6 @@ async function handleModDossierContext(interaction) {
 function withContextLang(handler) {
   return async function (...args) {
     const interaction = args.length >= 2 ? args[1] : args[0];
-    const { runWithLang, wrapInteractionForLang } = require("./i18n");
     const lang = await resolveContextLang({
       guildId: interaction?.guildId ?? null,
       userId: interaction?.user?.id ?? null,

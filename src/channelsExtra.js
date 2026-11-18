@@ -1,29 +1,55 @@
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
 const mongoose = require("mongoose");
 const { AutopurgeRule, GuildConfig, StickyMessage, TempChannel, VoiceLink } = require("./database");
+const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("CHANNELS_EXTRA", process.env.LOG_LEVEL);
 const MAX_TEMP_CHANNELS_PER_GUILD = 100;
 const stickyDebounceTimers = new Map();
+const stickyInFlight = new Set();
+const stickyPresenceCache = new TtlCache(60_000, 4000);
 const tempChannelTimers = new Map();
 let autopurgeInterval = null;
+let isSweepingAutopurge = false;
+
+function invalidateStickyCache(channelId) {
+  if (channelId) stickyPresenceCache.delete(channelId);
+}
+
+async function hasActiveSticky(channelId) {
+  const cached = stickyPresenceCache.get(channelId);
+  if (cached !== undefined) return cached;
+  const exists = Boolean(await StickyMessage.exists({ channelId, enabled: true }).catch(() => null));
+  stickyPresenceCache.set(channelId, exists);
+  return exists;
+}
 
 async function handleStickyOnMessage(message) {
   if (!message?.guild?.id || !message.channelId || message.author?.bot) return;
   if (mongoose.connection.readyState !== 1) return;
 
-  const sticky = await StickyMessage.findOne({ channelId: message.channelId, enabled: true }).lean().catch(() => null);
-  if (!sticky) return;
+  const channelId = message.channelId;
+  if (stickyDebounceTimers.has(channelId) || stickyInFlight.has(channelId)) return;
 
-  if (stickyDebounceTimers.has(message.channelId)) return;
+  stickyInFlight.add(channelId);
+  let active = false;
+  try {
+    active = await hasActiveSticky(channelId);
+  } finally {
+    stickyInFlight.delete(channelId);
+  }
+  if (!active || stickyDebounceTimers.has(channelId)) return;
 
   const timer = setTimeout(async () => {
-    stickyDebounceTimers.delete(message.channelId);
+    stickyDebounceTimers.delete(channelId);
     try {
-      const latest = await StickyMessage.findOne({ channelId: message.channelId, enabled: true }).lean();
-      if (!latest) return;
+      const latest = await StickyMessage.findOne({ channelId, enabled: true }).lean();
+      if (!latest) {
+        stickyPresenceCache.set(channelId, false);
+        return;
+      }
 
       const ch = message.channel;
       if (!ch?.isTextBased?.()) return;
@@ -44,76 +70,90 @@ async function handleStickyOnMessage(message) {
       }
 
       if (sent?.id) {
-        await StickyMessage.updateOne({ channelId: message.channelId }, { $set: { lastMessageId: sent.id } }).catch(() => {});
+        await StickyMessage.updateOne({ channelId }, { $set: { lastMessageId: sent.id } }).catch(() => {});
       }
     } catch (err) {
-      log.warn("Error reenviando sticky", { channelId: message.channelId, err: err?.message });
+      log.warn("Error reenviando sticky", { channelId, err: err?.message });
     }
   }, 2500);
   timer.unref();
-  stickyDebounceTimers.set(message.channelId, timer);
+  stickyDebounceTimers.set(channelId, timer);
 }
 
 async function runAutopurgeSweep(client) {
-  if (!client?.guilds || mongoose.connection.readyState !== 1) return;
-  const rules = await AutopurgeRule.find().lean().catch(() => []);
-  if (!rules.length) return;
+  if (isSweepingAutopurge || !client?.guilds || mongoose.connection.readyState !== 1) return;
+  isSweepingAutopurge = true;
+  try {
+    const rules = await AutopurgeRule.find().lean().catch(() => []);
+    if (!rules.length) return;
 
-  const now = Date.now();
-  const stickyChannels = new Set(
-    (await StickyMessage.find({ enabled: true }).select("channelId lastMessageId").lean().catch(() => []))
-      .map((s) => `${s.channelId}:${s.lastMessageId}`)
-  );
+    const now = Date.now();
+    const ruleChannelIds = rules.map((r) => r.channelId);
+    const stickyChannels = new Set(
+      (await StickyMessage.find({ enabled: true, channelId: { $in: ruleChannelIds } }).select("channelId lastMessageId").lean().catch(() => []))
+        .map((s) => `${s.channelId}:${s.lastMessageId}`)
+    );
 
-  for (const rule of rules) {
-    try {
-      const ch = client.channels?.cache?.get(rule.channelId) ?? await client.channels?.fetch?.(rule.channelId).catch(() => null);
-      if (!ch?.isTextBased?.()) continue;
+    for (const rule of rules) {
+      try {
+        const ch = client.channels?.cache?.get(rule.channelId) ?? await client.channels?.fetch?.(rule.channelId).catch(() => null);
+        if (!ch?.isTextBased?.()) continue;
 
-      const cutoff = now - Math.max(10_000, rule.maxAgeMs);
-      const fetched = await ch.messages.fetch({ limit: 50 }).catch(() => null);
-      if (!fetched?.size) continue;
+        const cutoff = now - Math.max(10_000, rule.maxAgeMs);
+        const fetched = await ch.messages.fetch({ limit: 50 }).catch(() => null);
+        if (!fetched?.size) continue;
 
-      const expired = [...fetched.values()].filter((m) => {
-        if (m.createdTimestamp > cutoff) return false;
-        if (rule.ignorePinned && m.pinned) return false;
-        if (rule.filter === "bots" && !m.author?.bot) return false;
-        if (rule.filter === "humans" && m.author?.bot) return false;
-        if (stickyChannels.has(`${rule.channelId}:${m.id}`)) return false;
-        return true;
-      });
+        const expired = [...fetched.values()].filter((m) => {
+          if (m.createdTimestamp > cutoff) return false;
+          if (rule.ignorePinned && m.pinned) return false;
+          if (rule.filter === "bots" && !m.author?.bot) return false;
+          if (rule.filter === "humans" && m.author?.bot) return false;
+          if (stickyChannels.has(`${rule.channelId}:${m.id}`)) return false;
+          return true;
+        });
 
-      if (!expired.length) continue;
+        if (!expired.length) continue;
 
-      const bulkCutoff = now - 14 * 86_400_000 + 60_000;
-      const bulkEligible = expired.filter((m) => m.createdTimestamp > bulkCutoff);
-      const oldSingle = expired.filter((m) => m.createdTimestamp <= bulkCutoff);
+        const bulkCutoff = now - 14 * 86_400_000 + 60_000;
+        const bulkEligible = expired.filter((m) => m.createdTimestamp > bulkCutoff);
+        const oldSingle = expired.filter((m) => m.createdTimestamp <= bulkCutoff);
 
-      if (bulkEligible.length >= 2 && typeof ch.bulkDelete === "function") {
-        await ch.bulkDelete(bulkEligible, true).catch(() => {});
-      } else {
-        for (const m of bulkEligible) await m.delete().catch(() => {});
-      }
-      for (const m of oldSingle.slice(0, 10)) {
-        await m.delete().catch(() => {});
-      }
-    } catch {}
+        if (bulkEligible.length >= 2 && typeof ch.bulkDelete === "function") {
+          await ch.bulkDelete(bulkEligible, true).catch(() => {});
+        } else {
+          for (const m of bulkEligible) await m.delete().catch(() => {});
+        }
+        for (const m of oldSingle.slice(0, 10)) {
+          await m.delete().catch(() => {});
+        }
+      } catch {}
+    }
+  } finally {
+    isSweepingAutopurge = false;
   }
 }
 
 function scheduleTempChannelExpiry(client, guildId, channelId, expiresAt) {
   if (!expiresAt) return;
+  const expMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expMs)) return;
+
   const existing = tempChannelTimers.get(channelId);
   if (existing) clearTimeout(existing);
 
-  const delay = Math.min(2_147_000_000, Math.max(1000, new Date(expiresAt).getTime() - Date.now()));
+  const delay = Math.min(2_147_000_000, Math.max(1000, expMs - Date.now()));
   const timer = setTimeout(async () => {
     tempChannelTimers.delete(channelId);
     try {
+      if (expMs > Date.now() + 2000) {
+        scheduleTempChannelExpiry(client, guildId, channelId, new Date(expMs));
+        return;
+      }
       if (mongoose.connection.readyState === 1) {
         const still = await TempChannel.findOne({ channelId }).lean().catch(() => null);
         if (!still) return;
-        if (still.expiresAt && new Date(still.expiresAt).getTime() > Date.now() + 2000) {
+        const dbExpMs = still.expiresAt ? new Date(still.expiresAt).getTime() : NaN;
+        if (Number.isFinite(dbExpMs) && dbExpMs > Date.now() + 2000) {
           scheduleTempChannelExpiry(client, guildId, channelId, still.expiresAt);
           return;
         }
@@ -150,7 +190,12 @@ async function createTimedTempChannel({ client, guild, name, type = ChannelType.
   });
 
   const expiresAt = new Date(Date.now() + durationMs);
-  await TempChannel.create({ guildId: guild.id, channelId: ch.id, ownerId, kind: "timed", expiresAt });
+  try {
+    await TempChannel.create({ guildId: guild.id, channelId: ch.id, ownerId, kind: "timed", expiresAt });
+  } catch (err) {
+    await ch.delete("Rollback por fallo en base de datos").catch(() => {});
+    throw err;
+  }
   scheduleTempChannelExpiry(client, guild.id, ch.id, expiresAt);
   return { ok: true, channel: ch, expiresAt };
 }
@@ -180,7 +225,7 @@ async function applyVoiceLinksForTransition(member, oldChannelId, newChannelId) 
     } else if (link.targetType === "role") {
       if (!me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) continue;
       const role = guild.roles.cache.get(link.targetId);
-      if (!role || role.position >= me.roles.highest.position) continue;
+      if (!role || role.managed || role.position >= me.roles.highest.position) continue;
       if (matchesNew && !member.roles.cache.has(role.id)) {
         await member.roles.add(role, "Voice-Role Link").catch(() => {});
       } else if (!matchesNew && member.roles.cache.has(role.id)) {
@@ -194,13 +239,15 @@ async function handleVoiceHubTransition(oldState, newState) {
   const guild = newState?.guild ?? oldState?.guild;
   if (!guild?.id || mongoose.connection.readyState !== 1) return;
 
-  // Limpiar sala de Voice Hub si quedó vacía
+  // Limpiar sala de Voice Hub si quedó vacía o si el canal ya fue borrado manualmente
   const leftId = oldState?.channelId;
   if (leftId && leftId !== newState?.channelId) {
     const tempDoc = await TempChannel.findOne({ channelId: leftId, kind: "voice_hub" }).lean().catch(() => null);
     if (tempDoc) {
       const ch = guild.channels.cache.get(leftId);
-      if (ch && ch.members?.size === 0) {
+      if (!ch) {
+        await TempChannel.deleteOne({ channelId: leftId }).catch(() => {});
+      } else if (ch.members?.size === 0) {
         await TempChannel.deleteOne({ channelId: leftId }).catch(() => {});
         await ch.delete("Sala temporal de voz vacía").catch(() => {});
       }
@@ -215,7 +262,10 @@ async function handleVoiceHubTransition(oldState, newState) {
       const count = await TempChannel.countDocuments({ guildId: guild.id }).catch(() => 0);
       if (count >= MAX_TEMP_CHANNELS_PER_GUILD) return;
 
-      const vars = buildTagVariables({ user: newState.member.user, member: newState.member, guild });
+      const vars = buildTagVariables(
+        { user: newState.member.user, member: newState.member, guild },
+        { user: newState.member.user.globalName ?? newState.member.user.username }
+      );
       const roomName = substituteVars(cfgDoc.voiceHubTemplate || "Sala de {user.username}", vars).slice(0, 90) || `Sala-${newState.member.user.username}`;
       const hubChannel = guild.channels.cache.get(joinedId);
       const parentId = cfgDoc.voiceHubCategoryId ?? hubChannel?.parentId ?? undefined;
@@ -235,7 +285,11 @@ async function handleVoiceHubTransition(oldState, newState) {
 
       if (created) {
         await TempChannel.create({ guildId: guild.id, channelId: created.id, ownerId: newState.member.id, kind: "voice_hub", expiresAt: null }).catch(() => {});
-        await newState.setChannel(created).catch(() => {});
+        const moved = await newState.setChannel(created).then(() => true).catch(() => false);
+        if (!moved) {
+          await TempChannel.deleteOne({ channelId: created.id }).catch(() => {});
+          await created.delete("Usuario desconectado antes de moverlo a la sala temporal").catch(() => {});
+        }
       }
     }
   }
@@ -261,10 +315,8 @@ function stopChannelsWorkers() {
 }
 
 module.exports = {
-  MAX_TEMP_CHANNELS_PER_GUILD,
+  invalidateStickyCache,
   handleStickyOnMessage,
-  runAutopurgeSweep,
-  scheduleTempChannelExpiry,
   restoreTempChannels,
   createTimedTempChannel,
   applyVoiceLinksForTransition,

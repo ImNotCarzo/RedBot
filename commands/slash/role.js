@@ -30,6 +30,7 @@ const {
   buildReactionRolePanelPayload,
   grantTempRole,
 } = require("../../src/reactionRoles");
+const { isValidMenuEmoji } = require("../../src/tickets");
 const { RED, GREEN, DARK } = require("../../src/config");
 
 const PAGE_SIZE = 15;
@@ -139,7 +140,7 @@ async function executeBulkRole({
 
       const processed = done + failed;
       if (processed % 10 === 0 || processed === total) {
-        await msg.edit(buildProgressCard(processed).toPayload()).catch(() => {});
+        await msg?.edit?.(buildProgressCard(processed).toPayload()).catch(() => {});
       }
     }
 
@@ -157,7 +158,7 @@ async function executeBulkRole({
       color,
     });
 
-    await msg.edit(finalCard.toPayload()).catch(() => {});
+    await msg?.edit?.(finalCard.toPayload()).catch(() => {});
 
     await logAction(guild, {
       title: `${title} ejecutado`,
@@ -243,6 +244,8 @@ function createMemberRoleCommand({ name, description, isAdd }) {
       const member = ctx.get("usuario");
       const role = ctx.get("rol");
       const modTag = ctx.user?.tag;
+
+      if (!member?.roles?.cache) return ctx.ephemeral("No pude obtener al miembro en el servidor");
 
       const hierr = roleHierarchyCheck(ctx, role);
       if (hierr) return ctx.ephemeral(hierr);
@@ -361,7 +364,9 @@ function createTargetBulkRoleCommand({ name, description, isBots, targetNoun, ti
     async code(ctx) {
       await ctx.defer();
       const role = ctx.get("rol");
-      const isAdd = ctx.get("accion") === "add";
+      const action = ctx.get("accion");
+      if (action !== "add" && action !== "remove") return ctx.ephemeral("Acción inválida");
+      const isAdd = action === "add";
       const modTag = ctx.user?.tag;
 
       return executeBulkRole({
@@ -605,7 +610,8 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
 
         const role = ctx.get("rol");
-        const newName = ctx.get("nombre").slice(0, 100);
+        const newName = String(ctx.get("nombre") ?? "").trim().slice(0, 100);
+        if (!newName) return ctx.ephemeral("Indica un nombre válido para el rol");
         const modTag = ctx.user?.tag;
 
         const hierr = roleHierarchyCheck(ctx, role);
@@ -952,8 +958,11 @@ const data = {
         }
 
         if (action === "create") {
-          const count = await ReactionRolePanel.countDocuments({ guildId: ctx.guild.id });
-          if (count >= MAX_PANELS_PER_GUILD) return ctx.ephemeral(`Alcanzaste el límite de ${MAX_PANELS_PER_GUILD} paneles`);
+          const existingPanel = await ReactionRolePanel.findOne({ guildId: ctx.guild.id, panelId }).lean();
+          if (!existingPanel) {
+            const count = await ReactionRolePanel.countDocuments({ guildId: ctx.guild.id });
+            if (count >= MAX_PANELS_PER_GUILD) return ctx.ephemeral(`Alcanzaste el límite de ${MAX_PANELS_PER_GUILD} paneles`);
+          }
           const mode = ctx.get("modo") || "normal";
           const durationMs = mode === "temp" ? parseDuration(ctx.get("duracion") || "1h") : null;
           if (mode === "temp" && (!durationMs || durationMs < 60_000)) {
@@ -987,6 +996,15 @@ const data = {
           const hierr = roleHierarchyCheck(ctx, role);
           if (hierr) return ctx.ephemeral(hierr);
 
+          if (panel.entries.some((e) => e.roleId === role.id)) {
+            return ctx.ephemeral("Ese rol ya está en el panel");
+          }
+
+          const rawEmoji = String(ctx.get("emoji") ?? "").trim() || null;
+          if (rawEmoji && !isValidMenuEmoji(rawEmoji)) {
+            return ctx.ephemeral("Emoji inválido");
+          }
+
           const allPanels = await ReactionRolePanel.find({ guildId: ctx.guild.id }).select("entries").lean();
           const totalRoles = allPanels.reduce((acc, p) => acc + (p.entries?.length ?? 0), 0);
           if (totalRoles >= MAX_ROLES_PER_GUILD) {
@@ -997,7 +1015,7 @@ const data = {
           const key = `r_${Date.now().toString(36)}_${panel.entries.length}`;
           panel.entries.push({
             key,
-            emoji: ctx.get("emoji") || null,
+            emoji: rawEmoji,
             label: String(ctx.get("etiqueta") || role.name).slice(0, 80),
             roleId: role.id,
           });
@@ -1021,6 +1039,7 @@ const data = {
           if (!panel.entries.length) return ctx.ephemeral("Añade al menos un rol al panel antes de publicarlo");
           const targetCh = ctx.get("canal") ?? ctx.guild.channels.cache.get(panel.channelId) ?? ctx.channel;
           if (!targetCh?.isTextBased?.()) return ctx.ephemeral("Canal inválido");
+          await ctx.defer({ ephemeral: true });
           const sent = await targetCh.send(buildReactionRolePanelPayload(panel));
           panel.channelId = targetCh.id;
           panel.messageId = sent.id;
@@ -1050,6 +1069,9 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const action = ctx.get("accion");
+        if (!["add", "remove", "list"].includes(action)) {
+          return ctx.ephemeral("Acción inválida");
+        }
 
         if (action === "list") {
           const list = await VoiceLink.find({ guildId: ctx.guild.id, targetType: "role" }).lean();
@@ -1100,6 +1122,7 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const member = ctx.get("usuario");
         const role = ctx.get("rol");
+        if (!member?.roles?.cache) return ctx.ephemeral("No pude obtener al miembro en el servidor");
         const hierr = roleHierarchyCheck(ctx, role);
         if (hierr) return ctx.ephemeral(hierr);
 
@@ -1108,7 +1131,7 @@ const data = {
           return ctx.ephemeral("Indica una duración válida entre `1m` y `365d`");
         }
         const expiresAt = await grantTempRole({
-          client: ctx.bot?.client ?? ctx.guild.client,
+          client: ctx.bot ?? ctx.guild.client,
           guild: ctx.guild,
           member,
           role,

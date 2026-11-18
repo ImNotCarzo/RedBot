@@ -1,13 +1,15 @@
+const mongoose = require("mongoose");
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
 const { Reminder } = require("./database");
 const { RED } = require("./config");
-const { Logger } = require("./runtime");
+const { Logger, sanitizeError } = require("./runtime");
 
 const log = new Logger("REMINDER_SERVICE");
 const timers = new Map();
 const MAX_TIMEOUT_MS = 2147483647;
 const MAX_PER_USER = 10;
 const RETRY_MS = 60_000;
+const MAX_DELIVERY_RETRIES = 3;
 
 function clearTimer(id) {
   const existing = timers.get(id);
@@ -17,7 +19,12 @@ function clearTimer(id) {
   }
 }
 
-function scheduleReminder(client, doc) {
+function stopReminderTimers() {
+  for (const t of timers.values()) clearTimeout(t);
+  timers.clear();
+}
+
+function scheduleReminder(client, doc, attempt = 0) {
   if (!client || !doc?._id) return;
 
   const id = String(doc._id);
@@ -28,14 +35,14 @@ function scheduleReminder(client, doc) {
 
   const delay = when - Date.now();
   if (delay <= 0) {
-    deliverReminder(client, doc);
+    deliverReminder(client, doc, attempt);
     return;
   }
 
   const timer = setTimeout(() => {
     timers.delete(id);
-    if (delay > MAX_TIMEOUT_MS) scheduleReminder(client, doc);
-    else deliverReminder(client, doc);
+    if (delay > MAX_TIMEOUT_MS) scheduleReminder(client, doc, attempt);
+    else deliverReminder(client, doc, attempt);
   }, Math.min(delay, MAX_TIMEOUT_MS));
   timer.unref();
   timers.set(id, timer);
@@ -56,53 +63,63 @@ function buildSnoozeRow(userId, lang = "es", disabled = false) {
   );
 }
 
-async function deliverReminder(client, doc) {
+async function deliverReminder(client, doc, attempt = 0) {
   const id = String(doc._id);
+  if (Reminder.db?.readyState !== 1) {
+    if (attempt < MAX_DELIVERY_RETRIES) {
+      scheduleReminder(client, { ...doc, remindAt: new Date(Date.now() + RETRY_MS) }, attempt + 1);
+    }
+    return;
+  }
+
   try {
-    const pending = await Reminder.exists({ _id: doc._id });
-    if (!pending) return;
+    // Reclamo atómico antes de enviar para impedir doble entrega si falla un borrado posterior
+    const claimed = await Reminder.findOneAndDelete({ _id: doc._id }).lean();
+    if (!claimed) return;
 
     const lang = await require("./guild")
-      .resolveContextLang({ guildId: doc.guildId ?? null, userId: doc.userId ?? null })
+      .resolveContextLang({ guildId: claimed.guildId ?? null, userId: claimed.userId ?? null })
       .catch(() => "es");
     const embed = new EmbedBuilder()
       .setTitle(lang === "en" ? "Reminder" : "Recordatorio")
-      .setDescription(doc.text)
+      .setDescription(claimed.text)
       .setColor(RED)
-      .setTimestamp(doc.createdAt ? new Date(doc.createdAt) : new Date());
+      .setTimestamp(claimed.createdAt ? new Date(claimed.createdAt) : new Date());
 
-    const components = [buildSnoozeRow(doc.userId, lang)];
+    const components = [buildSnoozeRow(claimed.userId, lang)];
     let sent = false;
 
-    const user = await client.users.fetch(doc.userId).catch(() => null);
+    const user = await client.users.fetch(claimed.userId).catch(() => null);
     if (user) {
       sent = await user.send({ embeds: [embed], components }).then(() => true).catch(() => false);
     }
 
-    if (!sent && doc.channelId) {
-      const channel = await client.channels.fetch(doc.channelId).catch(() => null);
+    if (!sent && claimed.channelId) {
+      const channel = await client.channels.fetch(claimed.channelId).catch(() => null);
       if (channel?.isTextBased?.()) {
         sent = await channel
           .send({
-            content: `<@${doc.userId}>`,
+            content: `<@${claimed.userId}>`,
             embeds: [embed],
             components,
-            allowedMentions: { users: [doc.userId] },
+            allowedMentions: { users: [claimed.userId] },
           })
           .then(() => true)
           .catch(() => false);
       }
     }
 
-    if (!sent) log.warn("No se pudo entregar el recordatorio", { reminderId: id, userId: doc.userId });
-    await Reminder.deleteOne({ _id: doc._id });
+    if (!sent) log.warn("No se pudo entregar el recordatorio", { reminderId: id, userId: claimed.userId });
   } catch (err) {
-    log.error("Fallo al entregar recordatorio; reintentando", { reminderId: id, err: err?.message ?? String(err) });
-    scheduleReminder(client, { ...doc, remindAt: new Date(Date.now() + RETRY_MS) });
+    log.error("Fallo al entregar recordatorio", { reminderId: id, attempt, err: sanitizeError(err) });
+    if (attempt < MAX_DELIVERY_RETRIES) {
+      scheduleReminder(client, { ...doc, remindAt: new Date(Date.now() + RETRY_MS) }, attempt + 1);
+    }
   }
 }
 
 async function createReminder(client, { userId, guildId = null, channelId = null, text, remindAt }) {
+  if (Reminder.db?.readyState !== 1) return { error: "db" };
   const count = await Reminder.countDocuments({ userId });
   if (count >= MAX_PER_USER) return { error: "limit", max: MAX_PER_USER };
 
@@ -130,6 +147,8 @@ async function cancelReminder(userId, reminderId = null) {
     return { deleted: res?.deletedCount ?? docs.length };
   }
 
+  if (!mongoose.isValidObjectId(reminderId)) return { deleted: 0 };
+
   const removed = await Reminder.findOneAndDelete({ _id: reminderId, userId }).lean();
   if (!removed) return { deleted: 0 };
   clearTimer(String(removed._id));
@@ -137,12 +156,13 @@ async function cancelReminder(userId, reminderId = null) {
 }
 
 async function restoreReminders(client) {
+  if (Reminder.db?.readyState !== 1) return;
   try {
     const pending = await Reminder.find({}).lean();
     for (const doc of pending) scheduleReminder(client, doc);
     if (pending.length) log.info(`Recordatorios restaurados: ${pending.length}`);
   } catch (err) {
-    log.error("Error al restaurar recordatorios", { err: err?.message ?? String(err) });
+    log.error("Error al restaurar recordatorios", { err: sanitizeError(err) });
   }
 }
 
@@ -151,8 +171,6 @@ module.exports = {
   listUserReminders,
   cancelReminder,
   restoreReminders,
-  scheduleReminder,
-  deliverReminder,
+  stopReminderTimers,
   buildSnoozeRow,
-  MAX_PER_USER,
 };

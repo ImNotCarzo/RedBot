@@ -30,12 +30,16 @@ function decodeHtmlEntities(str) {
     .replace(/&#x2F;/g, "/");
 }
 
+function isHost(host, domain) {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 function extractMetaTag(html, prop) {
   const escaped = prop.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const r1 = new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i");
-  const r2 = new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["']`, "i");
+  const r1 = new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=(["'])((?:(?!\\1).)+)\\1`, "i");
+  const r2 = new RegExp(`<meta[^>]+content=(["'])((?:(?!\\1).)+)\\1[^>]+(?:property|name)=["']${escaped}["']`, "i");
   const m = html.match(r1) || html.match(r2);
-  return m ? decodeHtmlEntities(m[1]) : null;
+  return m ? decodeHtmlEntities(m[2]) : null;
 }
 
 function getGuildUploadLimitBytes(guild) {
@@ -49,11 +53,11 @@ function extractYouTubeId(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
     const host = parsed.hostname.toLowerCase();
-    if (host === "youtu.be" || host.endsWith(".youtu.be")) {
+    if (isHost(host, "youtu.be")) {
       const id = parsed.pathname.split("/").filter(Boolean)[0];
       return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
     }
-    if (host.includes("youtube.com") || host.includes("youtube-nocookie.com")) {
+    if (isHost(host, "youtube.com") || isHost(host, "youtube-nocookie.com")) {
       const v = parsed.searchParams.get("v");
       if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
       const pathMatch = parsed.pathname.match(/\/(?:shorts|embed|live|v)\/([A-Za-z0-9_-]{11})/);
@@ -188,13 +192,18 @@ async function pickNoTubeServers(count = 2, exclude = new Set()) {
     const host = `https://s${n}.notube.im`;
     if (!exclude.has(host)) pool.push(host);
   }
-  pool.sort(() => Math.random() - 0.5);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
   const candidates = pool.slice(0, 8);
+  if (!candidates.length) return ["https://s60.notube.im"];
   const ready = [];
 
   await new Promise((resolve) => {
     let settled = 0;
     const timer = setTimeout(resolve, 1500);
+    timer.unref();
     for (const host of candidates) {
       fetchWithTimeout(
         `${host}/check-server-load.php`,
@@ -202,7 +211,10 @@ async function pickNoTubeServers(count = 2, exclude = new Set()) {
         1500
       )
         .then(async (res) => {
-          if (!res.ok) return;
+          if (!res.ok) {
+            await res.body?.cancel?.().catch(() => {});
+            return;
+          }
           const text = (await readTextLimited(res, 64 * 1024)).trim();
           if (text === "OK" && ready.length < count) {
             ready.push(host);
@@ -252,7 +264,10 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     },
     15_000
   );
-  if (!r1.ok) throw new Error(`weight HTTP ${r1.status}`);
+  if (!r1.ok) {
+    await r1.body?.cancel?.().catch(() => {});
+    throw new Error(`weight HTTP ${r1.status}`);
+  }
   const weightData = await r1.json();
   if (!weightData?.token || !weightData?.name_mp4) {
     throw new Error("missing token/name_mp4");
@@ -276,7 +291,10 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     },
     25_000
   );
-  if (!r2.ok) throw new Error(`file HTTP ${r2.status}`);
+  if (!r2.ok) {
+    await r2.body?.cancel?.().catch(() => {});
+    throw new Error(`file HTTP ${r2.status}`);
+  }
 
   let finalToken = weightData.token;
   try {
@@ -284,7 +302,7 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     if (rfJson?.token) finalToken = rfJson.token;
   } catch {}
 
-  await fetchWithTimeout(
+  const convRes = await fetchWithTimeout(
     `${host}/conversion.php`,
     {
       method: "POST",
@@ -293,20 +311,30 @@ async function runNoTubeHost(host, watchUrl, originalUrl) {
     },
     12_000
   ).catch(() => null);
+  await convRes?.body?.cancel?.().catch(() => {});
 
   const pageRes = await fetchWithTimeout(
     `https://notube.im/es/download?token=${encodeURIComponent(finalToken)}`,
     { headers: { "User-Agent": BROWSER_UA, Referer: "https://notube.im/" } },
     8_000
   );
-  if (!pageRes.ok) throw new Error(`download page HTTP ${pageRes.status}`);
+  if (!pageRes.ok) {
+    await pageRes.body?.cancel?.().catch(() => {});
+    throw new Error(`download page HTTP ${pageRes.status}`);
+  }
   const pageHtml = await readTextLimited(pageRes, MAX_HTML_BYTES);
   const dlMatch = pageHtml.match(/href="(https:\/\/[^"]+download\.php\?[^"]+)"/i);
   if (!dlMatch?.[1]) throw new Error("missing download.php link");
 
-  const decodedTitle = weightData.titre_mp4
-    ? decodeURIComponent(weightData.titre_mp4.replace(/\+/g, " "))
-    : "Video de YouTube";
+  let decodedTitle = "Video de YouTube";
+  if (weightData.titre_mp4) {
+    const rawTitle = weightData.titre_mp4.replace(/\+/g, " ");
+    try {
+      decodedTitle = decodeURIComponent(rawTitle);
+    } catch {
+      decodedTitle = rawTitle;
+    }
+  }
 
   return {
     platform: "YouTube",
@@ -422,11 +450,17 @@ async function extractInstagram(url) {
   if (/instagram\.com\/share\//i.test(url)) {
     try {
       const redir = await fetchWithTimeout(url, { redirect: "follow", headers: { "User-Agent": DISCORD_BOT_UA } }, 6000);
+      await redir?.body?.cancel?.().catch(() => {});
       if (redir?.url) targetUrl = redir.url;
     } catch {}
   }
 
-  const parsed = new URL(targetUrl);
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return null;
+  }
   for (const fixHost of ["instagramez.com", "kkinstagram.com"]) {
     const fixUrl = `https://${fixHost}${parsed.pathname}${parsed.search}`;
     const info = await extractOpenGraphVideo(fixUrl, "Instagram", url);
@@ -452,6 +486,8 @@ async function extractInstagram(url) {
             sourceUrl: url,
           };
         }
+      } else {
+        await res.body?.cancel?.().catch(() => {});
       }
     } catch {}
   }
@@ -464,6 +500,7 @@ async function extractReddit(url) {
   if (/redd\.it\//i.test(url) || /\/s\/[A-Za-z0-9]+/i.test(url)) {
     try {
       const redir = await fetchWithTimeout(url, { redirect: "follow", headers: { "User-Agent": DISCORD_BOT_UA } }, 6000);
+      await redir?.body?.cancel?.().catch(() => {});
       if (redir?.url) targetUrl = redir.url;
     } catch {}
   }
@@ -485,15 +522,20 @@ async function extractOpenGraphVideo(fetchUrl, platformLabel = "Web", originalUr
       { headers: { "User-Agent": DISCORD_BOT_UA, Accept: "text/html,application/xhtml+xml" }, redirect: "follow" },
       8000
     );
-    if (!res.ok) return null;
+    if (!res.ok) {
+      await res.body?.cancel?.().catch(() => {});
+      return null;
+    }
 
     const ctype = (res.headers.get("content-type") || "").toLowerCase();
     if (ctype.startsWith("video/")) {
+      const finalVideoUrl = res.url || fetchUrl;
+      await res.body?.cancel?.().catch(() => {});
       return {
         platform: platformLabel,
         author: null,
         title: "Video",
-        videoUrl: res.url || fetchUrl,
+        videoUrl: finalVideoUrl,
         sourceUrl: originalUrl,
       };
     }
@@ -553,23 +595,23 @@ async function resolveVideoMetadata(rawUrl) {
     };
   }
 
-  if (host.includes("youtube.com") || host === "youtu.be" || host.endsWith(".youtu.be")) {
+  if (isHost(host, "youtube.com") || isHost(host, "youtube-nocookie.com") || isHost(host, "youtu.be")) {
     return extractYouTube(rawUrl);
   }
 
-  if (host.includes("tiktok.com")) {
+  if (isHost(host, "tiktok.com")) {
     return extractTikTok(rawUrl);
   }
 
-  if (host.includes("twitter.com") || host.includes("x.com") || host.includes("vxtwitter.com") || host.includes("fxtwitter.com")) {
+  if (isHost(host, "twitter.com") || isHost(host, "x.com") || isHost(host, "vxtwitter.com") || isHost(host, "fxtwitter.com")) {
     return extractTwitter(rawUrl);
   }
 
-  if (host.includes("instagram.com") || host.includes("instagramez.com") || host.includes("kkinstagram.com")) {
+  if (isHost(host, "instagram.com") || isHost(host, "instagramez.com") || isHost(host, "kkinstagram.com")) {
     return extractInstagram(rawUrl);
   }
 
-  if (host.includes("reddit.com") || host.includes("redd.it") || host.includes("rxddit.com")) {
+  if (isHost(host, "reddit.com") || isHost(host, "redd.it") || isHost(host, "rxddit.com")) {
     return extractReddit(rawUrl);
   }
 
@@ -578,8 +620,12 @@ async function resolveVideoMetadata(rawUrl) {
 
 async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, extraHeaders = {}) {
   const ua = userAgent || BROWSER_UA;
+  let videoHost = "";
+  try {
+    videoHost = new URL(videoUrl).hostname.toLowerCase();
+  } catch {}
 
-  if (/googlevideo\.com/i.test(videoUrl)) {
+  if (isHost(videoHost, "googlevideo.com")) {
     const probe = await fetchWithTimeout(
       videoUrl,
       {
@@ -588,7 +634,10 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
       },
       10_000
     );
-    if (!probe.ok && probe.status !== 206) throw new Error(`HTTP ${probe.status}`);
+    if (!probe.ok && probe.status !== 206) {
+      await probe.body?.cancel?.().catch(() => {});
+      throw new Error(`HTTP ${probe.status}`);
+    }
 
     const contentRange = probe.headers.get("content-range");
     const totalSize = contentRange
@@ -596,11 +645,11 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
       : Number(probe.headers.get("content-length") ?? 0);
     await probe.body?.cancel?.().catch(() => {});
 
-    if (totalSize > maxBytes) {
+    if (Number.isFinite(totalSize) && totalSize > maxBytes) {
       return { tooLarge: true, size: totalSize };
     }
 
-    if (totalSize > 0) {
+    if (probe.status === 206 && Number.isFinite(totalSize) && totalSize > 0) {
       const chunkSize = 2 * 1024 * 1024;
       const ranges = [];
       for (let start = 0; start < totalSize; start += chunkSize) {
@@ -609,22 +658,31 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
 
       const buffers = new Array(ranges.length);
       let cursor = 0;
+      let failed = false;
       const worker = async () => {
-        while (cursor < ranges.length) {
+        while (!failed && cursor < ranges.length) {
           const index = cursor++;
           const [start, end] = ranges[index];
-          const r = await fetchWithTimeout(
-            videoUrl,
-            {
-              headers: { "User-Agent": ua, Range: `bytes=${start}-${end}`, ...extraHeaders },
-              redirect: "follow",
-            },
-            45_000
-          );
-          if (!r.ok && r.status !== 206) throw new Error(`HTTP ${r.status}`);
-          const chunkBody = await readBodyLimited(r, chunkSize + 4096);
-          if (chunkBody.tooLarge || !chunkBody.buffer) throw new Error("Chunk de video excede el tamaño esperado");
-          buffers[index] = chunkBody.buffer;
+          try {
+            const r = await fetchWithTimeout(
+              videoUrl,
+              {
+                headers: { "User-Agent": ua, Range: `bytes=${start}-${end}`, ...extraHeaders },
+                redirect: "follow",
+              },
+              45_000
+            );
+            if (!r.ok && r.status !== 206) {
+              await r.body?.cancel?.().catch(() => {});
+              throw new Error(`HTTP ${r.status}`);
+            }
+            const chunkBody = await readBodyLimited(r, chunkSize + 4096);
+            if (chunkBody.tooLarge || !chunkBody.buffer) throw new Error("Chunk de video excede el tamaño esperado");
+            buffers[index] = chunkBody.buffer;
+          } catch (err) {
+            failed = true;
+            throw err;
+          }
         }
       };
       await Promise.all(Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, ranges.length) }, worker));
@@ -651,10 +709,14 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
     35_000
   );
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    throw new Error(`HTTP ${res.status}`);
+  }
 
   const ctype = (res.headers.get("content-type") || "").toLowerCase();
   if (ctype.includes("text/html")) {
+    await res.body?.cancel?.().catch(() => {});
     throw new Error("URL resolved to HTML instead of a video stream");
   }
 
@@ -704,7 +766,6 @@ module.exports = {
   extractFirstUrl,
   getGuildUploadLimitBytes,
   resolveVideoMetadata,
-  downloadVideoBuffer,
   downloadMeta,
   buildDownloadV2Payload,
 };

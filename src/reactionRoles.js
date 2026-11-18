@@ -19,26 +19,38 @@ function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
   const prev = tempRoleTimers.get(key);
   if (prev) clearTimeout(prev);
 
-  const delay = Math.min(2_147_000_000, Math.max(1000, new Date(expiresAt).getTime() - Date.now()));
+  const targetMs = new Date(expiresAt).getTime();
+  if (!Number.isFinite(targetMs)) return;
+
+  const delay = Math.min(2_147_000_000, Math.max(1000, targetMs - Date.now()));
   const timer = setTimeout(async () => {
     tempRoleTimers.delete(key);
     try {
+      if (targetMs > Date.now() + 2000) {
+        scheduleTempRoleExpiry(client, guildId, userId, roleId, new Date(targetMs));
+        return;
+      }
+
       if (mongoose.connection.readyState === 1) {
         const doc = await TempRole.findOne({ guildId, userId, roleId }).lean().catch(() => null);
         if (!doc) return;
-        if (new Date(doc.expiresAt).getTime() > Date.now() + 2000) {
+        const docMs = new Date(doc.expiresAt).getTime();
+        if (Number.isFinite(docMs) && docMs > Date.now() + 2000) {
           scheduleTempRoleExpiry(client, guildId, userId, roleId, doc.expiresAt);
           return;
         }
-        await TempRole.deleteOne({ guildId, userId, roleId }).catch(() => {});
       }
 
       const guild = client.guilds?.cache?.get(guildId) ?? await client.guilds?.fetch?.(guildId).catch(() => null);
-      if (!guild) return;
-      const member = await guild.members.fetch(userId).catch(() => null);
-      const role = guild.roles.cache.get(roleId);
-      if (member && role && member.roles.cache.has(roleId)) {
-        await member.roles.remove(role, "Rol temporal expirado").catch(() => {});
+      if (guild) {
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (member?.roles?.cache?.has(roleId)) {
+          await member.roles.remove(roleId, "Rol temporal expirado").catch(() => {});
+        }
+      }
+
+      if (mongoose.connection.readyState === 1) {
+        await TempRole.deleteOne({ guildId, userId, roleId }).catch(() => {});
       }
     } catch {}
   }, delay);
@@ -108,7 +120,7 @@ function normalizeEmojiKey(emoji) {
 async function applyPanelRoleAction({ client, guild, member, panel, entry, isAddIntent = null }) {
   const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
   const role = guild.roles.cache.get(entry.roleId);
-  if (!role || !me?.permissions?.has?.("ManageRoles") || role.position >= me.roles.highest.position) {
+  if (!role || role.managed || !me?.permissions?.has?.("ManageRoles") || role.position >= me.roles.highest.position) {
     return { error: "hierarchy" };
   }
 
@@ -152,6 +164,17 @@ async function applyPanelRoleAction({ client, guild, member, panel, entry, isAdd
   if (hasRole) {
     await member.roles.remove(role, `Reaction Role (${panel.panelId})`);
   }
+  if (panel.mode === "temp") {
+    const key = tempRoleKey(guild.id, member.id, role.id);
+    const prev = tempRoleTimers.get(key);
+    if (prev) {
+      clearTimeout(prev);
+      tempRoleTimers.delete(key);
+    }
+    if (mongoose.connection.readyState === 1) {
+      await TempRole.deleteOne({ guildId: guild.id, userId: member.id, roleId: role.id }).catch(() => {});
+    }
+  }
   return { action: "removed", role };
 }
 
@@ -162,6 +185,7 @@ async function handleEmojiReactionRole(bot, reaction, user, isAdding) {
   try {
     if (reaction.partial) await reaction.fetch().catch(() => {});
     const message = reaction.message;
+    if (message?.partial) await message.fetch().catch(() => {});
     const panel = await ReactionRolePanel.findOne({ messageId: message.id }).lean().catch(() => null);
     if (!panel?.entries?.length) return;
 
@@ -171,12 +195,13 @@ async function handleEmojiReactionRole(bot, reaction, user, isAdding) {
     );
     if (!entry) return;
 
-    const guild = message.guild;
+    const guild = message.guild ?? bot?.guilds?.cache?.get?.(message.guildId);
+    if (!guild) return;
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (!member) return;
 
     const res = await applyPanelRoleAction({
-      client: bot?.client ?? guild.client,
+      client: bot ?? guild.client,
       guild,
       member,
       panel,
@@ -200,7 +225,6 @@ async function handleEmojiReactionRole(bot, reaction, user, isAdding) {
 module.exports = {
   MAX_PANELS_PER_GUILD,
   MAX_ROLES_PER_GUILD,
-  scheduleTempRoleExpiry,
   grantTempRole,
   restoreTempRoles,
   stopTempRoleTimers,

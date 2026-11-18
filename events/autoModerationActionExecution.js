@@ -17,8 +17,11 @@ const data = {
     if (!execution?.guild) return;
 
     const actionLabel = ACTION_LABELS[execution.action?.type] ?? "Acción de AutoMod";
-    const userLabel = execution.user
-      ? `${execution.user.tag} (\`${execution.userId}\`)`
+    const targetUser =
+      execution.user ??
+      (execution.userId ? await execution.guild.client?.users?.fetch?.(execution.userId).catch(() => null) : null);
+    const userLabel = targetUser
+      ? `${targetUser.tag} (\`${execution.userId}\`)`
       : `\`${execution.userId}\``;
 
     const fields = [
@@ -43,10 +46,10 @@ const data = {
       .setTimestamp();
 
     await sendLog(execution.guild, embed);
-    if (execution.user) {
+    if (targetUser) {
       await postToDramaWatcher({
         guild: execution.guild,
-        targetUser: execution.user,
+        targetUser,
         channelId: execution.channelId ?? null,
         reason: execution.matchedKeyword ? `AutoMod Discord: ${execution.matchedKeyword}` : actionLabel,
         ruleName: "Discord AutoMod",

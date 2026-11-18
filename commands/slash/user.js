@@ -40,12 +40,16 @@ function cleanDecoLabel(raw, fallback) {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
+function isGuildMember(obj) {
+  return Boolean(obj && typeof obj === "object" && obj.roles?.cache && obj.user);
+}
+
 async function resolveUser(ctx, input) {
   const invoker = ctx.user;
   if (!input) return invoker ?? null;
   if (typeof input === "object") return input.user ?? input;
   const match = String(input).trim().match(/^(?:<@!?)?(\d{17,20})>?$/);
-  const client = ctx.bot ?? ctx.client ?? ctx.data?.client;
+  const client = ctx.bot ?? ctx.data?.client;
   if (match && client?.users) return client.users.fetch(match[1]).catch(() => null);
   return null;
 }
@@ -189,7 +193,7 @@ async function sendMemberListCommand(ctx, { logName, getItems, emptyMessage, ren
     const input = ctx.get("usuario") ?? null;
     const invoker = ctx.user ?? ctx.member?.user;
     const member = await resolveMember(ctx, input);
-    if (!member) return ctx.send("No pude encontrar al usuario");
+    if (!isGuildMember(member)) return ctx.send("No pude encontrar al usuario en el servidor");
 
     const items = getItems(member);
     if (!items.length) return ctx.send(emptyMessage);
@@ -327,11 +331,15 @@ const data = {
             if (!baseUser) return ctx.send("No pude encontrar al usuario");
             user = await baseUser.fetch(true).catch(() => baseUser);
           } else {
-            const member = await resolveMember(ctx, input);
-            if (!member) return ctx.send("No pude encontrar al usuario");
-            user = await member.user.fetch(true).catch(() => member.user);
-            fullMember = await member.fetch(true).catch(() => member);
-            colorRol = getMemberColor(member, DARK);
+            const resolved = await resolveMember(ctx, input);
+            if (!resolved) return ctx.send("No pude encontrar al usuario");
+            if (isGuildMember(resolved)) {
+              user = await resolved.user.fetch(true).catch(() => resolved.user);
+              fullMember = await resolved.fetch(true).catch(() => resolved);
+              colorRol = getMemberColor(resolved, DARK);
+            } else {
+              user = await resolved.fetch(true).catch(() => resolved);
+            }
           }
 
           const hasBanner = Boolean(user.banner || fullMember?.banner);
@@ -355,7 +363,7 @@ const data = {
           const baseOptions = [
             { label: "Avatar", value: "avatar", description: "Avatar del usuario" },
             ...(hasBanner ? [{ label: "Banner", value: "banner", description: "Banner del usuario" }] : []),
-            ...(guild
+            ...(fullMember
               ? [
                   { label: "Roles", value: "roles", description: "Roles del usuario" },
                   { label: "Permisos", value: "permissions", description: "Permisos del usuario" },
@@ -472,9 +480,14 @@ const data = {
           let member = null;
 
           if (ctx.guild) {
-            member = await resolveMember(ctx, input);
-            if (!member) return ctx.send("No pude encontrar al usuario");
-            user = member.user;
+            const resolved = await resolveMember(ctx, input);
+            if (!resolved) return ctx.send("No pude encontrar al usuario");
+            if (isGuildMember(resolved)) {
+              member = resolved;
+              user = resolved.user;
+            } else {
+              user = resolved;
+            }
           } else {
             user = await resolveUser(ctx, input);
             if (!user) return ctx.send("No pude encontrar al usuario");
@@ -529,10 +542,14 @@ const data = {
           let member = null;
 
           if (ctx.guild) {
-            member = await resolveMember(ctx, input);
-            if (!member) return ctx.send("No pude encontrar al usuario");
-            user = await member.user.fetch(true).catch(() => member.user);
-            member = await member.fetch(true).catch(() => member);
+            const resolved = await resolveMember(ctx, input);
+            if (!resolved) return ctx.send("No pude encontrar al usuario");
+            if (isGuildMember(resolved)) {
+              user = await resolved.user.fetch(true).catch(() => resolved.user);
+              member = await resolved.fetch(true).catch(() => resolved);
+            } else {
+              user = await resolved.fetch(true).catch(() => resolved);
+            }
           } else {
             user = await resolveUser(ctx, input);
             if (!user) return ctx.send("No pude encontrar al usuario");

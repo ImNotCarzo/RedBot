@@ -600,9 +600,14 @@ function createServerViewCommand(name, description) {
           thirdPartyMode: "ephemeral-view",
           onEnd: "static",
           state: { tab: name },
-          render: ({ view, isEnded }) =>
-            getServerViewBuilder(guild, name, { historyButtonId: isEnded ? null : view.id("history") }).builder,
-          renderStatic: () => getServerViewBuilder(guild, name).builder,
+          render: ({ view, isEnded }) => {
+            const viewData = getServerViewBuilder(guild, name, { historyButtonId: isEnded ? null : view.id("history") });
+            return viewData?.builder ?? ComponentsV2Builder.card({ description: viewData?.error ?? "No disponible", color: RED });
+          },
+          renderStatic: () => {
+            const viewData = getServerViewBuilder(guild, name);
+            return viewData?.builder ?? ComponentsV2Builder.card({ description: viewData?.error ?? "No disponible", color: RED });
+          },
           actions: {
             history: async ({ interaction }) => {
               await replyWithImageHistory(interaction, {
@@ -671,9 +676,10 @@ const data = {
                 : null;
               builder = buildServerRolesCard(guild, roles.length, pageItems, safePage, totalRolePages, { controls });
             } else if (state.tab !== "info") {
-              builder = getServerViewBuilder(guild, state.tab, {
+              const viewData = getServerViewBuilder(guild, state.tab, {
                 historyButtonId: !isEnded && (state.tab === "logo" || state.tab === "banner") ? view.id("history") : null,
-              }).builder;
+              });
+              builder = viewData?.builder ?? buildServerInfoCard(guild, owner);
             } else {
               builder = buildServerInfoCard(guild, owner);
             }

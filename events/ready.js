@@ -1,4 +1,4 @@
-const { ActivityType, REST, Routes } = require("discord.js");
+const { ActivityType, Routes } = require("discord.js");
 const { hydrateAiSessions } = require("../src/ai");
 const { startAutomationWorkers } = require("../src/automation");
 const { restoreTempChannels, startChannelsWorkers } = require("../src/channelsExtra");
@@ -56,15 +56,13 @@ const runReadyStep = (label, fn) =>
   );
 
 async function syncSlashAndContexts(client) {
-  const token = process.env.TOKEN;
-  const clientId = process.env.CLIENT_ID;
+  const clientId = client?.user?.id ?? process.env.CLIENT_ID;
 
   await runReadyStep("Sincronización de comandos (slash y menús contextuales)", () => client.sync());
   log.info("Comandos slash y menús contextuales sincronizados");
 
-  const rest = new REST().setToken(token);
   const commands = await runReadyStep("Lectura de comandos de aplicación", () =>
-    rest.get(Routes.applicationCommands(clientId))
+    client.rest.get(Routes.applicationCommands(clientId))
   );
 
   for (const cmd of commands) {
@@ -74,8 +72,15 @@ async function syncSlashAndContexts(client) {
   log.info("IDs de comandos actualizados");
 }
 
+function stopPresenceRotation() {
+  if (presenceInterval) {
+    clearInterval(presenceInterval);
+    presenceInterval = null;
+  }
+}
+
 function startPresenceRotation(client) {
-  if (presenceInterval) clearInterval(presenceInterval);
+  stopPresenceRotation();
 
   const getActivities = () => [
     `${client.guilds.cache.size} servidores`,
@@ -95,13 +100,12 @@ function startPresenceRotation(client) {
       i = (i + 1) % activities.length;
     } catch (err) {
       log.error("Error al actualizar presencia", { err: sanitizeError(err) });
-      if (presenceInterval) clearInterval(presenceInterval);
-      presenceInterval = null;
+      stopPresenceRotation();
     }
   };
 
   applyPresence();
-  presenceInterval = setInterval(applyPresence, 10000);
+  presenceInterval = setInterval(applyPresence, 30000);
   presenceInterval.unref?.();
 }
 
@@ -163,4 +167,8 @@ const shardResumeEvent = {
   },
 };
 
-module.exports = { data: [readyEvent, shardResumeEvent], ensureReadyRan: (bot) => !didRunReady && bot?.isReady?.() ? readyEvent.code(bot, bot) : null };
+module.exports = {
+  data: [readyEvent, shardResumeEvent],
+  stopPresenceRotation,
+  ensureReadyRan: (bot) => (!didRunReady && bot?.isReady?.() ? readyEvent.code(bot, bot) : null),
+};

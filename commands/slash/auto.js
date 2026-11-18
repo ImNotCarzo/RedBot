@@ -5,6 +5,9 @@ const {
   MAX_EMBED_TEMPLATES,
   MAX_RULES,
   MAX_TIMERS,
+  invalidateAutoRulesCache,
+  invalidateCustomCommandsCache,
+  isSafeRegexPattern,
 } = require("../../src/automation");
 const { AutoRule, AutoTimer, CustomCommand, EmbedTemplate } = require("../../src/database");
 const { parseDuration, formatDuration } = require("../../src/moderation");
@@ -12,6 +15,33 @@ const { createListPaginator, noGuildReply } = require("../../src/runtime");
 const { renderEmbedTemplate } = require("../../src/tagscript");
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
+
+function validateManageableRole(ctx, role) {
+  if (!role) return "No encontré ese rol en el servidor";
+  if (role.id === ctx.guild.id || role.managed) return "Ese rol no puede gestionarse automáticamente";
+  if (!ctx.member?.permissions?.has?.("ManageRoles")) {
+    return "Necesitas el permiso **Administrar roles** para configurar acciones de rol";
+  }
+  if (ctx.member.id !== ctx.guild.ownerId && role.position >= ctx.member.roles.highest.position) {
+    return "No puedes configurar un rol igual o superior a tu rol más alto";
+  }
+  const me = ctx.guild.members?.me;
+  if (me && role.position >= me.roles.highest.position) {
+    return "Ese rol está igual o por encima de mi rol más alto";
+  }
+  return null;
+}
+
+function isValidTemplateUrl(raw) {
+  if (!raw) return true;
+  if (/^\{[^}]+\}$/.test(raw)) return true;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 const data = {
   data: new GroupBuilder({
@@ -46,6 +76,24 @@ const data = {
         const matchType = ctx.get("tipo") || "exact";
         const templateName = ctx.get("embed") ? String(ctx.get("embed")).trim().toLowerCase() : null;
 
+        if (!trigger) return ctx.ephemeral("Indica un disparador válido");
+        if (matchType === "regex" && !isSafeRegexPattern(trigger)) {
+          return ctx.ephemeral("Expresión regular inválida o insegura");
+        }
+
+        const roleTagMatches = [...response.matchAll(/\{(?:addrole|removerole):(\d{17,20})\}/gi)];
+        let canRoles = false;
+        if (roleTagMatches.length) {
+          for (const [, roleId] of roleTagMatches) {
+            const role = ctx.guild.roles.cache.get(roleId) ?? null;
+            const roleErr = validateManageableRole(ctx, role);
+            if (roleErr) return ctx.ephemeral(roleErr);
+          }
+          canRoles = true;
+        } else {
+          canRoles = Boolean(ctx.member?.permissions?.has?.("ManageRoles"));
+        }
+
         const existing = await CustomCommand.findOne({ guildId: ctx.guild.id, trigger }).lean();
         if (!existing) {
           const count = await CustomCommand.countDocuments({ guildId: ctx.guild.id });
@@ -54,12 +102,12 @@ const data = {
           }
         }
 
-        const canRoles = Boolean(ctx.member?.permissions?.has?.("ManageRoles"));
         await CustomCommand.findOneAndUpdate(
           { guildId: ctx.guild.id, trigger },
           { $set: { matchType, response, templateName, authorId: ctx.user.id, grantRoleAllowed: canRoles } },
           { upsert: true, returnDocument: "after" }
         );
+        invalidateCustomCommandsCache(ctx.guild.id);
 
         await ctx.send(ComponentsV2Builder.card({
           title: "Comando personalizado guardado",
@@ -82,6 +130,7 @@ const data = {
         const trigger = String(ctx.get("disparador") ?? "").trim().toLowerCase();
         const res = await CustomCommand.deleteOne({ guildId: ctx.guild.id, trigger });
         if (!res.deletedCount) return ctx.ephemeral("No encontré ese comando personalizado");
+        invalidateCustomCommandsCache(ctx.guild.id);
         await ctx.send(ComponentsV2Builder.card({ title: "Comando eliminado", description: `Se borró \`${trigger}\`.`, color: RED }));
       },
     })
@@ -133,15 +182,26 @@ const data = {
           }
         }
 
+        const rawColor = String(ctx.get("color") ?? "#ff383d").trim();
+        if (!/^#?[0-9a-f]{6}$/i.test(rawColor)) {
+          return ctx.ephemeral("Color hex inválido (usa el formato `#ff383d`)");
+        }
+        const normalizedColor = rawColor.startsWith("#") ? rawColor : `#${rawColor}`;
+        const image = String(ctx.get("imagen") ?? "").trim();
+        const thumbnail = String(ctx.get("thumbnail") ?? "").trim();
+        if (!isValidTemplateUrl(image) || !isValidTemplateUrl(thumbnail)) {
+          return ctx.ephemeral("Las URLs de imagen y miniatura deben comenzar con `http://` o `https://`");
+        }
+
         const doc = await EmbedTemplate.findOneAndUpdate(
           { guildId: ctx.guild.id, name },
           {
             $set: {
               title: String(ctx.get("titulo") ?? "").slice(0, 256),
               description: String(ctx.get("descripcion") ?? "").slice(0, 4000),
-              color: String(ctx.get("color") ?? "#ff383d"),
-              image: String(ctx.get("imagen") ?? ""),
-              thumbnail: String(ctx.get("thumbnail") ?? ""),
+              color: normalizedColor,
+              image,
+              thumbnail,
               footer: String(ctx.get("footer") ?? "").slice(0, 2048),
             },
           },
@@ -273,11 +333,21 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const list = await AutoTimer.find({ guildId: ctx.guild.id }).lean();
         if (!list.length) return ctx.ephemeral("No hay mensajes recurrentes configurados");
-        await ctx.send(ComponentsV2Builder.card({
-          title: `Temporizadores (${list.length}/${MAX_TIMERS})`,
-          description: list.map((t) => `• \`${t.timerId}\` en <#${t.channelId}> cada \`${formatDuration(t.intervalMs)}\``).join("\n"),
-          color: RED,
-        }));
+        const rows = list.map((t) => `• \`${t.timerId}\` en <#${t.channelId}> cada \`${formatDuration(t.intervalMs)}\``);
+        const paginator = createListPaginator({
+          items: rows,
+          ownerId: ctx.user?.id,
+          perPage: 12,
+          render: ({ items, pageIndex, totalPages, controls }) => {
+            const b = new ComponentsV2Builder({ color: RED })
+              .addText(`${V2Text.heading(`Temporizadores (${list.length}/${MAX_TIMERS})`, 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
+              .addSeparator("small")
+              .addText(items.join("\n"));
+            if (controls) b.addSpacer("small").addButtonsRow(controls);
+            return b;
+          },
+        });
+        await paginator.send(ctx);
       },
     })
     .addCommand({
@@ -326,6 +396,16 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const name = String(ctx.get("nombre") ?? "").trim().toLowerCase().slice(0, 64);
+        if (!name) return ctx.ephemeral("Indica un nombre válido");
+        const actionType = ctx.get("accion");
+        const actionValue = String(ctx.get("valor_accion") ?? "").slice(0, 1500);
+        if (actionType === "add_role" || actionType === "remove_role") {
+          const roleId = actionValue.replace(/[<@&>]/g, "").trim();
+          const role = ctx.guild.roles.cache.get(roleId) ?? null;
+          const roleErr = validateManageableRole(ctx, role);
+          if (roleErr) return ctx.ephemeral(roleErr);
+        }
+
         const existing = await AutoRule.findOne({ guildId: ctx.guild.id, name }).lean();
         if (!existing) {
           const count = await AutoRule.countDocuments({ guildId: ctx.guild.id });
@@ -339,13 +419,14 @@ const data = {
               event: ctx.get("evento"),
               conditionType: ctx.get("condicion"),
               conditionValue: String(ctx.get("valor_condicion") ?? "").slice(0, 200),
-              actionType: ctx.get("accion"),
-              actionValue: String(ctx.get("valor_accion") ?? "").slice(0, 1500),
+              actionType,
+              actionValue,
               enabled: true,
             },
           },
           { upsert: true, returnDocument: "after" }
         );
+        invalidateAutoRulesCache(ctx.guild.id);
 
         await ctx.send(ComponentsV2Builder.card({
           title: "Regla de automatización guardada",
@@ -363,6 +444,7 @@ const data = {
         const name = String(ctx.get("nombre") ?? "").trim().toLowerCase();
         const res = await AutoRule.deleteOne({ guildId: ctx.guild.id, name });
         if (!res.deletedCount) return ctx.ephemeral("No encontré esa regla");
+        invalidateAutoRulesCache(ctx.guild.id);
         await ctx.send(ComponentsV2Builder.card({ title: "Regla eliminada", description: `Se eliminó \`${name}\`.`, color: RED }));
       },
     })
@@ -373,11 +455,21 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const list = await AutoRule.find({ guildId: ctx.guild.id }).lean();
         if (!list.length) return ctx.ephemeral("No hay reglas configuradas");
-        await ctx.send(ComponentsV2Builder.card({
-          title: `Reglas (${list.length}/${MAX_RULES})`,
-          description: list.map((r) => `• \`${r.name}\`: **${r.event}** (${r.conditionType}) → \`${r.actionType}\``).join("\n"),
-          color: RED,
-        }));
+        const rows = list.map((r) => `• \`${r.name}\`: **${r.event}** (${r.conditionType}) → \`${r.actionType}\``);
+        const paginator = createListPaginator({
+          items: rows,
+          ownerId: ctx.user?.id,
+          perPage: 12,
+          render: ({ items, pageIndex, totalPages, controls }) => {
+            const b = new ComponentsV2Builder({ color: RED })
+              .addText(`${V2Text.heading(`Reglas (${list.length}/${MAX_RULES})`, 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
+              .addSeparator("small")
+              .addText(items.join("\n"));
+            if (controls) b.addSpacer("small").addButtonsRow(controls);
+            return b;
+          },
+        });
+        await paginator.send(ctx);
       },
     }),
 };

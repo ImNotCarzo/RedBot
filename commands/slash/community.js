@@ -6,6 +6,24 @@ const { avatarUrl, createListPaginator, noGuildReply } = require("../../src/runt
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
 const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function validateAssignableRole(ctx, role) {
+  if (!role || role.id === ctx.guild.id || role.managed) {
+    return "Ese rol no puede asignarse automáticamente";
+  }
+  if (!ctx.member?.permissions?.has?.("ManageRoles")) {
+    return "Necesitas el permiso **Administrar roles** para configurar ese rol";
+  }
+  if (ctx.member.id !== ctx.guild.ownerId && role.position >= ctx.member.roles.highest.position) {
+    return "No puedes configurar un rol igual o superior a tu rol más alto";
+  }
+  const me = ctx.guild.members?.me;
+  if (me && role.position >= me.roles.highest.position) {
+    return "Ese rol está igual o por encima de mi rol más alto";
+  }
+  return null;
+}
 
 const data = {
   data: new GroupBuilder({
@@ -143,17 +161,22 @@ const data = {
         const day = Number.parseInt(dayRaw, 10);
         const month = Number.parseInt(monthRaw, 10);
         const year = ctx.get("anio") ? Number.parseInt(ctx.get("anio"), 10) : null;
-        if (!Number.isFinite(day) || day < 1 || day > 31 || !Number.isFinite(month) || month < 1 || month > 12) {
+        if (
+          !Number.isFinite(month) || month < 1 || month > 12 ||
+          !Number.isFinite(day) || day < 1 || day > DAYS_IN_MONTH[month - 1]
+        ) {
           return ctx.ephemeral("Fecha inválida. Indica día (1-31) y mes (1-12).");
         }
+        const maxYear = new Date().getFullYear();
+        const validYear = Number.isFinite(year) && year > 1920 && year <= maxYear ? year : null;
         await Birthday.findOneAndUpdate(
           { guildId: ctx.guild.id, userId: ctx.user.id },
-          { $set: { day, month, year: year && year > 1920 && year < 2025 ? year : null } },
+          { $set: { day, month, year: validYear } },
           { upsert: true, returnDocument: "after" }
         );
         await ctx.send(ComponentsV2Builder.card({
           title: "Cumpleaños guardado",
-          description: `Tu cumpleaños quedó registrado el **${day} de ${MONTHS[month - 1]}**${year ? ` (${year})` : ""}.`,
+          description: `Tu cumpleaños quedó registrado el **${day} de ${MONTHS[month - 1]}**${validYear ? ` (${validYear})` : ""}.`,
           color: GREEN,
         }));
       },
@@ -206,14 +229,20 @@ const data = {
           setObj["birthdayConfig.enabled"] = true;
         }
         const role = ctx.get("rol");
-        if (role) setObj["birthdayConfig.roleId"] = role.id;
+        if (role) {
+          const roleErr = validateAssignableRole(ctx, role);
+          if (roleErr) return ctx.ephemeral(roleErr);
+          setObj["birthdayConfig.roleId"] = role.id;
+        }
         if (ctx.get("mensaje")) setObj["birthdayConfig.message"] = ctx.get("mensaje").slice(0, 1000);
 
-        const doc = await GuildConfig.findOneAndUpdate(
-          { guildId: ctx.guild.id },
-          Object.keys(setObj).length ? { $set: setObj } : {},
-          { upsert: true, returnDocument: "after" }
-        ).lean();
+        const doc = Object.keys(setObj).length
+          ? await GuildConfig.findOneAndUpdate(
+              { guildId: ctx.guild.id },
+              { $set: setObj },
+              { upsert: true, returnDocument: "after" }
+            ).lean()
+          : await GuildConfig.findOne({ guildId: ctx.guild.id }).select("birthdayConfig").lean();
         const cfg = doc?.birthdayConfig ?? {};
         await ctx.send(ComponentsV2Builder.card({
           title: "Configuración de cumpleaños",
@@ -316,6 +345,8 @@ const data = {
           await InviteReward.deleteOne({ guildId: ctx.guild.id, invitesRequired: reqInv });
           return ctx.send(ComponentsV2Builder.card({ title: "Recompensa eliminada", description: `Se quitó la recompensa de ${reqInv} invitaciones.`, color: RED }));
         }
+        const roleErr = validateAssignableRole(ctx, role);
+        if (roleErr) return ctx.ephemeral(roleErr);
         await InviteReward.findOneAndUpdate(
           { guildId: ctx.guild.id, invitesRequired: reqInv },
           { $set: { roleId: role.id } },

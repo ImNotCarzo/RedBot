@@ -8,6 +8,14 @@ const { getCurrentLang, localizeCommand } = require("./i18n");
 
 const LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
 
+function safeStringify(meta) {
+  try {
+    return JSON.stringify(meta, (_key, val) => (typeof val === "bigint" ? val.toString() : val));
+  } catch {
+    return "[unserializable_meta]";
+  }
+}
+
 class Logger {
   constructor(label, level = process.env.LOG_LEVEL || "info") {
     this.label = label;
@@ -19,8 +27,8 @@ class Logger {
     if (numLevel === undefined || numLevel > this.level) return;
 
     const base = `${new Date().toISOString()} [${this.label}] ${severity.toUpperCase()}: ${message}`;
-    if (Object.keys(meta).length) {
-      console.log(base, JSON.stringify(meta));
+    if (meta && Object.keys(meta).length) {
+      console.log(base, safeStringify(meta));
     } else {
       console.log(base);
     }
@@ -37,15 +45,16 @@ const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
 const THINKING_TEXT = "<a:typing:1484407380291616778>  RedBot está pensando...";
 
 const PROCESS_ERROR_GUARD = Symbol.for("redbot.processErrorHandlersRegistered");
-const SHUTDOWN_TIMEOUT_MS = Number.parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS ?? "15000", 10);
-
-let shuttingDown = false;
-let shutdownHandlersRegistered = false;
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
+
+const SHUTDOWN_TIMEOUT_MS = parsePositiveInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 15000);
+
+let shuttingDown = false;
+let shutdownHandlersRegistered = false;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -97,7 +106,7 @@ async function runWithRetry(task, log, taskName, attempts, baseDelayMs, maxDelay
       if (attempt >= attempts) break;
       const backoff = Math.min(baseDelayMs * (2 ** (attempt - 1)), maxDelayMs);
       log?.warn(`${taskName} falló (intento ${attempt}/${attempts}), reintentando`, {
-        err: err?.message ?? String(err),
+        err: sanitizeError(err),
         backoff,
       });
       await wait(backoff);
@@ -135,27 +144,30 @@ function loadAndRegisterEvents(bot, log = new Logger("EVENT")) {
       const exported = require(path.join(eventsPath, file))?.data;
       const eventDefs = Array.isArray(exported) ? exported : exported ? [exported] : [];
 
-      for (const eventDef of eventDefs) {
-        if (!eventDef?.name || typeof eventDef?.code !== "function") continue;
+      for (const rawDef of eventDefs) {
+        const eventName = rawDef?.name ?? rawDef?.data?.name;
+        const once = Boolean(rawDef?.once ?? rawDef?.data?.once);
+        const code = rawDef?.code;
+        if (!eventName || typeof code !== "function") continue;
 
         const safeHandler = async (...args) => {
           try {
-            await eventDef.code(bot, ...args);
+            await code(bot, ...args);
           } catch (err) {
-            log.error(`Fallo en evento: ${eventDef.name}`, {
-              event: eventDef.name,
+            log.error(`Fallo en evento: ${eventName}`, {
+              event: eventName,
               ...extractEventContext(args),
               err: sanitizeError(err),
             });
           }
         };
 
-        if (eventDef.once) bot.once(eventDef.name, safeHandler);
-        else bot.on(eventDef.name, safeHandler);
+        if (once) bot.once(eventName, safeHandler);
+        else bot.on(eventName, safeHandler);
         loaded++;
       }
     } catch (err) {
-      log?.error(`Error cargando evento: ${file}`, { err: err.message });
+      log?.error(`Error cargando evento: ${file}`, { err: sanitizeError(err) });
     }
   }
 
@@ -163,7 +175,7 @@ function loadAndRegisterEvents(bot, log = new Logger("EVENT")) {
 }
 
 function createBot() {
-  const { getPrefix, DEFAULT_PREFIX } = require("./guild");
+  const { getPrefix, getLang, DEFAULT_PREFIX } = require("./guild");
 
   const bot = new Gralonium({
     ...botOptions,
@@ -182,7 +194,7 @@ function createBot() {
         const trimmed = content.trim();
         if (trimmed === mentionA || trimmed === mentionB) {
           const guildPrefix = guildId ? await getPrefix(guildId) : DEFAULT_PREFIX;
-          const lang = guildId ? await require("./guild").getLang(guildId) : "es";
+          const lang = guildId ? await getLang(guildId) : "es";
           await message.reply({
             content: lang === "en"
               ? `My prefix in this server is \`${guildPrefix}\``
@@ -228,7 +240,7 @@ function registerProcessErrorHandlers(log = new Logger("PROCESS")) {
   });
 }
 
-async function gracefulShutdown(signal, bot, log) {
+async function gracefulShutdown(signal, botOrGetter, log) {
   if (shuttingDown) return;
   shuttingDown = true;
 
@@ -237,7 +249,7 @@ async function gracefulShutdown(signal, bot, log) {
   const forceExitTimer = setTimeout(() => {
     log?.error("Cierre forzado tras timeout");
     process.exit(1);
-  }, Number.isFinite(SHUTDOWN_TIMEOUT_MS) ? SHUTDOWN_TIMEOUT_MS : 15000);
+  }, SHUTDOWN_TIMEOUT_MS);
   forceExitTimer.unref();
 
   try {
@@ -250,9 +262,14 @@ async function gracefulShutdown(signal, bot, log) {
     try { require("./automation").stopAutomationWorkers(); } catch {}
     try { require("./feeds").stopSocialFeedWorker(); } catch {}
     try { require("./community").stopCommunityWorkers(); } catch {}
+    try { require("./reminders").stopReminderTimers?.(); } catch {}
+    try { require("./moderation").stopTempBanTimers?.(); } catch {}
+    try { require("../events/ready").stopPresenceRotation?.(); } catch {}
+    try { await require("./security").closePublicAgent?.(); } catch {}
 
+    const bot = typeof botOrGetter === "function" ? botOrGetter() : botOrGetter;
     if (typeof bot?.destroy === "function") {
-      await bot.destroy().catch((err) => log?.error("Error al cerrar bot", { err: err.message }));
+      await Promise.resolve(bot.destroy()).catch((err) => log?.error("Error al cerrar bot", { err: sanitizeError(err) }));
     }
 
     await closeDatabase(log);
@@ -261,17 +278,17 @@ async function gracefulShutdown(signal, bot, log) {
     process.exit(0);
   } catch (err) {
     clearTimeout(forceExitTimer);
-    log?.error("Error inesperado durante cierre", { err: err.message });
+    log?.error("Error inesperado durante cierre", { err: sanitizeError(err) });
     process.exit(1);
   }
 }
 
-function registerShutdownHandlers(bot, log) {
+function registerShutdownHandlers(botOrGetter, log) {
   if (shutdownHandlersRegistered) return;
   shutdownHandlersRegistered = true;
 
   for (const sig of ["SIGTERM", "SIGINT"]) {
-    process.once(sig, () => gracefulShutdown(sig, bot, log));
+    process.once(sig, () => gracefulShutdown(sig, botOrGetter, log));
   }
 }
 
@@ -313,7 +330,7 @@ function handleCommandError(ctx, err) {
 const commandErrorLog = new Logger("CMD_ERROR");
 
 const avatarUrl = (user, size = 256) => user?.displayAvatarURL?.({ size }) ?? null;
-const roleIconUrl = (role, size = 256) => (role.icon ? role.iconURL({ size }) : null);
+const roleIconUrl = (role, size = 256) => (role?.icon ? role.iconURL?.({ size }) ?? null : null);
 
 function buildActionCard({
   title,
@@ -342,7 +359,7 @@ function failWith(ctx, err, message) {
   if (err?.code === 50013 || err?.code === 50006) return handleCommandError(ctx, err);
   commandErrorLog.error(message, {
     command: ctx?.command?.data?.name,
-    err: err?.stack || err?.message || String(err),
+    err: sanitizeError(err),
   });
   return ctx.ephemeral(ComponentsV2Builder.card({ description: message, color: RED }));
 }
@@ -420,11 +437,13 @@ async function broadcastDm({ guild, embed, soloRolId, excluirRolId, excluirUserI
     let fallidos = 0;
 
     for (let i = 0; i < total; i++) {
-      if (await sendDmWithRetry(members[i], { embeds: [embed], allowedMentions: { parse: [] } })) enviados++;
+      if (shuttingDown) break;
+      const sent = await sendDmWithRetry(members[i], { embeds: [embed], allowedMentions: { parse: [] } });
+      if (sent) enviados++;
       else fallidos++;
 
-      await wait(500);
       if ((i + 1) % 10 === 0 || i + 1 === total) await onProgress?.(i + 1, total);
+      if (sent && i + 1 < total && !shuttingDown) await wait(500);
     }
 
     return { enviados, fallidos, total };
@@ -450,12 +469,12 @@ function buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros
 }
 
 function buildDmAllEmbed({ titulo, texto, author, guild, imagenUrl }) {
-  const avatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
+  const authorAvatarUrl = author.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
   const embed = new EmbedBuilder()
     .setTitle(titulo)
     .setDescription(texto)
     .setColor(RED)
-    .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: avatarUrl })
+    .setFooter({ text: `att: ${author.globalName ?? author.username}`, iconURL: authorAvatarUrl })
     .setThumbnail(guild.iconURL({ size: 512 }));
   if (imagenUrl) embed.setImage(imagenUrl);
   return embed;
@@ -488,5 +507,4 @@ module.exports = {
   broadcastDm,
   buildDmAllEmbed,
   buildDmAllLogEmbed,
-  loadAndRegisterEvents,
 };

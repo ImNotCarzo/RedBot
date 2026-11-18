@@ -8,6 +8,7 @@ const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./t
 const log = new Logger("COMMUNITY", process.env.LOG_LEVEL);
 const inviteCache = new Map(); // guildId -> Map<code, { uses, inviterId }>
 let birthdayInterval = null;
+let isCheckingBirthdays = false;
 
 async function snapshotGuildInvites(guild) {
   if (!guild?.id || !guild.members?.me?.permissions?.has?.(PermissionFlagsBits.ManageGuild)) return;
@@ -39,6 +40,10 @@ function removeCachedInvite(invite) {
   inviteCache.get(invite.guild.id)?.delete(invite.code);
 }
 
+function clearGuildInviteCache(guildId) {
+  if (guildId) inviteCache.delete(guildId);
+}
+
 async function syncInviteRewards(member, inviterId) {
   if (!member?.guild?.id || !inviterId || mongoose.connection.readyState !== 1) return;
   const stat = await InviteStat.findOne({ guildId: member.guild.id, userId: inviterId }).lean().catch(() => null);
@@ -54,7 +59,7 @@ async function syncInviteRewards(member, inviterId) {
 
   for (const rw of rewards) {
     const role = member.guild.roles.cache.get(rw.roleId);
-    if (role && role.position < me.roles.highest.position && !inviterMember.roles.cache.has(role.id)) {
+    if (role && !role.managed && role.position < me.roles.highest.position && !inviterMember.roles.cache.has(role.id)) {
       await inviterMember.roles.add(role, `Recompensa por ${rw.invitesRequired} invitaciones`).catch(() => {});
     }
   }
@@ -65,6 +70,7 @@ async function trackMemberJoinInvite(member) {
   if (!guild?.id || member.user?.bot) return null;
   if (!guild.members?.me?.permissions?.has?.(PermissionFlagsBits.ManageGuild)) return null;
 
+  const hasBaseline = inviteCache.has(guild.id);
   const prev = inviteCache.get(guild.id) ?? new Map();
   const currentInvites = await guild.invites?.fetch?.().catch(() => null);
   if (!currentInvites) return null;
@@ -74,11 +80,13 @@ async function trackMemberJoinInvite(member) {
   for (const inv of currentInvites.values()) {
     const oldUses = prev.get(inv.code)?.uses ?? 0;
     nextMap.set(inv.code, { uses: inv.uses ?? 0, inviterId: inv.inviterId ?? inv.inviter?.id ?? null });
-    if ((inv.uses ?? 0) > oldUses) {
+    if (hasBaseline && (inv.uses ?? 0) > oldUses) {
       used = inv;
     }
   }
   inviteCache.set(guild.id, nextMap);
+
+  if (!hasBaseline) return null;
 
   const inviterId = used?.inviterId ?? used?.inviter?.id ?? null;
   if (!inviterId || mongoose.connection.readyState !== 1) return { inviterId, code: used?.code ?? null, total: null };
@@ -92,7 +100,7 @@ async function trackMemberJoinInvite(member) {
 
   const stat = await InviteStat.findOneAndUpdate(
     { guildId: guild.id, userId: inviterId },
-    { $inc: isFake ? { fake: 1 } : { regular: 1 } },
+    { $inc: isFake ? { regular: 1, fake: 1 } : { regular: 1 } },
     { upsert: true, returnDocument: "after" }
   ).lean().catch(() => null);
 
@@ -102,13 +110,13 @@ async function trackMemberJoinInvite(member) {
 }
 
 async function trackMemberLeaveInvite(member) {
-  if (!member?.guild?.id || !member.id || mongoose.connection.readyState !== 1) return;
+  if (!member?.guild?.id || !member.id || member.user?.bot || mongoose.connection.readyState !== 1) return;
   const join = await InviteJoin.findOneAndDelete({ guildId: member.guild.id, memberId: member.id }).lean().catch(() => null);
   if (!join?.inviterId) return;
 
   await InviteStat.updateOne(
     { guildId: member.guild.id, userId: join.inviterId },
-    { $inc: join.isFake ? { fake: -1 } : { left: 1 } }
+    { $inc: join.isFake ? { fake: -1, left: 1 } : { left: 1 } }
   ).catch(() => {});
 }
 
@@ -171,51 +179,68 @@ async function sendWelcomeOrGoodbye(member, kind, inviteInfo = null) {
 }
 
 async function checkBirthdaysToday(client) {
-  if (!client?.guilds || mongoose.connection.readyState !== 1) return;
-  const now = new Date();
-  const day = now.getUTCDate();
-  const month = now.getUTCMonth() + 1;
-  const year = now.getUTCFullYear();
+  if (isCheckingBirthdays || !client?.guilds || mongoose.connection.readyState !== 1) return;
+  isCheckingBirthdays = true;
+  try {
+    const now = new Date();
+    const day = now.getUTCDate();
+    const month = now.getUTCMonth() + 1;
+    const year = now.getUTCFullYear();
 
-  const due = await Birthday.find({
-    day,
-    month,
-    lastCelebratedYear: { $ne: year },
-  }).lean().catch(() => []);
+    const due = await Birthday.find({
+      day,
+      month,
+      lastCelebratedYear: { $ne: year },
+    }).lean().catch(() => []);
+    if (!due.length) return;
 
-  for (const b of due) {
-    try {
-      await Birthday.updateOne({ _id: b._id }, { $set: { lastCelebratedYear: year } }).catch(() => {});
-      const guild = client.guilds.cache.get(b.guildId) ?? await client.guilds.fetch(b.guildId).catch(() => null);
-      if (!guild) continue;
+    const guildCfgCache = new Map();
 
-      const cfgDoc = await GuildConfig.findOne({ guildId: guild.id }).select("birthdayConfig").lean().catch(() => null);
-      const cfg = cfgDoc?.birthdayConfig;
-      if (!cfg?.enabled) continue;
+    for (const b of due) {
+      try {
+        const guild = client.guilds.cache.get(b.guildId) ?? await client.guilds.fetch(b.guildId).catch(() => null);
+        if (!guild) continue;
 
-      const member = await guild.members.fetch(b.userId).catch(() => null);
-      if (!member) continue;
-
-      if (cfg.roleId) {
-        const role = guild.roles.cache.get(cfg.roleId);
-        const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
-        if (role && me?.permissions?.has?.(PermissionFlagsBits.ManageRoles) && role.position < me.roles.highest.position) {
-          await grantTempRole({ client, guild, member, role, durationMs: 24 * 60 * 60_000, source: "birthday" }).catch(() => {});
+        let cfg = guildCfgCache.get(guild.id);
+        if (cfg === undefined) {
+          const cfgDoc = await GuildConfig.findOne({ guildId: guild.id }).select("birthdayConfig").lean().catch(() => null);
+          cfg = cfgDoc?.birthdayConfig ?? null;
+          guildCfgCache.set(guild.id, cfg);
         }
-      }
+        if (!cfg?.enabled) continue;
 
-      if (cfg.channelId) {
-        const ch = guild.channels.cache.get(cfg.channelId) ?? await guild.channels.fetch(cfg.channelId).catch(() => null);
-        if (ch?.isTextBased?.()) {
-          const age = b.year ? String(year - b.year) : "";
-          const vars = buildTagVariables({ user: member.user, member, guild, channel: ch }, { age });
-          const text = substituteVars(cfg.message || "🎂 ¡Feliz cumpleaños {user}!", vars);
-          await ch.send({ content: text, allowedMentions: { users: [member.id] } }).catch(() => {});
+        const member = await guild.members.fetch(b.userId).catch(() => null);
+        if (!member) continue;
+
+        const claimed = await Birthday.findOneAndUpdate(
+          { _id: b._id, lastCelebratedYear: { $ne: year } },
+          { $set: { lastCelebratedYear: year } }
+        ).lean().catch(() => null);
+        if (!claimed) continue;
+
+        if (cfg.roleId) {
+          const role = guild.roles.cache.get(cfg.roleId);
+          const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+          if (role && !role.managed && me?.permissions?.has?.(PermissionFlagsBits.ManageRoles) && role.position < me.roles.highest.position) {
+            await grantTempRole({ client, guild, member, role, durationMs: 24 * 60 * 60_000, source: "birthday" }).catch(() => {});
+          }
         }
+
+        if (cfg.channelId) {
+          const ch = guild.channels.cache.get(cfg.channelId) ?? await guild.channels.fetch(cfg.channelId).catch(() => null);
+          if (ch?.isTextBased?.()) {
+            const age = b.year ? String(year - b.year) : "";
+            const vars = buildTagVariables({ user: member.user, member, guild, channel: ch }, { age });
+            const text = substituteVars(cfg.message || "🎂 ¡Feliz cumpleaños {user}!", vars);
+            await ch.send({ content: text, allowedMentions: { users: [member.id] } }).catch(() => {});
+          }
+        }
+      } catch (err) {
+        log.warn("Error celebrando cumpleaños", { err: err?.message });
       }
-    } catch (err) {
-      log.warn("Error celebrando cumpleaños", { err: err?.message });
     }
+  } finally {
+    isCheckingBirthdays = false;
   }
 }
 
@@ -232,6 +257,7 @@ function stopCommunityWorkers() {
     clearInterval(birthdayInterval);
     birthdayInterval = null;
   }
+  inviteCache.clear();
 }
 
 module.exports = {
@@ -239,11 +265,11 @@ module.exports = {
   snapshotAllInvites,
   cacheInviteEntry,
   removeCachedInvite,
+  clearGuildInviteCache,
   trackMemberJoinInvite,
   trackMemberLeaveInvite,
   getMemberInviteStats,
   sendWelcomeOrGoodbye,
-  checkBirthdaysToday,
   startCommunityWorkers,
   stopCommunityWorkers,
 };

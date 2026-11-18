@@ -6,6 +6,14 @@ const { noGuildReply, THINKING_TEXT } = require("../../src/runtime");
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
 
+function normalizeFeedAccount(platform, raw) {
+  const clean = String(raw ?? "").trim().slice(0, 128);
+  if (platform === "youtube" && /^UC[\w-]{16,}$/.test(clean)) {
+    return clean;
+  }
+  return clean.toLowerCase();
+}
+
 const data = {
   data: new GroupBuilder({
     name: "feeds",
@@ -36,11 +44,16 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const platform = ctx.get("plataforma");
-        const account = String(ctx.get("cuenta") ?? "").trim().slice(0, 128);
+        if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
+          return ctx.ephemeral("Plataforma inválida");
+        }
+        const rawAccount = String(ctx.get("cuenta") ?? "").trim().slice(0, 128);
+        const storedAccount = normalizeFeedAccount(platform, rawAccount);
         const channel = ctx.get("canal");
+        if (!storedAccount) return ctx.ephemeral("Indica una cuenta válida");
         if (!channel?.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
 
-        const existing = await SocialFeed.findOne({ guildId: ctx.guild.id, platform, account: account.toLowerCase() }).lean();
+        const existing = await SocialFeed.findOne({ guildId: ctx.guild.id, platform, account: storedAccount }).lean();
         if (!existing) {
           const count = await SocialFeed.countDocuments({ guildId: ctx.guild.id, platform });
           const max = PLATFORM_LIMITS[platform] ?? 10;
@@ -50,10 +63,10 @@ const data = {
         }
 
         await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
-        const latest = await fetchLatestForFeed(platform, account).catch(() => null);
+        const latest = await fetchLatestForFeed(platform, rawAccount).catch(() => null);
 
         await SocialFeed.findOneAndUpdate(
-          { guildId: ctx.guild.id, platform, account: account.toLowerCase() },
+          { guildId: ctx.guild.id, platform, account: storedAccount },
           {
             $set: {
               channelId: channel.id,
@@ -69,7 +82,7 @@ const data = {
           title: "Alerta social configurada",
           fields: [
             ["Plataforma", V2Text.code(platform)],
-            ["Cuenta", V2Text.code(account)],
+            ["Cuenta", V2Text.code(rawAccount)],
             ["Canal", `${channel}`],
             ["Estado inicial", latest ? V2Text.code(latest.isLive ? "En directo" : "Sincronizado") : V2Text.code("Pendiente")],
           ],
@@ -97,8 +110,15 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const platform = ctx.get("plataforma");
-        const account = String(ctx.get("cuenta") ?? "").trim().toLowerCase();
-        const res = await SocialFeed.deleteOne({ guildId: ctx.guild.id, platform, account });
+        if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
+          return ctx.ephemeral("Plataforma inválida");
+        }
+        const rawAccount = String(ctx.get("cuenta") ?? "").trim();
+        const account = normalizeFeedAccount(platform, rawAccount);
+        let res = await SocialFeed.deleteOne({ guildId: ctx.guild.id, platform, account });
+        if (!res.deletedCount && account !== rawAccount.toLowerCase()) {
+          res = await SocialFeed.deleteOne({ guildId: ctx.guild.id, platform, account: rawAccount.toLowerCase() });
+        }
         if (!res.deletedCount) return ctx.ephemeral("No encontré esa alerta social");
         await ctx.send(ComponentsV2Builder.card({ title: "Alerta eliminada", description: `Se quitó **${platform}** · \`${account}\`.`, color: RED }));
       },
@@ -136,14 +156,17 @@ const data = {
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
         const platform = ctx.get("plataforma");
+        if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
+          return ctx.ephemeral("Plataforma inválida");
+        }
+        await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
         const account = String(ctx.get("cuenta") ?? "").trim();
         const latest = await fetchLatestForFeed(platform, account).catch(() => null);
         if (!latest || latest.offline) {
           return ctx.ephemeral(latest?.offline ? "El canal está desconectado (offline) ahora mismo." : "No pude obtener publicaciones recientes de esa cuenta.");
         }
-        await dispatchFeedNotification(ctx.bot?.client ?? ctx.guild.client, { channelId: ctx.channel.id, customMessage: "" }, latest);
+        await dispatchFeedNotification(ctx.bot ?? ctx.guild.client, { channelId: ctx.channel.id, customMessage: "" }, latest);
         await ctx.ephemeral("Prueba enviada");
       },
     }),

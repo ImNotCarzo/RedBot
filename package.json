@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node scripts/dev.js",
-    "audit": "npm audit fix"
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
@@ -15,7 +16,8 @@
     "dotenv": "^18.0.4",
     "gralonium": "^0.4.1",
     "groq-sdk": "^1.6.0",
-    "mongoose": "^9.10.3"
+    "mongoose": "^9.10.3",
+    "undici": "^6.29.1"
   },
   "author": "carzo.",
   "license": "MIT"

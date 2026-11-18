@@ -24,7 +24,10 @@ const data = {
   async code(interaction) {
     const subcommand = interaction.options?.getSubcommand?.(false);
     const focused = interaction.options?.getFocused?.(true);
-    if (subcommand !== "translate" || focused?.name !== "idioma") return;
+    if (subcommand !== "translate" || focused?.name !== "idioma") {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
 
     const query = String(focused.value ?? "").trim().toLowerCase();
     const matches = TRANSLATE_LANGUAGES.filter(

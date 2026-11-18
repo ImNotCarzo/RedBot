@@ -52,7 +52,9 @@ const buttonData = {
   }),
   async code(_bot, interaction) {
     if (!interaction?.guildId || !interaction.guild) return;
-    const [, action, extra] = String(interaction.customId ?? "").split(":");
+    const parts = String(interaction.customId ?? "").split(":");
+    const action = parts[1];
+    const extra = parts.slice(2).join(":");
     const lang = await getLang(interaction.guildId).catch(() => "es");
 
     return runWithLang(lang, async () => {
@@ -147,6 +149,12 @@ const buttonData = {
       }
 
       if (action === "close_confirm") {
+        if (!isStaff && interaction.user.id !== ticket.openerId) {
+          return interaction.reply({
+            content: isEn ? "You don't have permission to close this ticket." : "No tienes permisos para cerrar este ticket.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+        }
         await interaction.update(
           ComponentsV2Builder.card({ description: isEn ? "Saving transcript & closing ticket..." : "Guardando transcripción y cerrando ticket...", color: RED }).toPayload()
         ).catch(() => {});
@@ -169,8 +177,11 @@ const selectData = {
     const selectedCategory = interaction.values?.[0] || "General";
     const lang = await getLang(interaction.guildId).catch(() => "es");
 
-    await interaction.message?.edit?.({ components: interaction.message.components }).catch(() => {});
-    return runWithLang(lang, () => handleOpenTicketInteraction(interaction, selectedCategory, lang));
+    return runWithLang(lang, async () => {
+      const res = await handleOpenTicketInteraction(interaction, selectedCategory, lang);
+      await interaction.message?.edit?.({ components: interaction.message.components }).catch(() => {});
+      return res;
+    });
   },
 };
 

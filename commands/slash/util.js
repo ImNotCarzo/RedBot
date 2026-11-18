@@ -1,5 +1,5 @@
 const path = require("path");
-const { PermissionFlagsBits } = require("discord.js");
+const { MessageFlags, PermissionFlagsBits } = require("discord.js");
 const {
   version: djsVersion,
   GroupBuilder,
@@ -12,8 +12,8 @@ const {
 } = require("gralonium");
 const { extractFirstUrl, getGuildUploadLimitBytes, resolveVideoMetadata, downloadMeta, buildDownloadV2Payload } = require("../../src/downloader");
 const { RED, GREEN, YELLOW, USER_APP_CONFIG } = require("../../src/config");
-const { getPrefix, setPrefix, setAfk, sendLog, getLang, setLang, setUserLang, resolveContextLang } = require("../../src/guild");
-const { normalizeLang, runWithLang, t } = require("../../src/i18n");
+const { getPrefix, setPrefix, setAfk, sendLog, setLang, setUserLang, resolveContextLang } = require("../../src/guild");
+const { getCurrentLang, normalizeLang, runWithLang, t } = require("../../src/i18n");
 const {
   Logger,
   THINKING_TEXT,
@@ -191,7 +191,6 @@ const data = {
     data: new CommandBuilder({
       name: "botinfo",
       description: "Información técnica y estadísticas del bot",
-      aliases: ["bot", "info"],
     }),
     params: new ParamsBuilder(),
 
@@ -247,7 +246,6 @@ const data = {
     data: new CommandBuilder({
       name: "invite",
       description: "Enlaces de invitación y servidor de soporte",
-      aliases: ["inv"],
     }),
     params: new ParamsBuilder(),
 
@@ -338,7 +336,6 @@ const data = {
     data: new CommandBuilder({
       name: "afk",
       description: "Activa tu estado AFK (ausente) en el servidor",
-      aliases: ["ausente"],
     }),
     params: new ParamsBuilder()
       .addString({
@@ -383,7 +380,6 @@ const data = {
     data: new CommandBuilder({
       name: "jumbo",
       description: "Amplía un emoji personalizado o estándar en alta resolución",
-      aliases: ["emojijumbo", "bigemoji"],
     }),
     params: new ParamsBuilder()
       .addString({
@@ -456,7 +452,6 @@ const data = {
     data: new CommandBuilder({
       name: "translate",
       description: "Traduce texto a otro idioma",
-      aliases: ["traducir", "trans"],
     }),
     params: new ParamsBuilder()
       .addString({
@@ -473,8 +468,9 @@ const data = {
 
     async code(ctx) {
       await ctx.defer();
-      const texto = ctx.get("texto");
-      const idioma = ctx.get("idioma") ?? require("../../src/i18n").getCurrentLang();
+      const texto = String(ctx.get("texto") ?? "").trim().slice(0, 3000);
+      if (!texto) return ctx.ephemeral("Debes ingresar texto para traducir");
+      const idioma = ctx.get("idioma") ?? getCurrentLang();
 
       try {
         const { translate } = require("@vitalets/google-translate-api");
@@ -510,7 +506,6 @@ const data = {
     data: new CommandBuilder({
       name: "download",
       description: "Descarga un video desde un enlace (TikTok, X, Instagram, Reddit)",
-      aliases: ["dl", "video", "bajar"],
       cooldown: { seconds: 8, bucket: "USER" },
     }),
     params: new ParamsBuilder()
@@ -630,18 +625,26 @@ const data = {
         if (!ctx.interaction && statusMsg && typeof statusMsg.edit === "function") {
           return statusMsg.edit(builder.toPayload());
         }
-        const sent = await ctx.send(builder);
-        if (!statusMsg) statusMsg = sent;
-        return sent;
+        try {
+          const sent = await ctx.send(builder);
+          if (!statusMsg) statusMsg = sent;
+          return sent;
+        } catch {
+          if (ctx.channel?.send) {
+            return ctx.channel.send(builder.toPayload());
+          }
+          return null;
+        }
       };
 
       const author = ctx.user;
+      const excludedUser = usuarioExcluido?.user ?? usuarioExcluido ?? null;
       const embed = buildDmAllEmbed({ titulo, texto, author, guild: ctx.guild, imagenUrl: imagen?.url });
       const guildIcon = ctx.guild.iconURL({ size: 256 });
       const displayFilters = [
         soloRol ? ["Solo rol", `${soloRol}`] : null,
         rolExcluido ? ["Rol excluido", `${rolExcluido}`] : null,
-        usuarioExcluido ? ["Usuario excluido", `${usuarioExcluido.user.tag}`] : null,
+        excludedUser ? ["Usuario excluido", `${excludedUser.tag}`] : null,
       ].filter(Boolean);
 
       const result = await broadcastDm({
@@ -649,7 +652,7 @@ const data = {
         embed,
         soloRolId: soloRol?.id,
         excluirRolId: rolExcluido?.id,
-        excluirUserId: usuarioExcluido?.id,
+        excluirUserId: excludedUser?.id,
         onProgress: (done, total) => {
           const pct = total > 0 ? Math.round((done / total) * 100) : 0;
           return sendStatus(
@@ -681,7 +684,7 @@ const data = {
       const filtrosLog = [
         soloRol ? `Solo rol: ${soloRol} (\`${soloRol.id}\`)` : null,
         rolExcluido ? `Rol excluido: ${rolExcluido} (\`${rolExcluido.id}\`)` : null,
-        usuarioExcluido ? `Usuario excluido: ${usuarioExcluido.user.tag} (\`${usuarioExcluido.id}\`)` : null,
+        excludedUser ? `Usuario excluido: ${excludedUser.tag} (\`${excludedUser.id}\`)` : null,
       ].filter(Boolean);
 
       await sendLog(ctx.guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros: filtrosLog })).catch(() => null);
@@ -777,7 +780,6 @@ const remindCommand = {
   data: new CommandBuilder({
     name: "remind",
     description: "Programa un recordatorio personal",
-    aliases: ["recordar"],
   }),
   params: new ParamsBuilder()
     .addString({
@@ -839,7 +841,6 @@ const chooseCommand = {
   data: new CommandBuilder({
     name: "choose",
     description: "Selecciona una opción aleatoria de una lista",
-    aliases: ["elegir", "escoger", "pick"],
   }),
   params: new ParamsBuilder().addString({
     name: "opciones",
@@ -910,7 +911,6 @@ const remindersCommand = {
   data: new CommandBuilder({
     name: "reminders",
     description: "Lista o cancela tus recordatorios activos",
-    aliases: ["recordatorios", "myreminders"],
   }),
   params: new ParamsBuilder(),
 
@@ -1009,7 +1009,6 @@ const setlangCommand = {
   data: new CommandBuilder({
     name: "setlang",
     description: "Configura o consulta el idioma del servidor o tu idioma personal",
-    aliases: ["lang", "idioma"],
   }),
   params: new ParamsBuilder().addString({
     name: "idioma",
@@ -1099,18 +1098,19 @@ const setlangCommand = {
           render: ({ state, view: activeView, isEnded }) => buildLangPanel(state.lang, activeView, isEnded),
           renderStatic: ({ state }) => buildLangPanel(state.lang, null, true),
           actions: {
-            lang: async ({ parts, interaction, setState, state }) => {
+            lang: async ({ parts, interaction, setState, state, view: activeView }) => {
               const target = parts[0] === "en" ? "en" : "es";
               if (isGuild && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
                 await interaction.reply({
                   content: t(state.lang, "lang.no_perm"),
-                  flags: 64,
+                  flags: MessageFlags.Ephemeral,
                 }).catch(() => {});
                 return false;
               }
               const updated = isGuild
                 ? await setLang(ctx.guild.id, target, { source: "manual" })
                 : await setUserLang(ctx.user.id, target);
+              activeView._i18nLang = updated;
               setState({ lang: updated });
             },
           },

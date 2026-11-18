@@ -1,3 +1,5 @@
+const { EmbedBuilder, ModalBuilder } = require("discord.js");
+
 const STRINGS = {
   es: {
     "error.guild_only": "Este comando solo se puede usar en servidores",
@@ -268,7 +270,6 @@ const EXACT_ES_TO_EN = {
   // User & Badges
   "Sin insignias": "No badges",
   "Insignias": "Badges",
-  "Color del rol": "Role color",
   "Cuenta creada": "Account created",
   "Servidor": "Server",
   "Ingreso": "Joined",
@@ -323,7 +324,6 @@ const EXACT_ES_TO_EN = {
   "Colaborador Restringido": "Restricted Collaborator",
 
   // Channel
-  "Canal": "Channel",
   "Detalle": "Details",
   "No se pudo obtener el canal": "Could not fetch the channel",
   "Desconocido": "Unknown",
@@ -444,7 +444,6 @@ const EXACT_ES_TO_EN = {
   "Usuario desbaneado": "User unbanned",
   "No se pudo desbanear al usuario, verifica que el ID sea correcto": "Could not unban user, verify the ID is correct",
   "Usuario softbaneado": "User softbanned",
-  "Mensajes": "Messages",
   "El usuario puede volver a entrar al servidor": "The user can rejoin the server",
   "No pude softbanear al usuario": "Could not softban user",
   "Duración inválida. Usa: `30s`, `10m`, `2h`, `1d`": "Invalid duration. Use: `30s`, `10m`, `2h`, `1d`",
@@ -528,7 +527,6 @@ const EXACT_ES_TO_EN = {
   "Google Translate está saturado, intenta en unos segundos": "Google Translate is rate-limited, try again in a few seconds",
   "No se pudo conectar con el servicio de traducción": "Could not connect to the translation service",
   "Debes proporcionar un enlace válido (`https://...`)": "You must provide a valid URL (`https://...`)",
-  "No pude extraer ningún video de ese enlace. Verifica que sea público y contenga un video.": "Could not extract any video from that link. Make sure it is public and contains a video.",
   "No se pudo descargar el video en este momento. Intenta con otro enlace.": "Could not download the video right now. Try another link.",
   "Debes adjuntar una imagen": "You must attach an image",
   "El archivo debe ser una imagen (jpg, png, gif, webp)": "The file must be an image (jpg, png, gif, webp)",
@@ -1038,7 +1036,6 @@ function translateComponentNode(node, lang) {
 
 function translateEmbed(embed, lang = "en") {
   if (lang !== "en" || !embed) return embed;
-  const { EmbedBuilder } = require("discord.js");
   const json = typeof embed.toJSON === "function" ? { ...embed.toJSON() } : { ...(embed.data ?? embed) };
 
   if (typeof json.title === "string") json.title = translateText(json.title, lang);
@@ -1058,7 +1055,6 @@ function translateEmbed(embed, lang = "en") {
 
 function translateModal(modal, lang = "en") {
   if (lang !== "en" || !modal) return modal;
-  const { ModalBuilder } = require("discord.js");
   const json = typeof modal.toJSON === "function" ? { ...modal.toJSON() } : { ...modal };
   if (typeof json.title === "string") json.title = translateText(json.title, lang);
   if (Array.isArray(json.components)) {
@@ -1086,30 +1082,38 @@ function translatePayload(payload, lang = getCurrentLang()) {
 
 const INTERACTION_I18N_WRAPPED = Symbol.for("redbot.interactionI18nWrapped");
 
-function wrapInteractionForLang(interaction, lang) {
-  if (lang !== "en" || !interaction || typeof interaction !== "object" || interaction[INTERACTION_I18N_WRAPPED]) {
+function wrapInteractionForLang(interaction, lang, getDynamicLang = null) {
+  if (!interaction || typeof interaction !== "object" || interaction[INTERACTION_I18N_WRAPPED]) {
+    return interaction;
+  }
+  if (lang !== "en" && typeof getDynamicLang !== "function") {
     return interaction;
   }
   interaction[INTERACTION_I18N_WRAPPED] = true;
+
+  const resolveLang = () => (typeof getDynamicLang === "function" ? getDynamicLang() : null) ?? langStorage.getStore() ?? lang;
 
   for (const method of ["reply", "update", "followUp", "editReply"]) {
     if (typeof interaction[method] === "function") {
       const orig = interaction[method].bind(interaction);
       interaction[method] = (payload, ...rest) => {
-        const cur = getCurrentLang() || lang;
+        const cur = resolveLang();
         return orig(cur === "en" ? translatePayload(payload, cur) : payload, ...rest);
       };
     }
   }
   if (typeof interaction.showModal === "function") {
     const origShow = interaction.showModal.bind(interaction);
-    interaction.showModal = (modal, ...rest) => origShow(translateModal(modal, lang), ...rest);
+    interaction.showModal = (modal, ...rest) => {
+      const cur = resolveLang();
+      return origShow(cur === "en" ? translateModal(modal, cur) : modal, ...rest);
+    };
   }
   if (typeof interaction.awaitModalSubmit === "function") {
     const origAwait = interaction.awaitModalSubmit.bind(interaction);
     interaction.awaitModalSubmit = async (...args) => {
       const sub = await origAwait(...args);
-      return wrapInteractionForLang(sub, lang);
+      return wrapInteractionForLang(sub, resolveLang(), getDynamicLang);
     };
   }
   return interaction;
@@ -1121,18 +1125,7 @@ function installV2I18nHooks() {
   if (globalThis[V2_HOOKS_INSTALLED]) return;
   globalThis[V2_HOOKS_INSTALLED] = true;
 
-  const { Gralonium, ComponentsV2Builder, V2View } = require("gralonium");
-
-  if (typeof Gralonium?.prototype?.load === "function") {
-    const origLoad = Gralonium.prototype.load;
-    Gralonium.prototype.load = async function (...args) {
-      const res = await origLoad.apply(this, args);
-      if (String(args[0] ?? "").toLowerCase().includes("commands")) {
-        require("./adapter").wrapPrefixedCommands?.();
-      }
-      return res;
-    };
-  }
+  const { ComponentsV2Builder, V2View } = require("gralonium");
 
   const origBuilderToPayload = ComponentsV2Builder.prototype.toPayload;
   ComponentsV2Builder.prototype.toPayload = function (options = {}) {
@@ -1165,17 +1158,16 @@ function installV2I18nHooks() {
 
   const origViewAttach = V2View.prototype.attach;
   V2View.prototype.attach = function (messageTarget, collectorOptions = {}) {
+    const viewSelf = this;
     const cur = langStorage.getStore();
-    if (!this._i18nLang && cur) this._i18nLang = cur;
-    const lang = this._i18nLang || cur || "es";
-    if (lang !== "en") {
-      return origViewAttach.call(this, messageTarget, collectorOptions);
-    }
+    if (!viewSelf._i18nLang && cur) viewSelf._i18nLang = cur;
+    const initialLang = viewSelf._i18nLang || cur || "es";
+    const getViewLang = () => viewSelf._i18nLang || initialLang;
 
     const msg = messageTarget?.resource?.message ?? messageTarget?.message ?? messageTarget;
     const origCreate = msg?.createMessageComponentCollector;
     if (typeof origCreate !== "function") {
-      return origViewAttach.call(this, messageTarget, collectorOptions);
+      return origViewAttach.call(viewSelf, messageTarget, collectorOptions);
     }
 
     msg.createMessageComponentCollector = function (...cArgs) {
@@ -1185,8 +1177,9 @@ function installV2I18nHooks() {
         collector.on = function (ev, listener) {
           if (typeof listener !== "function") return origOn(ev, listener);
           return origOn(ev, function (...evArgs) {
-            return runWithLang(lang, () => {
-              if (ev === "collect" && evArgs[0]) wrapInteractionForLang(evArgs[0], lang);
+            const activeLang = getViewLang();
+            return runWithLang(activeLang, () => {
+              if (ev === "collect" && evArgs[0]) wrapInteractionForLang(evArgs[0], activeLang, getViewLang);
               return listener.apply(this, evArgs);
             });
           });
@@ -1196,7 +1189,7 @@ function installV2I18nHooks() {
     };
 
     try {
-      return origViewAttach.call(this, messageTarget, collectorOptions);
+      return origViewAttach.call(viewSelf, messageTarget, collectorOptions);
     } finally {
       if (msg.createMessageComponentCollector !== origCreate) {
         delete msg.createMessageComponentCollector;
@@ -1486,37 +1479,6 @@ const COMMAND_DESCRIPTION_ES_TO_EN = {
   "Configura o quita un rol de recompensa por invitaciones": "Set or remove an invite milestone role reward",
   "Cantidad de invitaciones requeridas": "Required invite count",
   "Rol recompensa (omitir para eliminar)": "Reward role (omit to remove)",
-  "Economía del servidor, tienda virtual e inventario": "Server economy, virtual shop, and inventory",
-  "Consulta tu saldo o el de otro usuario": "Check your balance or another user's",
-  "Reclama tu recompensa diaria de economía": "Claim your daily economy reward",
-  "Trabaja para ganar monedas en el servidor": "Work to earn server currency",
-  "Transfiere monedas de tu saldo a otro usuario": "Transfer currency to another user",
-  "Destinatario": "Recipient",
-  "Cantidad a transferir": "Amount to transfer",
-  "Apuesta monedas a cara o cruz": "Bet currency on heads or tails",
-  "Cara o cruz": "Heads or tails",
-  "Cantidad a apostar": "Bet amount",
-  "Explora los artículos y roles disponibles en la tienda": "Browse items and roles in the server shop",
-  "Compra un artículo o rol de la tienda usando su ID": "Buy a shop item or role by ID",
-  "ID del artículo (ver /economy shop)": "Item ID (see /economy shop)",
-  "Muestra los artículos de tu inventario": "Show items in your inventory",
-  "Usa y consume un artículo de tu inventario": "Use and consume an inventory item",
-  "ID del artículo a usar": "Item ID to use",
-  "Ranking de los miembros más ricos del servidor": "Leaderboard of richest server members",
-  "Añade un artículo o rol a la tienda del servidor": "Add an item or role to the server shop",
-  "Nombre del artículo": "Item name",
-  "Precio en monedas": "Price in currency",
-  "Descripción (opcional)": "Description (optional)",
-  "Rol que entrega al comprar (opcional)": "Role granted on purchase (optional)",
-  "Elimina un artículo de la tienda por su ID": "Remove an item from the shop by ID",
-  "ID del artículo": "Item ID",
-  "Da monedas a un usuario (admin)": "Grant currency to a user (admin)",
-  "Cantidad": "Amount",
-  "Quita monedas a un usuario (admin)": "Remove currency from a user (admin)",
-  "Personaliza la moneda, diaria y trabajo del servidor": "Customize currency, daily, and work payouts",
-  "Nombre de la moneda": "Currency name",
-  "Emoji de la moneda": "Currency emoji",
-  "Cantidad del comando daily": "Daily reward amount",
   "Alertas instantáneas de YouTube, Twitch, Kick, TikTok y Reddit": "Instant alerts for YouTube, Twitch, Kick, TikTok, and Reddit",
   "Suscribe un canal de Discord a notificaciones sociales": "Subscribe a Discord channel to social alerts",
   "Red o plataforma social": "Social platform",
@@ -1529,27 +1491,6 @@ const COMMAND_DESCRIPTION_ES_TO_EN = {
   "Lista las alertas sociales activas del servidor": "List active social feeds in the server",
   "Prueba manualmente una alerta social y muestra su última publicación": "Manually test a social feed and preview latest post",
   "Cuenta o subreddit": "Account or subreddit",
-  "Sistema de niveles, experiencia, ranking y recompensas": "Leveling system, XP, leaderboard, and role rewards",
-  "Muestra tu nivel, XP y posición en el servidor": "Show your level, XP, and server rank",
-  "Tabla de clasificación de niveles del servidor": "Server levels leaderboard",
-  "Configura el sistema de niveles y anuncios del servidor": "Configure server XP system and level-up announcements",
-  "Activar o desactivar XP": "Enable or disable XP",
-  "Canal para anuncios de subida de nivel": "Channel for level-up announcements",
-  "Mensaje ({user}, {level}, {xp})": "Message ({user}, {level}, {xp})",
-  "Segundos de espera entre mensajes con XP (5-600)": "XP cooldown in seconds between messages (5-600)",
-  "Mantener roles de niveles anteriores": "Keep roles from previous levels",
-  "Asigna una recompensa de rol automática al alcanzar un nivel": "Assign an automatic role reward at a given level",
-  "Nivel requerido (1-200)": "Required level (1-200)",
-  "Rol a otorgar": "Role to grant",
-  "Elimina una recompensa de rol por nivel": "Remove a level role reward",
-  "Nivel de la recompensa": "Reward level",
-  "Lista las recompensas de rol por nivel del servidor": "List server level role rewards",
-  "Suma experiencia (XP) a un usuario": "Add experience (XP) to a user",
-  "Cantidad de XP a sumar": "Amount of XP to add",
-  "Establece el nivel exacto de un usuario": "Set a user's exact level",
-  "Nivel (0-200)": "Level (0-200)",
-  "Reinicia los niveles de un usuario o de todo el servidor": "Reset XP for a user or the whole server",
-  "Usuario (omitir para reiniciar todo el servidor)": "User (omit to reset entire server)",
   "Configura el filtro automático ampliado y respuestas personalizadas": "Configure extended AutoMod filter and custom responses",
   "Activar o desactivar AutoMod": "Enable or disable AutoMod",
   "Sanción al detectar infracción": "Sanction on rule violation",
@@ -1577,10 +1518,6 @@ const COMMAND_DESCRIPTION_ES_TO_EN = {
   "Asigna un rol temporal a un usuario que se quita solo al expirar": "Assign a temporary role that auto-expires",
   "Rol temporal": "Temporary role",
   "Duración (ej: 30m, 2h, 7d)": "Duration (e.g. 30m, 2h, 7d)",
-  "Personaliza el estado y actividad global del bot (solo dueño)": "Customize global bot status and activity (owner only)",
-  "Texto del estado (omitir para restaurar rotación)": "Status text (omit to restore rotation)",
-  "Tipo de actividad": "Activity type",
-  "Presencia": "Presence",
   "Sistema de tickets de soporte y transcripciones": "Support tickets and transcript system",
   "Configura categoría, rol de soporte y canal de transcripciones": "Configure ticket category, support role, and transcript logs",
   "Categoría donde se crearán los tickets": "Category where tickets will be created",
@@ -1653,8 +1590,6 @@ const CHOICE_NAME_ES_TO_EN = {
   "Listar": "List",
   "Activar": "Enable",
   "Desactivar": "Disable",
-  "Cara": "Heads",
-  "Cruz": "Tails",
   "YouTube": "YouTube",
   "Twitch": "Twitch",
   "Kick": "Kick",
@@ -1674,13 +1609,6 @@ const CHOICE_NAME_ES_TO_EN = {
   "Único (solo 1 por panel)": "Unique (only 1 per panel)",
   "Verificación (solo poner)": "Verify (add only)",
   "Temporal (expira tras tiempo)": "Temporary (auto-expires)",
-  "Jugando": "Playing",
-  "Viendo": "Watching",
-  "Escuchando": "Listening",
-  "Compitiendo": "Competing",
-  "No molestar": "Do Not Disturb",
-  "En línea": "Online",
-  "Ausente": "Idle",
 };
 
 const CONTEXT_MENU_NAME_ES_TO_EN = {
@@ -1761,21 +1689,13 @@ function localizeCommand(cmdJson) {
 installV2I18nHooks();
 
 module.exports = {
-  STRINGS,
-  COMMAND_DESCRIPTION_ES_TO_EN,
-  CHOICE_NAME_ES_TO_EN,
-  CONTEXT_MENU_NAME_ES_TO_EN,
   normalizeLang,
   detectLocaleLang,
   t,
   getCurrentLang,
   runWithLang,
-  translateText,
-  translateComponentNode,
   translateEmbed,
-  translateModal,
   translatePayload,
   wrapInteractionForLang,
-  installV2I18nHooks,
   localizeCommand,
 };

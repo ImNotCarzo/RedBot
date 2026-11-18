@@ -255,11 +255,15 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
       togglebots: async ({ state, setState }) => {
         if (!state.joinRoleDoc?.roleId) return false;
         const nextIgnore = !state.joinRoleDoc.ignoreBots;
-        await JoinRole.findOneAndUpdate(
+        const updated = await JoinRole.findOneAndUpdate(
           { guildId: guild.id },
-          { ignoreBots: nextIgnore },
-          { upsert: true }
-        );
+          { $set: { ignoreBots: nextIgnore } },
+          { returnDocument: "after" }
+        ).lean();
+        if (!updated) {
+          setState({ joinRoleDoc: null });
+          return;
+        }
         setState({ joinRoleDoc: { ...state.joinRoleDoc, ignoreBots: nextIgnore } });
       },
       clearjoin: async ({ setState }) => {
@@ -294,9 +298,10 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
         }
         return false;
       },
-      lang: async ({ state, setState }) => {
+      lang: async ({ state, setState, view: activeView }) => {
         const nextLang = state.lang === "en" ? "es" : "en";
         await setLang(guild.id, nextLang);
+        activeView._i18nLang = nextLang;
         setState({ lang: nextLang });
       },
       warnauto: async ({ state, setState }) => {
@@ -335,11 +340,11 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
         if (typeof onOpenCustomBot !== "function") return false;
         activeView.stop("switched");
         await interaction.deferUpdate().catch(() => {});
-        await onOpenCustomBot({
-          ...ctx,
+        const proxyCtx = Object.assign(Object.create(ctx), {
           message: null,
           send: (payload) => interaction.followUp(typeof payload?.toPayload === "function" ? payload.toPayload() : payload),
         });
+        await onOpenCustomBot(proxyCtx);
         return false;
       },
     },
@@ -349,6 +354,5 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
 }
 
 module.exports = {
-  buildSetupCard,
   sendServerSetupPanel,
 };

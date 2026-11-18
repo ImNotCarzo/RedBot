@@ -1,6 +1,7 @@
 const { AuditLogEvent, ChannelType, ComponentType, MessageFlags, PermissionFlagsBits } = require("discord.js");
 const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { RED } = require("../src/config");
+const { snapshotGuildInvites } = require("../src/community");
 const {
   detectDefaultGuildLang,
   getLang,
@@ -93,6 +94,7 @@ const event = {
     const { lang: initialLang, source } = await resolveInitialGuildLang(guild);
 
     await setLang(guild.id, initialLang, { source });
+    snapshotGuildInvites(guild).catch(() => {});
     log.info("Bot añadido a servidor", {
       guildId: guild.id,
       preferredLocale: guild.preferredLocale ?? null,
@@ -139,6 +141,10 @@ const event = {
         } catch (err) {
           log.warn("Error al cambiar idioma en welcome card", { err: sanitizeError(err) });
         }
+      });
+
+      collector.on("end", () => {
+        ComponentsV2Builder.disableMessageComponents(sent).catch(() => {});
       });
     } catch (err) {
       log.warn("No se pudo enviar tarjeta de bienvenida", {

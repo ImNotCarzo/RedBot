@@ -33,16 +33,21 @@ const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
 const SAFE_MENTIONS = { parse: [], repliedUser: false };
 
-async function handleAfkChecks(message, prefix) {
+async function handleAfkChecks(message, prefix, botId) {
   if (!message.guildId || message.author.bot) return;
 
   let cachedLang = null;
   const resolveLang = async () => (cachedLang ??= await getLang(message.guildId).catch(() => "es"));
 
   const content = message.content?.trim() ?? "";
-  const isInvokingAfk =
-    content.startsWith(prefix) &&
-    /^(afk|ausente)(\s|$)/i.test(content.slice(prefix.length).trim());
+  let afterPrefix = null;
+  if (content.startsWith(prefix)) {
+    afterPrefix = content.slice(prefix.length).trim();
+  } else if (botId) {
+    const mentionMatch = content.match(new RegExp(`^<@!?${botId}>\\s*([\\s\\S]*)$`));
+    if (mentionMatch) afterPrefix = mentionMatch[1].trim();
+  }
+  const isInvokingAfk = afterPrefix !== null && /^(afk|ausente)(\s|$)/i.test(afterPrefix);
 
   if (!isInvokingAfk) {
     const authorAfk = await getAfk(message.guildId, message.author.id);
@@ -97,47 +102,52 @@ const event = {
   name: "messageCreate",
   once: false,
   async code(_bot, message) {
+    if (!message?.author || message.author.bot || message.webhookId) return;
+
+    const botId = _bot?.user?.id ?? null;
+
+    if (message.guildId) {
+      const blocked = await evaluateMessageAutomod(message).catch(() => false);
+      if (blocked) return;
+    }
+
+    const prefix = message.guildId
+      ? await getPrefix(message.guildId).catch(() => DEFAULT_PREFIX)
+      : DEFAULT_PREFIX;
+    await handleAfkChecks(message, prefix, botId).catch(() => {});
+
+    if (message.guildId) {
+      handleStickyOnMessage(message).catch(() => {});
+      dispatchAutoRules("message", {
+        guild: message.guild,
+        message,
+        member: message.member,
+        channel: message.channel,
+      }).catch(() => {});
+      handleCustomCommandsOnMessage(message, prefix).catch(() => {});
+    }
+
+    if (!message.reference?.messageId || !botId) return;
+
+    const rawPregunta = message.content?.trim() ?? "";
+    const imageUrl = extractReplyImageUrl(message);
+    if (!rawPregunta && !imageUrl) return;
+
+    // Evitar conflicto si el usuario está ejecutando un comando con prefijo o mención mientras hace reply
+    if (rawPregunta.startsWith(prefix)) return;
+    if (new RegExp(`^<@!?${botId}>(?:\\s|$)`).test(rawPregunta)) return;
+
+    const repliedMsg =
+      message.channel.messages.cache.get(message.reference.messageId) ??
+      (await message.channel.messages.fetch(message.reference.messageId).catch(() => null));
+
+    // Solo procesar si el mensaje al que se responde es de este bot
+    if (!repliedMsg || repliedMsg.author?.id !== botId) return;
+
+    // Ignorar replies a embeds interactivos de menús (como /help, /user info, /server info) que tienen componentes activos
+    if (repliedMsg.components?.length > 0 && !repliedMsg.embeds?.[0]?.author) return;
+
     try {
-      if (message.author.bot) return;
-
-      if (message.guildId) {
-        const blocked = await evaluateMessageAutomod(message).catch(() => false);
-        if (blocked) return;
-      }
-
-      const prefix = message.guildId ? await getPrefix(message.guildId) : DEFAULT_PREFIX;
-      await handleAfkChecks(message, prefix).catch(() => {});
-
-      if (message.guildId) {
-        handleStickyOnMessage(message).catch(() => {});
-        dispatchAutoRules("message", {
-          guild: message.guild,
-          message,
-          member: message.member,
-          channel: message.channel,
-        }).catch(() => {});
-        handleCustomCommandsOnMessage(message, prefix).catch(() => {});
-      }
-
-      if (!message.reference?.messageId) return;
-
-      const rawPregunta = message.content?.trim() ?? "";
-      const imageUrl = extractReplyImageUrl(message);
-      if (!rawPregunta && !imageUrl) return;
-
-      // Evitar conflicto si el usuario está ejecutando un comando con prefijo mientras hace reply
-      if (rawPregunta.startsWith(prefix)) return;
-
-      const repliedMsg =
-        message.channel.messages.cache.get(message.reference.messageId) ??
-        (await message.channel.messages.fetch(message.reference.messageId).catch(() => null));
-
-      // Solo procesar si el mensaje al que se responde es de este bot
-      if (!repliedMsg || repliedMsg.author.id !== _bot.user.id) return;
-
-      // Ignorar replies a embeds interactivos de menús (como /help, /user info, /server info) que tienen componentes activos
-      if (repliedMsg.components?.length > 0 && !repliedMsg.embeds?.[0]?.author) return;
-
       await message.channel.sendTyping().catch(() => {});
 
       const lang = await resolveContextLang({

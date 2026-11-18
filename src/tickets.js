@@ -14,8 +14,11 @@ const { RED, GREEN } = require("./config");
 const { GuildConfig, Ticket } = require("./database");
 const { getCurrentLang } = require("./i18n");
 const { Logger } = require("./runtime");
+const { escapeHtml } = require("./security");
 
 const log = new Logger("TICKETS", process.env.LOG_LEVEL);
+const openingTickets = new Set();
+const closingTickets = new Set();
 
 async function getTicketConfig(guildId) {
   const defaults = {
@@ -47,15 +50,6 @@ async function updateTicketConfig(guildId, patch) {
     { upsert: true, returnDocument: "after" }
   ).lean();
   return doc?.ticketConfig ?? null;
-}
-
-function escapeHtml(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function isValidMenuEmoji(raw) {
@@ -134,14 +128,24 @@ function parseTicketMenuOptions(rawInput) {
           description = seg1.slice(0, 100);
           bodyText = seg1.slice(0, 300);
         }
-      } else if (line.includes(":")) {
-        const idx = line.indexOf(":");
-        label = line.slice(0, idx).trim().slice(0, 80);
-        const detail = line.slice(idx + 1).trim();
-        description = detail.slice(0, 100);
-        bodyText = detail.slice(0, 300);
       } else {
-        label = line.slice(0, 80);
+        // Evitar partir por los ':' internos de un emoji personalizado <a?:nombre:id>
+        let working = line;
+        const customEmojiLead = working.match(/^(<a?:[a-zA-Z0-9_~]+:\d{15,22}>)\s+(.+)$/);
+        if (customEmojiLead) {
+          emoji = customEmojiLead[1];
+          working = customEmojiLead[2].trim();
+        }
+        const strippedForColon = working.replace(/<a?:[a-zA-Z0-9_~]+:\d{15,22}>/g, (m) => " ".repeat(m.length));
+        const idx = strippedForColon.indexOf(":");
+        if (idx > 0) {
+          label = working.slice(0, idx).trim().slice(0, 80);
+          const detail = working.slice(idx + 1).trim();
+          description = detail.slice(0, 100);
+          bodyText = detail.slice(0, 300);
+        } else {
+          label = working.slice(0, 80);
+        }
       }
     }
 
@@ -472,7 +476,7 @@ function buildTicketPanelModal(customId, cfg = null, lang = "es") {
             .setMinLength(1)
             .setMaxLength(80)
             .setRequired(false)
-            .setValue(cfg?.panelPlaceholder || (isEn ? "Open Tickets" : "Abrir Tickets"))
+            .setValue(String(cfg?.panelPlaceholder || (isEn ? "Open Tickets" : "Abrir Tickets")).slice(0, 80))
         )
     );
 }
@@ -560,10 +564,10 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
         if (!submitted) return false;
 
         const msg = submitted.fields.getTextInputValue("welcome")?.trim().slice(0, 1500);
+        await submitted.deferUpdate().catch(() => {});
         if (!msg) return false;
 
         const nextCfg = await updateTicketConfig(guild.id, { enabled: true, welcomeMessage: msg });
-        await submitted.deferUpdate().catch(() => {});
         if (nextCfg) activeView.setState({ cfg: nextCfg });
         if (activeView.message?.editable) {
           await activeView.message.edit(activeView.toPayload()).catch(() => {});
@@ -580,6 +584,8 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
         }).catch(() => null);
         if (!submitted) return false;
 
+        await submitted.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
         const title = submitted.fields.getTextInputValue("title")?.trim();
         const description = submitted.fields.getTextInputValue("description")?.trim() || null;
         const optionsRaw = submitted.fields.getTextInputValue("options")?.trim() || "";
@@ -588,9 +594,26 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
         const parsedOptions = parseTicketMenuOptions(optionsRaw);
         const targetChannel = ctx.channel;
         if (!targetChannel?.isTextBased?.()) {
-          await submitted.reply({
+          await submitted.editReply({
             content: isEn ? "Could not send the panel to this channel." : "No pude enviar el panel en este canal.",
-            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return false;
+        }
+
+        const payload = buildTicketPanelPayload({
+          title,
+          description,
+          category: "General",
+          buttonLabel: parsedOptions.length ? null : buttonOrPlaceholder,
+          placeholder: parsedOptions.length ? buttonOrPlaceholder : null,
+          options: parsedOptions.length ? parsedOptions : null,
+          lang: state.lang,
+        });
+        try {
+          await targetChannel.send(payload);
+        } catch {
+          await submitted.editReply({
+            content: isEn ? "Could not send the panel to this channel (check permissions)." : "No pude enviar el panel en este canal (verifica los permisos).",
           }).catch(() => {});
           return false;
         }
@@ -611,19 +634,8 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
           }
         }
 
-        const payload = buildTicketPanelPayload({
-          title,
-          description,
-          category: "General",
-          buttonLabel: parsedOptions.length ? null : buttonOrPlaceholder,
-          placeholder: parsedOptions.length ? buttonOrPlaceholder : null,
-          options: parsedOptions.length ? parsedOptions : null,
-          lang: state.lang,
-        });
-        await targetChannel.send(payload);
-        await submitted.reply({
+        await submitted.editReply({
           content: isEn ? `Ticket panel published in ${targetChannel}.` : `Panel de tickets publicado en ${targetChannel}.`,
-          flags: MessageFlags.Ephemeral,
         }).catch(() => {});
         return false;
       },
@@ -636,104 +648,123 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
 async function openTicket({ guild, user, category = "General", categoryChannelId = null, supportRoleId = null }) {
   if (!guild?.id || !user?.id || mongoose.connection.readyState !== 1) return { error: "unavailable" };
 
-  const existing = await Ticket.findOne({ guildId: guild.id, openerId: user.id, status: "open" }).lean().catch(() => null);
-  if (existing) {
-    const ch = guild.channels.cache.get(existing.channelId) ?? await guild.channels.fetch(existing.channelId).catch(() => null);
-    if (ch) return { error: "already_open", channelId: ch.id };
-    await Ticket.updateOne({ channelId: existing.channelId }, { $set: { status: "closed" } }).catch(() => {});
-  }
+  const lockKey = `${guild.id}:${user.id}`;
+  if (openingTickets.has(lockKey)) return { error: "already_open", channelId: null };
+  openingTickets.add(lockKey);
 
-  const updatedGuild = await GuildConfig.findOneAndUpdate(
-    { guildId: guild.id },
-    { $inc: { "ticketConfig.counter": 1 }, $set: { "ticketConfig.enabled": true } },
-    { upsert: true, returnDocument: "after" }
-  ).lean();
+  try {
+    const existing = await Ticket.findOne({ guildId: guild.id, openerId: user.id, status: "open" }).lean().catch(() => null);
+    if (existing) {
+      const ch = guild.channels.cache.get(existing.channelId) ?? await guild.channels.fetch(existing.channelId).catch(() => null);
+      if (ch) return { error: "already_open", channelId: ch.id };
+      await Ticket.updateOne({ channelId: existing.channelId }, { $set: { status: "closed" } }).catch(() => {});
+    }
 
-  const cfg = updatedGuild?.ticketConfig ?? {};
-  const catList = Array.isArray(cfg.categories) ? cfg.categories : [];
-  const rawCat = String(category || "General").trim();
-  const matchedCat = catList.find(
-    (c) => c.id === rawCat || String(c.label || "").toLowerCase() === rawCat.toLowerCase()
-  ) ?? null;
+    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    if (!me?.permissions?.has?.(PermissionFlagsBits.ManageChannels)) {
+      throw new Error("Missing ManageChannels permission");
+    }
 
-  const resolvedCategoryLabel = String(matchedCat?.label || rawCat || "General").slice(0, 80);
-  const resolvedParentId = categoryChannelId || matchedCat?.categoryId || cfg.categoryId || null;
-  const resolvedSupportRoleId = supportRoleId || matchedCat?.supportRoleId || cfg.supportRoleId || null;
+    const updatedGuild = await GuildConfig.findOneAndUpdate(
+      { guildId: guild.id },
+      { $inc: { "ticketConfig.counter": 1 }, $set: { "ticketConfig.enabled": true } },
+      { upsert: true, returnDocument: "after" }
+    ).lean();
 
-  const ticketNum = cfg.counter || 1;
-  const safeUser = String(user.username || "user").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 14) || "user";
-  const channelName = `ticket-${String(ticketNum).padStart(4, "0")}-${safeUser}`;
+    const cfg = updatedGuild?.ticketConfig ?? {};
+    const catList = Array.isArray(cfg.categories) ? cfg.categories : [];
+    const rawCat = String(category || "General").trim();
+    const matchedCat = catList.find(
+      (c) => c.id === rawCat || String(c.label || "").toLowerCase() === rawCat.toLowerCase()
+    ) ?? null;
 
-  const overwrites = [
-    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-    {
-      id: user.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.AttachFiles,
-        PermissionFlagsBits.EmbedLinks,
-      ],
-    },
-  ];
-  const meId = guild.members.me?.id ?? guild.client?.user?.id;
-  if (meId) {
-    overwrites.push({
-      id: meId,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ManageChannels,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.AttachFiles,
-      ],
+    const resolvedCategoryLabel = String(matchedCat?.label || rawCat || "General").slice(0, 80);
+    const resolvedParentId = categoryChannelId || matchedCat?.categoryId || cfg.categoryId || null;
+    const resolvedSupportRoleId = supportRoleId || matchedCat?.supportRoleId || cfg.supportRoleId || null;
+
+    const ticketNum = cfg.counter || 1;
+    const safeUser = String(user.username || "user").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 14) || "user";
+    const channelName = `ticket-${String(ticketNum).padStart(4, "0")}-${safeUser}`;
+
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      {
+        id: user.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+          PermissionFlagsBits.EmbedLinks,
+        ],
+      },
+    ];
+    const meId = me?.id ?? guild.client?.user?.id;
+    if (meId) {
+      overwrites.push({
+        id: meId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+        ],
+      });
+    }
+    if (resolvedSupportRoleId && guild.roles.cache.has(resolvedSupportRoleId)) {
+      overwrites.push({
+        id: resolvedSupportRoleId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+        ],
+      });
+    }
+
+    const parent = resolvedParentId && guild.channels.cache.has(resolvedParentId) ? resolvedParentId : undefined;
+    const channel = await guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      parent,
+      permissionOverwrites: overwrites,
+      reason: `Ticket #${ticketNum} abierto por ${user.tag || user.username}`,
     });
-  }
-  if (resolvedSupportRoleId && guild.roles.cache.has(resolvedSupportRoleId)) {
-    overwrites.push({
-      id: resolvedSupportRoleId,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.AttachFiles,
-      ],
+
+    let ticket;
+    try {
+      ticket = await Ticket.create({
+        guildId: guild.id,
+        channelId: channel.id,
+        openerId: user.id,
+        number: ticketNum,
+        category: resolvedCategoryLabel,
+        status: "open",
+      });
+    } catch (err) {
+      await channel.delete("Rollback por fallo en base de datos").catch(() => {});
+      throw err;
+    }
+
+    const lang = getCurrentLang();
+    const controlCard = buildTicketControlCard({
+      ticket,
+      openerUser: user,
+      category: ticket.category,
+      welcomeMsg: cfg.welcomeMessage || "Describe tu consulta y un miembro del equipo te atenderá pronto.",
+      lang,
     });
+
+    const mentionPing = resolvedSupportRoleId ? `<@${user.id}> <@&${resolvedSupportRoleId}>` : `<@${user.id}>`;
+    await channel.send(controlCard.toPayload()).catch(() => {});
+    await channel.send({ content: mentionPing, allowedMentions: { users: [user.id], roles: resolvedSupportRoleId ? [resolvedSupportRoleId] : [] } }).catch(() => {});
+
+    return { ok: true, channel, ticket };
+  } finally {
+    openingTickets.delete(lockKey);
   }
-
-  const parent = resolvedParentId && guild.channels.cache.has(resolvedParentId) ? resolvedParentId : undefined;
-  const channel = await guild.channels.create({
-    name: channelName,
-    type: ChannelType.GuildText,
-    parent,
-    permissionOverwrites: overwrites,
-    reason: `Ticket #${ticketNum} abierto por ${user.tag || user.username}`,
-  });
-
-  const ticket = await Ticket.create({
-    guildId: guild.id,
-    channelId: channel.id,
-    openerId: user.id,
-    number: ticketNum,
-    category: resolvedCategoryLabel,
-    status: "open",
-  });
-
-  const lang = getCurrentLang();
-  const controlCard = buildTicketControlCard({
-    ticket,
-    openerUser: user,
-    category: ticket.category,
-    welcomeMsg: cfg.welcomeMessage || "Describe tu consulta y un miembro del equipo te atenderá pronto.",
-    lang,
-  });
-
-  const mentionPing = resolvedSupportRoleId ? `<@${user.id}> <@&${resolvedSupportRoleId}>` : `<@${user.id}>`;
-  await channel.send(controlCard.toPayload()).catch(() => {});
-  await channel.send({ content: mentionPing, allowedMentions: { users: [user.id], roles: resolvedSupportRoleId ? [resolvedSupportRoleId] : [] } }).catch(() => {});
-
-  return { ok: true, channel, ticket };
 }
 
 async function generateTicketTranscript(channel, ticket) {
@@ -798,58 +829,64 @@ async function closeTicketChannel({ channel, closedByUser, reason = null }) {
   const guild = channel?.guild;
   if (!guild || mongoose.connection.readyState !== 1) return { error: "unavailable" };
 
-  const ticket = await Ticket.findOne({ channelId: channel.id, status: "open" }).lean().catch(() => null);
-  if (!ticket) return { error: "not_ticket" };
+  if (closingTickets.has(channel.id)) return { error: "not_ticket" };
+  closingTickets.add(channel.id);
 
-  const cfg = await getTicketConfig(guild.id);
-  const transcript = await generateTicketTranscript(channel, ticket);
+  try {
+    const ticket = await Ticket.findOne({ channelId: channel.id, status: "open" }).lean().catch(() => null);
+    if (!ticket) return { error: "not_ticket" };
 
-  await Ticket.updateOne({ channelId: channel.id }, { $set: { status: "closed" } }).catch(() => {});
+    const cfg = await getTicketConfig(guild.id);
+    const transcript = await generateTicketTranscript(channel, ticket);
 
-  const lang = getCurrentLang();
-  const summaryCard = new ComponentsV2Builder({ color: GREEN })
-    .addText(
-      `${V2Text.heading(lang === "en" ? `Ticket #${ticket.number} closed` : `Ticket #${ticket.number} cerrado`, 3)}\n` +
-      V2Text.fields([
-        [lang === "en" ? "Opened by" : "Abierto por", `<@${ticket.openerId}>`],
-        [lang === "en" ? "Closed by" : "Cerrado por", `<@${closedByUser.id}>`],
-        [lang === "en" ? "Messages" : "Mensajes", V2Text.code(transcript.count)],
-        reason ? [lang === "en" ? "Reason" : "Motivo", V2Text.clip(reason, 300)] : null,
-      ])
-    )
-    .toPayload();
+    await Ticket.updateOne({ channelId: channel.id }, { $set: { status: "closed" } }).catch(() => {});
 
-  if (cfg.logChannelId) {
-    const logCh = guild.channels.cache.get(cfg.logChannelId) ?? await guild.channels.fetch(cfg.logChannelId).catch(() => null);
-    if (logCh?.isTextBased?.()) {
-      await logCh.send({ ...summaryCard, files: [transcript.htmlAttachment, transcript.txtAttachment] }).catch(() => {});
+    const lang = getCurrentLang();
+    const summaryCard = new ComponentsV2Builder({ color: GREEN })
+      .addText(
+        `${V2Text.heading(lang === "en" ? `Ticket #${ticket.number} closed` : `Ticket #${ticket.number} cerrado`, 3)}\n` +
+        V2Text.fields([
+          [lang === "en" ? "Opened by" : "Abierto por", `<@${ticket.openerId}>`],
+          [lang === "en" ? "Closed by" : "Cerrado por", `<@${closedByUser.id}>`],
+          [lang === "en" ? "Messages" : "Mensajes", V2Text.code(transcript.count)],
+          reason ? [lang === "en" ? "Reason" : "Motivo", V2Text.clip(reason, 300)] : null,
+        ])
+      )
+      .toPayload();
+
+    if (cfg.logChannelId) {
+      const logCh = guild.channels.cache.get(cfg.logChannelId) ?? await guild.channels.fetch(cfg.logChannelId).catch(() => null);
+      if (logCh?.isTextBased?.()) {
+        await logCh.send({ ...summaryCard, files: [transcript.htmlAttachment, transcript.txtAttachment] }).catch(() => {});
+      }
     }
-  }
 
-  const opener = await guild.client.users.fetch(ticket.openerId).catch(() => null);
-  if (opener) {
-    await opener.send({
-      content: lang === "en"
-        ? `Your ticket **#${channel.name}** in **${guild.name}** was closed. Attached is the transcript.`
-        : `Tu ticket **#${channel.name}** en **${guild.name}** fue cerrado. Adjunto el historial completo.`,
-      files: [transcript.htmlAttachment, transcript.txtAttachment],
-    }).catch((err) => {
-      log.debug("No se pudo enviar transcript por DM", { err: err?.message });
-    });
-  }
+    const opener = await guild.client.users.fetch(ticket.openerId).catch(() => null);
+    if (opener) {
+      await opener.send({
+        content: lang === "en"
+          ? `Your ticket **#${channel.name}** in **${guild.name}** was closed. Attached is the transcript.`
+          : `Tu ticket **#${channel.name}** en **${guild.name}** fue cerrado. Adjunto el historial completo.`,
+        files: [transcript.htmlAttachment, transcript.txtAttachment],
+      }).catch((err) => {
+        log.debug("No se pudo enviar transcript por DM", { err: err?.message });
+      });
+    }
 
-  await channel.delete(`Ticket cerrado por ${closedByUser.tag || closedByUser.username}`).catch(() => {});
-  return { ok: true, ticket, count: transcript.count };
+    await channel.delete(`Ticket cerrado por ${closedByUser.tag || closedByUser.username}`).catch(() => {});
+    return { ok: true, ticket, count: transcript.count };
+  } finally {
+    closingTickets.delete(channel.id);
+  }
 }
 
 module.exports = {
+  isValidMenuEmoji,
   getTicketConfig,
   updateTicketConfig,
   parseTicketMenuOptions,
-  formatTicketMenuOptionsText,
   buildTicketPanelPayload,
   buildTicketControlCard,
-  buildTicketSetupCard,
   sendTicketSetupPanel,
   openTicket,
   generateTicketTranscript,

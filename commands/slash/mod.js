@@ -3,7 +3,7 @@ const {
   ChannelType,
   EmbedBuilder,
 } = require("discord.js");
-const { buildActionCard, createListPaginator, avatarUrl, failWith } = require("../../src/runtime");
+const { buildActionCard, createListPaginator, avatarUrl, failWith, noGuildReply } = require("../../src/runtime");
 const { RED, YELLOW, GREEN } = require("../../src/config");
 const {
   generateId,
@@ -32,7 +32,7 @@ const CASE_TYPE_LABELS = {
   unban: "Unban",
 };
 const { GuildConfig } = require("../../src/database");
-const { getAutomodConfig, updateAutomodConfig } = require("../../src/moderationExtra");
+const { getAutomodConfig, invalidateDramaChannelCache, updateAutomodConfig } = require("../../src/moderationExtra");
 const { logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
 
 function notifyUser(user, { description, color = RED, fields = null }) {
@@ -327,7 +327,13 @@ const data = {
       async code(ctx) {
         await ctx.defer();
 
-        const users = [1, 2, 3, 4, 5].map((i) => ctx.get(`usuario${i}`)).filter(Boolean);
+        const rawUsers = [1, 2, 3, 4, 5].map((i) => ctx.get(`usuario${i}`)).filter(Boolean);
+        const seenIds = new Set();
+        const users = rawUsers.filter((u) => {
+          if (!u?.id || seenIds.has(u.id)) return false;
+          seenIds.add(u.id);
+          return true;
+        });
         const reason = ctx.get("razon") ?? "Sin razón";
         const tag = modTag(ctx);
 
@@ -359,7 +365,8 @@ const data = {
           }
         }
 
-        const desc = banned.map((m, i) => `${i + 1}. ${m.user.tag}`).join("\n") || "Ninguno";
+        const memberTag = (m) => (m?.user ?? m)?.tag ?? (m?.user ?? m)?.username ?? m?.id ?? "unknown";
+        const desc = banned.map((m, i) => `${i + 1}. ${memberTag(m)}`).join("\n") || "Ninguno";
 
         await ctx.send(
           buildActionCard({
@@ -382,7 +389,7 @@ const data = {
           { name: "Razón", value: reason, inline: false },
         ];
         if (failed.length) {
-          logFields.push({ name: "No se pudo banear a", value: failed.map((m) => m.user.tag).join(", ") });
+          logFields.push({ name: "No se pudo banear a", value: failed.map(memberTag).join(", ") });
         }
 
         await logAction(ctx.guild, {
@@ -526,6 +533,10 @@ const data = {
         const member = ctx.get("usuario");
         const reason = ctx.get("razon") ?? "Sin razón";
         const tag = modTag(ctx);
+
+        const hierr = hierarchyChecks(ctx, member, "quitar el silencio a");
+        if (hierr) return ctx.ephemeral(hierr);
+
         if (!member.communicationDisabledUntil) {
           return ctx.ephemeral("Ese usuario no está silenciado");
         }
@@ -608,13 +619,14 @@ const data = {
           const deleted = await ctx.channel.bulkDelete(toDelete, true);
           const cantidad = Math.max(0, deleted.size - (cmdMessage && deleted.has(cmdMessage.id) ? 1 : 0));
 
+          const targetUser = target?.user ?? target;
           const reply = await ctx.send(
             buildActionCard({
               title: "Mensajes eliminados",
               fields: [
                 ["Canal", `${ctx.channel}`],
                 ["Cantidad", V2Text.code(cantidad)],
-                target ? ["Usuario", userValue(target.user)] : null,
+                targetUser ? ["Usuario", userValue(targetUser)] : null,
               ].filter(Boolean),
               moderator: tag,
               color: GREEN,
@@ -628,11 +640,11 @@ const data = {
               { name: "Canal", value: `${ctx.channel}`, inline: true },
               { name: "Mensajes eliminados", value: `${cantidad}`, inline: true },
               { name: "Moderador", value: tag, inline: true },
-              { name: "Filtro", value: target ? `${target.user.tag} (\`${target.id}\`)` : "Ninguno", inline: false },
+              { name: "Filtro", value: targetUser ? `${targetUser.tag} (\`${targetUser.id}\`)` : "Ninguno", inline: false },
             ],
           });
 
-          setTimeout(() => reply.delete().catch(() => {}), 5000);
+          setTimeout(() => reply?.delete?.().catch(() => {}), 5000).unref();
         } catch (err) {
           return failWith(ctx, err, "No pude eliminar los mensajes — pueden ser demasiado antiguos");
         }
@@ -650,6 +662,9 @@ const data = {
         const member = ctx.get("usuario");
         const reason = ctx.get("razon");
         const tag = modTag(ctx);
+        if (!member?.roles) {
+          return ctx.ephemeral("No pude obtener al miembro en el servidor");
+        }
         if (member.user.bot) {
           return ctx.ephemeral("No puedes advertir a un bot");
         }
@@ -775,22 +790,23 @@ const data = {
       async code(ctx) {
         await ctx.defer();
         const member = ctx.get("usuario");
+        const targetUser = member?.user ?? member;
         const tag = modTag(ctx);
 
         try {
-          const deletedCount = await clearWarnsForUser({ guildId: ctx.guild.id, userId: member.id });
+          const deletedCount = await clearWarnsForUser({ guildId: ctx.guild.id, userId: targetUser.id });
           if (!deletedCount) {
-            return ctx.ephemeral(`${member.user.tag} no tiene advertencias`);
+            return ctx.ephemeral(`${targetUser.tag} no tiene advertencias`);
           }
 
-          const username = member.user.globalName || member.user.username;
+          const username = targetUser.globalName || targetUser.username;
 
           await ctx.send(
             buildActionCard({
               title: "Advertencias eliminadas",
-              thumbnail: avatarUrl(member.user),
+              thumbnail: avatarUrl(targetUser),
               fields: [
-                ["Usuario", userValue(member.user)],
+                ["Usuario", userValue(targetUser)],
                 ["Cantidad", V2Text.code(deletedCount)],
               ],
               moderator: tag,
@@ -815,12 +831,13 @@ const data = {
       async code(ctx) {
         await ctx.defer();
         const member = ctx.get("usuario");
+        const targetUser = member?.user ?? member;
         const authorId = ctx.user?.id;
 
         try {
-          const cases = await listUnifiedHistoryForUser({ guildId: ctx.guild.id, userId: member.id });
+          const cases = await listUnifiedHistoryForUser({ guildId: ctx.guild.id, userId: targetUser.id });
           if (!cases.length) {
-            return ctx.ephemeral(`${member.user.tag} no tiene sanciones registradas`);
+            return ctx.ephemeral(`${targetUser.tag} no tiene sanciones registradas`);
           }
 
           const paginator = createListPaginator({
@@ -830,10 +847,10 @@ const data = {
             render: ({ items: pageCases, pageIndex, totalPages, controls }) => {
               const builder = new ComponentsV2Builder({ color: YELLOW }).addSection(
                 [
-                  V2Text.heading(`Historial de ${V2Text.clip(member.user.tag, 100)}`, 3),
+                  V2Text.heading(`Historial de ${V2Text.clip(targetUser.tag, 100)}`, 3),
                   V2Text.subtext(`Página ${pageIndex + 1}/${totalPages} · ${cases.length} en total`),
                 ],
-                { thumbnail: member.user.displayAvatarURL({ size: 256 }) }
+                { thumbnail: targetUser.displayAvatarURL({ size: 256 }) }
               );
 
               for (const c of pageCases) {
@@ -877,7 +894,7 @@ const data = {
         await ctx.defer();
         const channel = ctx.get("canal");
         const tag = modTag(ctx);
-        if (!channel.isTextBased()) {
+        if (![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(channel?.type)) {
           return ctx.ephemeral("El canal debe ser de texto");
         }
 
@@ -1001,9 +1018,9 @@ const data = {
           patch.customMessage = String(ctx.get("mensaje_custom")).trim().slice(0, 400);
         }
 
-        const cfg = Object.keys(patch).length
+        const cfg = (Object.keys(patch).length
           ? await updateAutomodConfig(ctx.guild.id, patch)
-          : await getAutomodConfig(ctx.guild.id);
+          : null) ?? (await getAutomodConfig(ctx.guild.id));
 
         await ctx.send(buildActionCard({
           title: "Configuración AutoMod",
@@ -1043,6 +1060,7 @@ const data = {
           { $set: { dramaChannelId: ch ? ch.id : null } },
           { upsert: true, returnDocument: "after" }
         );
+        invalidateDramaChannelCache(ctx.guild.id);
 
         await ctx.send(buildActionCard({
           title: ch ? "Drama Watcher activado" : "Drama Watcher desactivado",

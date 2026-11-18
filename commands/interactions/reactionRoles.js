@@ -23,20 +23,26 @@ const data = {
     const lang = await getLang(interaction.guildId).catch(() => "es");
     return runWithLang(lang, async () => {
       const isEn = lang === "en";
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
+      const replyEphemeral = (content) =>
+        interaction.deferred || interaction.replied
+          ? interaction.editReply({ content }).catch(() => {})
+          : interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const panel = await ReactionRolePanel.findOne({ guildId: interaction.guildId, panelId }).lean().catch(() => null);
       const entry = panel?.entries?.find((e) => e.key === entryKey);
       if (!panel || !entry) {
-        return interaction.reply({
-          content: isEn ? "This reaction role panel is no longer active." : "Este panel de roles ya no está activo.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyEphemeral(isEn ? "This reaction role panel is no longer active." : "Este panel de roles ya no está activo.");
       }
 
       const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-      if (!member) return;
+      if (!member) {
+        return replyEphemeral(isEn ? "Could not resolve your server member profile." : "No pude verificar tu perfil en este servidor.");
+      }
 
       const res = await applyPanelRoleAction({
-        client: bot?.client ?? interaction.client,
+        client: bot ?? interaction.client,
         guild: interaction.guild,
         member,
         panel,
@@ -44,34 +50,35 @@ const data = {
       });
 
       if (res.error === "hierarchy") {
-        return interaction.reply({
-          content: isEn ? "I don't have permission or hierarchy to manage that role." : "No tengo permisos ni jerarquía suficiente para gestionar ese rol.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyEphemeral(
+          isEn ? "I don't have permission or hierarchy to manage that role." : "No tengo permisos ni jerarquía suficiente para gestionar ese rol."
+        );
+      }
+
+      if (res.error) {
+        return replyEphemeral(
+          isEn ? "Could not update your role right now." : "No pude actualizar tu rol en este momento."
+        );
       }
 
       if (res.action === "verify") {
-        return interaction.reply({
-          content: isEn ? `You already have <@&${entry.roleId}>.` : `Ya tienes <@&${entry.roleId}>.`,
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyEphemeral(isEn ? `You already have <@&${entry.roleId}>.` : `Ya tienes <@&${entry.roleId}>.`);
       }
 
       if (res.action === "added_temp") {
         const ts = Math.floor(new Date(res.expiresAt).getTime() / 1000);
-        return interaction.reply({
-          content: isEn
+        return replyEphemeral(
+          isEn
             ? `Added temporary role <@&${entry.roleId}> (expires <t:${ts}:R>).`
-            : `Rol temporal <@&${entry.roleId}> añadido (expira <t:${ts}:R>).`,
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+            : `Rol temporal <@&${entry.roleId}> añadido (expira <t:${ts}:R>).`
+        );
       }
 
       const msg = res.action === "added"
         ? (isEn ? `Role <@&${entry.roleId}> added.` : `Rol <@&${entry.roleId}> añadido.`)
         : (isEn ? `Role <@&${entry.roleId}> removed.` : `Rol <@&${entry.roleId}> quitado.`);
 
-      return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral }).catch(() => {});
+      return replyEphemeral(msg);
     });
   },
 };

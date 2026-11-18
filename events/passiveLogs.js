@@ -1,6 +1,6 @@
 const { AuditLogEvent, PermissionFlagsBits } = require("discord.js");
 const { GREEN, RED, YELLOW } = require("../src/config");
-const { getLang, logAction } = require("../src/guild");
+const { getLang, getLogChannelId, logAction } = require("../src/guild");
 const { t } = require("../src/i18n");
 
 const AUDIT_WINDOW_MS = 5000;
@@ -39,6 +39,7 @@ const data = [
       const guild = ban?.guild;
       const user = ban?.user;
       if (!guild?.id || !user?.id) return;
+      if (!(await getLogChannelId(guild.id))) return;
 
       const { skip, entry } = await checkRecentAudit(guild, AuditLogEvent.MemberBanAdd, user.id);
       if (skip) return;
@@ -63,6 +64,7 @@ const data = [
       const guild = ban?.guild;
       const user = ban?.user;
       if (!guild?.id || !user?.id) return;
+      if (!(await getLogChannelId(guild.id))) return;
 
       const { skip, entry } = await checkRecentAudit(guild, AuditLogEvent.MemberBanRemove, user.id);
       if (skip) return;
@@ -85,6 +87,7 @@ const data = [
       const guild = member?.guild;
       const user = member?.user;
       if (!guild?.id || !user?.id) return;
+      if (!(await getLogChannelId(guild.id))) return;
 
       const banCheck = await checkRecentAudit(guild, AuditLogEvent.MemberBanAdd, user.id);
       if (banCheck.entry) return;
@@ -116,6 +119,7 @@ const data = [
     async code(_bot, channel) {
       const guild = channel?.guild;
       if (!guild?.id || !channel?.id) return;
+      if (!(await getLogChannelId(guild.id))) return;
 
       const { skip, entry } = await checkRecentAudit(guild, AuditLogEvent.ChannelDelete, channel.id);
       if (skip) return;
@@ -137,6 +141,7 @@ const data = [
     async code(_bot, role) {
       const guild = role?.guild;
       if (!guild?.id || !role?.id) return;
+      if (!(await getLogChannelId(guild.id))) return;
 
       const { skip, entry } = await checkRecentAudit(guild, AuditLogEvent.RoleDelete, role.id);
       if (skip) return;
@@ -154,4 +159,4 @@ const data = [
   },
 ];
 
-module.exports = { data, checkRecentAudit };
+module.exports = { data };

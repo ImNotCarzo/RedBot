@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const { validateEnv } = require("./config");
-const { connectDatabase } = require("./database");
+const { connectDatabase, closeDatabase } = require("./database");
 const {
   Logger,
   createBot,
@@ -17,21 +17,27 @@ const log = new Logger("MAIN");
 (async () => {
   registerProcessErrorHandlers(log);
 
+  let bot = null;
+  registerShutdownHandlers(() => bot, log);
+
   try {
     const config = validateEnv();
     log.info("Variables de entorno validadas");
 
     await connectDatabase(config.MONGO, log);
 
-    const bot = createBot();
+    bot = createBot();
     await initializeBot(bot, config, log);
 
     await startApi(bot, config, log);
 
-    registerShutdownHandlers(bot, log);
     log.info("Bot iniciado");
   } catch (err) {
     log.error("Error fatal durante el arranque", { err: sanitizeError(err) });
+    if (bot) {
+      await Promise.resolve(bot.destroy?.()).catch(() => {});
+    }
+    await closeDatabase(log).catch(() => {});
     process.exit(1);
   }
 })();

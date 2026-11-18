@@ -71,20 +71,10 @@ function listSnipedMessages(channelId) {
     return [];
   }
   if (valid.length !== raw.length) snipes.set(channelId, valid);
-  return valid;
-}
-
-function getSnipedMessage(channelId, index = 0) {
-  const list = listSnipedMessages(channelId);
-  if (!list.length) return null;
-  const idx = Math.max(0, Math.min(list.length - 1, Math.floor(Number(index) || 0)));
-  return list[idx] ?? null;
+  return [...valid];
 }
 
 module.exports = {
-  SNIPE_TTL_MS,
-  MAX_SNIPES_PER_CHANNEL,
   recordDeletedMessage,
   listSnipedMessages,
-  getSnipedMessage,
 };

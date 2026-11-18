@@ -77,7 +77,6 @@ const COLORS = {
 
 const MAX_HISTORIAL = 10;
 const MAX_EMBED_DESCRIPTION = 4096;
-const COMMANDS_TO_UPDATE = ["help", "ask", "util", "fun", "user"];
 const USER_APP_CONFIG = {
   integrationTypes: [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
   contexts: [InteractionContextType.Guild, InteractionContextType.BotDM, InteractionContextType.PrivateChannel],
@@ -135,7 +134,6 @@ module.exports = {
   ...COLORS,
   MAX_HISTORIAL,
   MAX_EMBED_DESCRIPTION,
-  COMMANDS_TO_UPDATE,
   USER_APP_CONFIG,
   SYSTEM_PROMPT,
   BADGE_NAMES,

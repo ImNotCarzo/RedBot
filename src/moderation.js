@@ -114,16 +114,31 @@ async function listUnifiedHistoryForUser({ guildId, userId }) {
 }
 
 async function addWarn({ guildId, userId, moderatorId, reason, warnId }) {
-  const normalizedWarnId = String(warnId).trim().toUpperCase();
   const normalizedReason = (typeof reason === "string" ? reason.trim() : "") || "Sin razón";
+  let normalizedWarnId = String(warnId || generateId()).trim().toUpperCase();
 
-  await Warn.create({
-    guildId,
-    userId,
-    moderator: moderatorId,
-    reason: normalizedReason,
-    warnId: normalizedWarnId,
-  });
+  try {
+    await Warn.create({
+      guildId,
+      userId,
+      moderator: moderatorId,
+      reason: normalizedReason,
+      warnId: normalizedWarnId,
+    });
+  } catch (err) {
+    if (err?.code === 11000 && !warnId) {
+      normalizedWarnId = generateId(7);
+      await Warn.create({
+        guildId,
+        userId,
+        moderator: moderatorId,
+        reason: normalizedReason,
+        warnId: normalizedWarnId,
+      });
+    } else {
+      throw err;
+    }
+  }
 
   await addModCase({
     guildId,
@@ -147,10 +162,6 @@ async function clearWarnsForUser({ guildId, userId }) {
   return result.deletedCount || 0;
 }
 
-async function listWarnsForUser({ guildId, userId }) {
-  return Warn.find({ guildId, userId }).sort({ createdAt: -1 });
-}
-
 async function upsertTempBan({ guildId, userId, unbanAt }) {
   const when = unbanAt instanceof Date ? unbanAt : new Date(unbanAt);
   await TempBan.findOneAndUpdate(
@@ -165,7 +176,16 @@ async function listPendingTempBans() {
   return TempBan.find({}).lean();
 }
 
-function scheduleTempUnban(client, guildId, userId, unbanAt) {
+const MAX_TEMPBAN_PERM_RETRIES = 3;
+
+function stopTempBanTimers() {
+  for (const entry of tempBanTimers.values()) {
+    if (entry?.timeout) clearTimeout(entry.timeout);
+  }
+  tempBanTimers.clear();
+}
+
+function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
   if (!client?.guilds?.fetch) return;
 
   const when = unbanAt instanceof Date ? unbanAt : new Date(unbanAt);
@@ -173,13 +193,15 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
 
   const key = `${guildId}:${userId}`;
   const existing = tempBanTimers.get(key);
-  if (existing) {
-    clearTimeout(existing);
-    tempBanTimers.delete(key);
+  if (existing?.timeout) {
+    clearTimeout(existing.timeout);
   }
+  const token = { timeout: null };
+  tempBanTimers.set(key, token);
 
   const execute = async () => {
     let retry = false;
+    let nextPermAttempt = permAttempt;
     try {
       const stillPending = await TempBan.exists({ guildId, userId });
       if (!stillPending) return;
@@ -198,9 +220,14 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
       try {
         await guild.members.unban(userId, "Tempban expirado");
       } catch (err) {
-        // 10026 = Unknown Ban: el usuario ya no está baneado
-        if (err?.code !== 10026) {
+        // 10026 = Unknown Ban, 10013 = Unknown User (no reintentables)
+        if (err?.code === 10026 || err?.code === 10013) {
+          // Ya no existe el ban o el usuario
+        } else if (err?.code === 50013 && permAttempt >= MAX_TEMPBAN_PERM_RETRIES) {
+          log.error("Fallo de permisos persistente al desbanear; descartando reintento", { guildId, userId });
+        } else {
           retry = true;
+          if (err?.code === 50013) nextPermAttempt = permAttempt + 1;
           log.error("Fallo al desbanear; reintentando", { guildId, userId, err: err?.message ?? String(err) });
           return;
         }
@@ -210,8 +237,10 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
       retry = true;
       log.error("Fallo al expirar tempban; reintentando", { guildId, userId, err: err?.message ?? String(err) });
     } finally {
-      tempBanTimers.delete(key);
-      if (retry) scheduleTempUnban(client, guildId, userId, new Date(Date.now() + TEMPBAN_RETRY_MS));
+      if (tempBanTimers.get(key) === token) {
+        tempBanTimers.delete(key);
+        if (retry) scheduleTempUnban(client, guildId, userId, new Date(Date.now() + TEMPBAN_RETRY_MS), nextPermAttempt);
+      }
     }
   };
 
@@ -222,20 +251,21 @@ function scheduleTempUnban(client, guildId, userId, unbanAt) {
   }
 
   const timeout = setTimeout(() => {
-    if (delay > MAX_TIMEOUT_MS) scheduleTempUnban(client, guildId, userId, when);
+    if (tempBanTimers.get(key) !== token) return;
+    if (delay > MAX_TIMEOUT_MS) scheduleTempUnban(client, guildId, userId, when, permAttempt);
     else execute();
   }, Math.min(delay, MAX_TIMEOUT_MS));
   timeout.unref();
-  tempBanTimers.set(key, timeout);
+  token.timeout = timeout;
 }
 
 async function cancelTempBan(guildId, userId) {
   const key = `${guildId}:${userId}`;
-  const timer = tempBanTimers.get(key);
-  if (timer) {
-    clearTimeout(timer);
-    tempBanTimers.delete(key);
+  const entry = tempBanTimers.get(key);
+  if (entry?.timeout) {
+    clearTimeout(entry.timeout);
   }
+  tempBanTimers.delete(key);
   await TempBan.deleteOne({ guildId, userId }).catch(() => {});
 }
 
@@ -288,17 +318,16 @@ async function applyWarnEscalation(guild, member, totalWarns) {
 
 module.exports = {
   cancelTempBan,
+  stopTempBanTimers,
   generateId,
   parseDuration,
   formatDuration,
   addModCase,
-  listModCasesForUser,
   listUnifiedHistoryForUser,
   addWarn,
   applyWarnEscalation,
   removeWarnById,
   clearWarnsForUser,
-  listWarnsForUser,
   upsertTempBan,
   listPendingTempBans,
   scheduleTempUnban,

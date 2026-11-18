@@ -3,6 +3,39 @@ const mongoose = require("mongoose");
 const { RED } = require("./config");
 const { EmbedTemplate } = require("./database");
 
+const OPEN_BRACE_SENTINEL = "\uE000";
+const CLOSE_BRACE_SENTINEL = "\uE001";
+const USER_CONTROLLED_KEYS = new Set([
+  "args",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "user.name",
+  "user.username",
+  "user.tag",
+  "server",
+  "server.name",
+  "channel.name",
+]);
+
+function escapeBraces(val) {
+  return String(val ?? "")
+    .replace(/\{/g, OPEN_BRACE_SENTINEL)
+    .replace(/\}/g, CLOSE_BRACE_SENTINEL);
+}
+
+function unescapeBraces(val) {
+  return String(val ?? "")
+    .replaceAll(OPEN_BRACE_SENTINEL, "{")
+    .replaceAll(CLOSE_BRACE_SENTINEL, "}");
+}
+
 function safeParseColor(raw, fallback = RED) {
   if (!raw || typeof raw !== "string") return fallback;
   const clean = raw.trim();
@@ -49,40 +82,46 @@ function buildTagVariables(ctx = {}, vars = {}) {
 }
 
 function evaluateCondition(expr, ctx, locals) {
-  const raw = String(expr || "").trim();
+  const raw = unescapeBraces(String(expr || "").trim());
   const hasRoleMatch = raw.match(/^hasrole:(\d{17,22})$/i);
   if (hasRoleMatch) {
     return Boolean(ctx.member?.roles?.cache?.has(hasRoleMatch[1]));
   }
 
-  for (const [op, fn] of [
-    ["!=", (a, b) => a !== b],
-    ["==", (a, b) => a === b],
-    [">=", (a, b) => Number(a) >= Number(b)],
-    ["<=", (a, b) => Number(a) <= Number(b)],
-    [">", (a, b) => Number(a) > Number(b)],
-    ["<", (a, b) => Number(a) < Number(b)],
-    ["contains", (a, b) => a.toLowerCase().includes(b.toLowerCase())],
-  ]) {
-    const idx = raw.indexOf(op);
-    if (idx > 0) {
-      const left = substituteVars(raw.slice(0, idx).trim(), locals);
-      const right = substituteVars(raw.slice(idx + op.length).trim(), locals);
+  // Evaluar operadores compuestos y "contains" antes de < / > para no partir menciones <@id>
+  const opMatchers = [
+    [/^(.*?)\s+contains\s+(.*)$/i, (a, b) => a.toLowerCase().includes(b.toLowerCase())],
+    [/^(.*?)\s*!=\s*(.*)$/, (a, b) => a !== b],
+    [/^(.*?)\s*==\s*(.*)$/, (a, b) => a === b],
+    [/^(.*?)\s*>=\s*(.*)$/, (a, b) => Number(a) >= Number(b)],
+    [/^(.*?)\s*<=\s*(.*)$/, (a, b) => Number(a) <= Number(b)],
+    [/^([^<>]+?)\s*>\s*([^<>]+)$/, (a, b) => Number(a) > Number(b)],
+    [/^([^<>]+?)\s*<\s*([^<>]+)$/, (a, b) => Number(a) < Number(b)],
+  ];
+
+  for (const [regex, fn] of opMatchers) {
+    const match = raw.match(regex);
+    if (match && match[1].trim()) {
+      const left = unescapeBraces(substituteVars(match[1].trim(), locals));
+      const right = unescapeBraces(substituteVars(match[2].trim(), locals));
       return fn(left, right);
     }
   }
-  return Boolean(substituteVars(raw, locals));
+  return Boolean(unescapeBraces(substituteVars(raw, locals)));
 }
 
-function substituteVars(text, locals) {
-  return String(text ?? "").replace(/\{([a-zA-Z0-9_.]+)\}/g, (full, key) =>
-    Object.prototype.hasOwnProperty.call(locals, key) ? String(locals[key]) : full
-  );
+function substituteVars(text, locals, { escapeUserVars = false } = {}) {
+  return String(text ?? "").replace(/\{([a-zA-Z0-9_.]+)\}/g, (full, key) => {
+    if (!Object.prototype.hasOwnProperty.call(locals, key)) return full;
+    const rawVal = String(locals[key]);
+    return escapeUserVars && USER_CONTROLLED_KEYS.has(key) ? escapeBraces(rawVal) : rawVal;
+  });
 }
 
 /**
  * Interprete seguro de TagScript (sin eval): soporta variables, {set}, {if},
  * {rand}, {choose} y bloques de accion {dm}, {addrole}, {removerole}, {react}, {delete}, {embed}.
+ * Las variables controladas por el usuario se escapan para impedir inyeccion de directivas.
  */
 function runTagScript(template, ctx = {}, extraVars = {}) {
   const locals = buildTagVariables(ctx, extraVars);
@@ -99,7 +138,7 @@ function runTagScript(template, ctx = {}, extraVars = {}) {
 
   // {set(var):value}
   out = out.replace(/\{set\(([a-zA-Z0-9_]+)\):([^{}]*)\}/gi, (_, key, val) => {
-    locals[key] = substituteVars(val.trim(), locals);
+    locals[key] = substituteVars(val.trim(), locals, { escapeUserVars: true });
     return "";
   });
 
@@ -119,8 +158,8 @@ function runTagScript(template, ctx = {}, extraVars = {}) {
     return opts[Math.floor(Math.random() * opts.length)];
   });
 
-  // Expandir variables antes de evaluar bloques {if(...):then|else}
-  out = substituteVars(out, locals);
+  // Expandir variables escapando llaves de valores de usuario antes de {if} y acciones
+  out = substituteVars(out, locals, { escapeUserVars: true });
 
   // {if(cond):then|else}
   for (let pass = 0; pass < 4; pass++) {
@@ -134,11 +173,11 @@ function runTagScript(template, ctx = {}, extraVars = {}) {
     if (out === prev) break;
   }
 
-  out = substituteVars(out, locals);
+  out = substituteVars(out, locals, { escapeUserVars: true });
 
-  // Bloques de accion
+  // Bloques de accion (solo del template, nunca inyectables desde {args} o nombres)
   out = out.replace(/\{dm:([^{}]+)\}/gi, (_, msg) => {
-    actions.dm = msg.trim().slice(0, 1800);
+    actions.dm = unescapeBraces(msg).trim().slice(0, 1800);
     return "";
   });
   out = out.replace(/\{addrole:(\d{17,22})\}/gi, (_, id) => {
@@ -150,7 +189,7 @@ function runTagScript(template, ctx = {}, extraVars = {}) {
     return "";
   });
   out = out.replace(/\{react:([^{}\s]+)\}/gi, (_, emoji) => {
-    if (actions.reactions.length < 5) actions.reactions.push(emoji.trim());
+    if (actions.reactions.length < 5) actions.reactions.push(unescapeBraces(emoji).trim());
     return "";
   });
   out = out.replace(/\{embed:([a-zA-Z0-9_-]{1,64})\}/gi, (_, name) => {
@@ -162,16 +201,35 @@ function runTagScript(template, ctx = {}, extraVars = {}) {
     return "";
   });
 
-  return { text: out.trim(), actions, vars: locals };
+  // Restaurar llaves literales provenientes de variables de usuario
+  for (const key of Object.keys(locals)) {
+    if (typeof locals[key] === "string") {
+      locals[key] = unescapeBraces(locals[key]);
+    }
+  }
+
+  return { text: unescapeBraces(out).trim(), actions, vars: locals };
 }
 
 function renderEmbedTemplate(doc, ctx = {}, extraVars = {}) {
   const locals = buildTagVariables(ctx, extraVars);
   const embed = new EmbedBuilder().setColor(safeParseColor(doc?.color, RED));
-  if (doc?.title) embed.setTitle(substituteVars(doc.title, locals).slice(0, 256));
-  if (doc?.description) embed.setDescription(substituteVars(doc.description, locals).slice(0, 4000));
-  if (doc?.footer) embed.setFooter({ text: substituteVars(doc.footer, locals).slice(0, 2048) });
-  if (doc?.authorName) embed.setAuthor({ name: substituteVars(doc.authorName, locals).slice(0, 256) });
+  if (doc?.title) {
+    const title = substituteVars(doc.title, locals).trim().slice(0, 256);
+    if (title) embed.setTitle(title);
+  }
+  if (doc?.description) {
+    const desc = substituteVars(doc.description, locals).trim().slice(0, 4000);
+    if (desc) embed.setDescription(desc);
+  }
+  if (doc?.footer) {
+    const footer = substituteVars(doc.footer, locals).trim().slice(0, 2048);
+    if (footer) embed.setFooter({ text: footer });
+  }
+  if (doc?.authorName) {
+    const author = substituteVars(doc.authorName, locals).trim().slice(0, 256);
+    if (author) embed.setAuthor({ name: author });
+  }
   if (doc?.image && /^https?:\/\//i.test(doc.image)) embed.setImage(doc.image);
   if (doc?.thumbnail && /^https?:\/\//i.test(doc.thumbnail)) embed.setThumbnail(doc.thumbnail);
   return embed;
@@ -191,5 +249,4 @@ module.exports = {
   runTagScript,
   renderEmbedTemplate,
   resolveEmbedTemplate,
-  safeParseColor,
 };

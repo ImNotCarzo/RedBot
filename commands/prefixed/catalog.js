@@ -71,14 +71,15 @@ const dmallCommand = {
     as_slash: false,
   }),
   async code(ctx) {
+    const guild = ctx.guild;
+    if (!guild) return ctx.send("Este comando solo se puede usar en servidores");
+
     const bot = ctx.bot.user;
     const raw = ctx.args?.join(" ").trim();
     if (!ctx.member?.permissions.has("Administrator")) {
       return ctx.send("No tienes permisos para usar este comando, necesitas: `Administrator`");
     }
 
-    const guild = ctx.guild;
-    if (!guild) return ctx.send("Este comando solo se puede usar en servidores");
     if (!raw) return ctx.send(DMALL_PARAMERROR(bot));
 
     const { titulo, texto, soloId, rolId, userId, imagen: imagenUrl } = parseDmAllArgs(raw);
@@ -134,7 +135,8 @@ const dmallCommand = {
 
     await sendLog(guild, buildDmAllLogEmbed({ author, enviados, fallidos, titulo, texto, filtros: exclusiones })).catch(() => null);
 
-    return (progressMsg ? progressMsg.edit.bind(progressMsg) : ctx.send)(`hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`).catch(() => null);
+    const doneText = `hecho\nEnviados: **${enviados}**\nFallidos: **${fallidos}**`;
+    return (progressMsg ? progressMsg.edit(doneText) : ctx.send(doneText)).catch(() => null);
   },
 };
 
@@ -149,7 +151,7 @@ function buildPrefixedCommand({ name, description, aliases = [], authorName, des
     }),
     async code(ctx) {
       if (!authorName || !descriptionText) return;
-      const botUser = ctx.bot?.user ?? ctx.client?.user;
+      const botUser = ctx.bot?.user;
       const embed = new EmbedBuilder()
         .setAuthor({ name: authorName, iconURL: botUser?.displayAvatarURL ? botUser.displayAvatarURL() : undefined })
         .setDescription(descriptionText)
@@ -206,7 +208,7 @@ const DEFINITIONS = [
   { name: "role", description: "Muestra información de un rol", aliases: ["roleinfo", "inforole", "ri"], authorName: "Comando Roleinfo", descriptionText: "**Usos:**\nMuestra información de un rol\n\n**Aliases:**\n`roleinfo`, `inforole`\n\n```js\n.roleinfo <@rol>\nEjemplo: .roleinfo @gokiano```" },
   { name: "rolejoin", description: "Configura o desactiva el rol automático al entrar", aliases: ["joinrole", "autorole"], authorName: "Comando Rolejoin", descriptionText: "**Usos:**\nConfigura o desactiva el rol automático al entrar\n\n**Aliases:**\n`joinrole`, `autorole`\n\n```js\n.rolejoin <@rol>   → activar\n.rolejoin          → desactivar```" },
   { name: "rolementionable", description: "Activa o desactiva si un rol es mencionable por todos", aliases: ["rolemention", "mentionrole", "rmention"], authorName: "Comando Rolementionable", descriptionText: "**Usos:**\nActiva o desactiva si el rol es mencionable por todos\n\n**Aliases:**\n`rolemention`, `mentionrole`, `rmention`\n\n```js\n.rolementionable <@rol>\nEjemplo: .rolementionable @gokiano```" },
-  { name: "roleperms", description: "Muestra permisos de un rol", aliases: ["rperms"] },
+  { name: "roleperms", description: "Muestra permisos de un rol", aliases: ["rperms"], authorName: "Comando Roleperms", descriptionText: "**Usos:**\nMuestra los permisos de un rol\n\n**Aliases:**\n`rperms`\n\n```js\n.roleperms <@rol>\nEjemplo: .roleperms @gokiano```" },
   { name: "roleremove", description: "Quita un rol a un usuario", aliases: ["removerole", "rremove", "delrole"], authorName: "Comando Roleremove", descriptionText: "**Usos:**\nQuita un rol a un usuario\n\n**Aliases:**\n`removerole`, `rremove`\n\n```js\n.roleremove <@usuario> <@rol>\nEjemplo: .roleremove @loge @gokiano```" },
   { name: "roleremoveall", description: "Quita un rol a todos los miembros que lo tengan", aliases: ["removeroleall", "removeallrole", "rremoveall"], authorName: "Comando Roleremoveall", descriptionText: "**Usos:**\nQuita un rol a todos los miembros que lo tengan\n\n**Aliases:**\n`removeroleall`, `removeallrole`\n\n```js\n.roleremoveall <@rol> [bots]\nEjemplo: .roleremoveall @miembro```" },
   { name: "rolerename", description: "Renombra un rol", aliases: ["renamerole", "rrename"], authorName: "Comando Rolerename", descriptionText: "**Usos:**\nRenombra un rol\n\n**Aliases:**\n`renamerole`, `rrename`\n\n```js\n.rolerename <@rol> <nuevoNombre>\nEjemplo: .rolerename @gokiano potatiano```" },

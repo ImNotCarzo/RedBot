@@ -5,6 +5,7 @@ const event = {
   once: false,
   async code(_bot, oldMember, newMember) {
     if (!newMember?.guild?.id || newMember.user?.bot) return;
+    if (oldMember?.partial) return;
     if (oldMember?.avatar === newMember.avatar) return;
 
     const targetId = `${newMember.guild.id}:${newMember.id}`;

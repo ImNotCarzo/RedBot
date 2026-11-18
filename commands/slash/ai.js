@@ -159,6 +159,9 @@ const data = {
         const pregunta = rawPregunta || (imagen ? (isEn ? "Analyze this image." : "Analiza esta imagen.") : "");
 
         if (!pregunta) {
+          if (ctx.interaction) {
+            return ctx.ephemeral(isEn ? "Write something to talk with me." : "Escribe algo para conversar conmigo.");
+          }
           const bot = ctx.bot.user;
           const paramerror = new EmbedBuilder()
             .setAuthor({ name: isEn ? "Ask Command" : "Comando Ask", iconURL: bot.displayAvatarURL() })
@@ -222,7 +225,6 @@ const data = {
       data: new CommandBuilder({
         name: "askreset",
         description: "Reinicia tu memoria de conversación con la IA",
-        aliases: ["reset"],
       }),
       params: new ParamsBuilder(),
       async code(ctx) {
@@ -341,7 +343,6 @@ const data = {
       data: new CommandBuilder({
         name: "resume",
         description: "Genera un resumen conciso de un texto largo con IA",
-        aliases: ["resumir", "summarize"],
         cooldown: { seconds: 6, bucket: "USER" },
       }),
       params: new ParamsBuilder().addString({
@@ -437,6 +438,7 @@ const data = {
       data: new CommandBuilder({
         name: "opinion",
         description: "Genera una opinión sarcástica sobre un tema",
+        cooldown: { seconds: 6, bucket: "USER" },
       }),
       params: new ParamsBuilder().addString({
         name: "tema",
@@ -462,6 +464,7 @@ const data = {
       data: new CommandBuilder({
         name: "critica",
         description: "Genera una crítica directa e irónica sobre un tema",
+        cooldown: { seconds: 6, bucket: "USER" },
       }),
       params: new ParamsBuilder().addString({
         name: "tema",
@@ -487,6 +490,7 @@ const data = {
       data: new CommandBuilder({
         name: "excusa",
         description: "Genera una excusa creativa o absurda",
+        cooldown: { seconds: 6, bucket: "USER" },
       }),
       params: new ParamsBuilder().addString({
         name: "situacion",
@@ -518,6 +522,7 @@ const data = {
       data: new CommandBuilder({
         name: "teoria",
         description: "Genera una teoría conspirativa sobre un tema",
+        cooldown: { seconds: 6, bucket: "USER" },
       }),
       params: new ParamsBuilder().addString({
         name: "tema",
@@ -544,6 +549,7 @@ const data = {
       data: new CommandBuilder({
         name: "roast",
         description: "Genera un roast humorístico del perfil de un usuario",
+        cooldown: { seconds: 6, bucket: "USER" },
       }),
       params: new ParamsBuilder().addMember({
         name: "usuario",
@@ -563,8 +569,11 @@ const data = {
             return ctx.ephemeral(isEn ? "I couldn't fetch that user's info" : "No pude obtener la información del usuario");
           }
 
-          const target = await ctx.guild.members.fetch({ user: baseTarget.id, force: true }).catch(() => baseTarget);
-          const user = await target.user.fetch(true).catch(() => target.user);
+          const fetched = await ctx.guild.members.fetch({ user: baseTarget.id, force: true }).catch(() => baseTarget);
+          const isMember = Boolean(fetched?.roles?.cache && fetched?.user);
+          const target = isMember ? fetched : null;
+          const rawUser = isMember ? fetched.user : (baseTarget?.user ?? baseTarget);
+          const user = await rawUser.fetch(true).catch(() => rawUser);
           const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
           const imagePart = await fetchImageAsInlineData(avatarUrl).catch(() => fetchImageAsInlineData(avatarUrl)).catch(() => null);
           const username = user.globalName ?? user.username;
@@ -574,16 +583,16 @@ const data = {
           const localeTag = isEn ? "en-US" : "es-ES";
           const createdHace = msATexto(ahoraMs - user.createdTimestamp, lang);
           const createdDate = new Date(user.createdTimestamp).toLocaleDateString(localeTag, { year: "numeric", month: "long" });
-          const joinedHace = target.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp, lang) : null;
-          const joinedDate = target.joinedTimestamp
+          const joinedHace = target?.joinedTimestamp ? msATexto(ahoraMs - target.joinedTimestamp, lang) : null;
+          const joinedDate = target?.joinedTimestamp
             ? new Date(target.joinedTimestamp).toLocaleDateString(localeTag, { year: "numeric", month: "long" })
             : null;
 
-          const activity = target.presence?.activities?.[0]?.name ?? null;
-          const status = target.presence?.status ?? "offline";
+          const activity = target?.presence?.activities?.[0]?.name ?? null;
+          const status = target?.presence?.status ?? "offline";
 
           const noneLabel = isEn ? "none" : "ninguno";
-          const roles = target.roles?.cache
+          const roles = target?.roles?.cache
             ?.filter((r) => r.id !== ctx.guild.id)
             ?.map((r) => r.name)
             ?.slice(0, 8)
@@ -593,7 +602,7 @@ const data = {
             "Administrator", "ManageGuild", "ManageMessages",
             "ManageRoles", "BanMembers", "KickMembers", "ModerateMembers",
           ];
-          const perms = target.permissions?.toArray()?.filter((p) => PERMS_RELEVANTES.includes(p))?.join(", ") || noneLabel;
+          const perms = target?.permissions?.toArray()?.filter((p) => PERMS_RELEVANTES.includes(p))?.join(", ") || noneLabel;
           const badges = user.flags?.toArray()?.map((f) => BADGE_NAMES[f] ?? f)?.join(", ") || (isEn ? "none" : "ninguna");
 
           const datosUsuario = isEn

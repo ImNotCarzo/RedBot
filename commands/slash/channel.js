@@ -5,10 +5,12 @@ const { logAction } = require("../../src/guild");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
-const { AutopurgeRule, GuildConfig, StickyMessage, VoiceLink } = require("../../src/database");
-const { createTimedTempChannel } = require("../../src/channelsExtra");
+const { AutopurgeRule, EmbedTemplate, GuildConfig, StickyMessage, VoiceLink } = require("../../src/database");
+const { createTimedTempChannel, invalidateStickyCache } = require("../../src/channelsExtra");
+const { getCurrentLang } = require("../../src/i18n");
 const { formatDuration, parseDuration } = require("../../src/moderation");
 const { listSnipedMessages } = require("../../src/snipe");
+const { renderEmbedTemplate } = require("../../src/tagscript");
 
 const log = new Logger("CMD_CHANNEL", process.env.LOG_LEVEL);
 
@@ -120,14 +122,15 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
       const modTag = ctx.user?.tag;
 
       try {
-        await channel.permissionOverwrites.edit(member, {
+        const targetUser = member?.user ?? member;
+        await channel.permissionOverwrites.edit(member.id ?? member, {
           ViewChannel: allow,
         }, { reason: `${modTag}: channel ${name}` });
 
         await ctx.send(
           buildActionCard({
             title: logTitle,
-            thumbnail: avatarUrl(member.user),
+            thumbnail: avatarUrl(targetUser),
             fields: [
               ["Usuario", `${member}`],
               ["Canal", `${channel}`],
@@ -142,7 +145,7 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
           title: logTitle,
           color,
           fields: [
-            { name: "Usuario", value: `${member.user.tag} (\`${member.id}\`)`, inline: true },
+            { name: "Usuario", value: `${targetUser.tag} (\`${member.id}\`)`, inline: true },
             { name: "Canal", value: `${channel} (\`${channel.id}\`)`, inline: true },
             { name: "Moderador", value: modTag, inline: true },
           ],
@@ -226,9 +229,10 @@ const data = {
         const channel = ctx.get("canal");
         const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageChannels]);
         if (permErr) return ctx.ephemeral(permErr);
-        const rawName = ctx.get("nombre");
+        const rawName = String(ctx.get("nombre") ?? "").trim();
         const isTextLike = channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement;
         const newName = (isTextLike ? rawName.toLowerCase().replace(/\s+/g, "-") : rawName).trim().slice(0, 100);
+        if (!newName) return ctx.ephemeral("Indica un nombre válido para el canal");
         const modTag = ctx.user?.tag;
 
         try {
@@ -382,7 +386,14 @@ const data = {
               color: RED,
             }),
           renderStatic: ({ state }) => {
-            const msg = state.status === "cancelled" ? "Nuke cancelado" : "Confirmación expirada";
+            const msg =
+              state.status === "done"
+                ? "Canal nukeado correctamente"
+                : state.status === "failed"
+                  ? "No se pudo nukear el canal"
+                  : state.status === "cancelled"
+                    ? "Nuke cancelado"
+                    : "Confirmación expirada";
             return ComponentsV2Builder.card({ description: msg, color: RED });
           },
           actions: {
@@ -392,15 +403,16 @@ const data = {
               return false;
             },
             confirm: async ({ interaction, setState, view }) => {
-              setState({ status: "done" });
-              view.stop("confirmed");
+              await interaction.deferUpdate().catch(() => {});
 
               let newChannel;
+              let oldChannelDeleted = false;
               try {
                 const position = channel.position;
                 newChannel = await channel.clone({ reason: `${modTag}: channel nuke` });
                 await newChannel.setPosition(position).catch(() => {});
                 await channel.delete(`${modTag}: channel nuke`);
+                oldChannelDeleted = true;
 
                 await newChannel
                   .send(
@@ -423,18 +435,16 @@ const data = {
                   ],
                 });
 
-                await interaction
-                  .update(ComponentsV2Builder.card({ description: "Canal nukeado correctamente", color: RED }).toPayload())
-                  .catch(() => {});
+                setState({ status: "done" });
+                view.stop("confirmed");
               } catch (err) {
                 log.error("Error en nuke", { err: err?.message ?? String(err) });
-                if (newChannel && !channel.deleted) {
+                if (newChannel && !oldChannelDeleted) {
                   await newChannel.delete("Rollback: channel nuke failed").catch(() => {});
                 }
 
-                await interaction
-                  .update(ComponentsV2Builder.card({ description: "No se pudo nukear el canal", color: RED }).toPayload())
-                  .catch(() => {});
+                setState({ status: "failed" });
+                view.stop("failed");
               }
               return false;
             },
@@ -563,7 +573,7 @@ const recapCommand = {
         return ctx.ephemeral("No hay suficientes mensajes para resumir");
       }
 
-      const isEn = require("../../src/i18n").getCurrentLang() === "en";
+      const isEn = getCurrentLang() === "en";
       const prompt =
         (isEn
           ? "Summarize the following Discord channel conversation. Highlight the main topics and, when relevant, who said what. " +
@@ -669,6 +679,9 @@ const autopurgeCommand = {
   async code(ctx) {
     if (!ctx.guild) return noGuildReply(ctx);
     const action = ctx.get("accion");
+    if (!["set", "remove", "list"].includes(action)) {
+      return ctx.ephemeral("Acción inválida");
+    }
     const channel = ctx.get("canal") ?? ctx.channel;
 
     if (action === "list") {
@@ -730,6 +743,9 @@ const stickyCommand = {
   async code(ctx) {
     if (!ctx.guild) return noGuildReply(ctx);
     const action = ctx.get("accion");
+    if (!["set", "remove", "list"].includes(action)) {
+      return ctx.ephemeral("Acción inválida");
+    }
     const channel = ctx.get("canal") ?? ctx.channel;
 
     if (action === "list") {
@@ -747,6 +763,7 @@ const stickyCommand = {
 
     if (action === "remove") {
       const old = await StickyMessage.findOneAndDelete({ channelId: channel.id }).lean();
+      invalidateStickyCache(channel.id);
       if (old?.lastMessageId) await channel.messages?.delete?.(old.lastMessageId).catch(() => {});
       return ctx.send(ComponentsV2Builder.card({ title: "Sticky eliminado", description: `Se quitó el mensaje anclado de ${channel}.`, color: RED }));
     }
@@ -755,12 +772,29 @@ const stickyCommand = {
     const templateName = ctx.get("embed") ? String(ctx.get("embed")).trim().toLowerCase() : null;
     if (!content && !templateName) return ctx.ephemeral("Debes escribir un mensaje o indicar una plantilla embed");
 
-    const sent = content ? await channel.send({ content, allowedMentions: { parse: [] } }).catch(() => null) : null;
+    const prev = await StickyMessage.findOne({ channelId: channel.id }).select("lastMessageId").lean().catch(() => null);
+    if (prev?.lastMessageId) {
+      await channel.messages?.delete?.(prev.lastMessageId).catch(() => {});
+    }
+
+    const payload = { allowedMentions: { parse: [] } };
+    if (content) payload.content = content;
+    if (templateName) {
+      const tpl = await EmbedTemplate.findOne({ guildId: ctx.guild.id, name: templateName }).lean().catch(() => null);
+      if (tpl) {
+        payload.embeds = [renderEmbedTemplate(tpl, { user: ctx.user, member: ctx.member, guild: ctx.guild, channel })];
+      }
+    }
+
+    const sent = (payload.content || payload.embeds?.length)
+      ? await channel.send(payload).catch(() => null)
+      : null;
     await StickyMessage.findOneAndUpdate(
       { channelId: channel.id },
       { $set: { guildId: ctx.guild.id, content, templateName, lastMessageId: sent?.id ?? null, enabled: true } },
       { upsert: true, returnDocument: "after" }
     );
+    invalidateStickyCache(channel.id);
     await ctx.ephemeral(`Mensaje anclado configurado en ${channel}`);
   },
 };
@@ -824,7 +858,7 @@ const tempChannelCommand = {
     }
     const chType = ctx.get("tipo") === "voice" ? ChannelType.GuildVoice : ChannelType.GuildText;
     const res = await createTimedTempChannel({
-      client: ctx.bot?.client ?? ctx.guild.client,
+      client: ctx.bot ?? ctx.guild.client,
       guild: ctx.guild,
       name: ctx.get("nombre") || "canal-temporal",
       type: chType,
@@ -832,7 +866,8 @@ const tempChannelCommand = {
       ownerId: ctx.user.id,
       parentId: ctx.channel?.parentId ?? null,
     });
-    if (res.error === "limit") return ctx.ephemeral(`Límite alcanzado: máximo ${res.max} canales temporales activos.`);
+    if (res?.error === "limit") return ctx.ephemeral(`Límite alcanzado: máximo ${res.max} canales temporales activos.`);
+    if (!res?.ok || !res.expiresAt) return ctx.ephemeral("No se pudo crear el canal temporal");
     const ts = Math.floor(res.expiresAt.getTime() / 1000);
     await ctx.send(ComponentsV2Builder.card({
       title: "Canal temporal creado",
@@ -860,6 +895,9 @@ const voiceTextLinkCommand = {
   async code(ctx) {
     if (!ctx.guild) return noGuildReply(ctx);
     const action = ctx.get("accion");
+    if (!["add", "remove", "list"].includes(action)) {
+      return ctx.ephemeral("Acción inválida");
+    }
 
     if (action === "list") {
       const list = await VoiceLink.find({ guildId: ctx.guild.id, targetType: "text" }).lean();

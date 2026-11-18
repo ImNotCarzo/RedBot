@@ -5,6 +5,7 @@ const event = {
   once: false,
   async code(_bot, oldUser, newUser) {
     if (!newUser || newUser.bot) return;
+    if (oldUser?.partial) return;
 
     if (oldUser?.avatar && oldUser.avatar !== newUser.avatar) {
       await recordImageIfNew("avatar", newUser.id, oldUser.displayAvatarURL({ size: 4096 })).catch(() => {});

@@ -2,6 +2,7 @@ const { EmbedBuilder } = require("discord.js");
 const mongoose = require("mongoose");
 const { RED } = require("./config");
 const { SocialFeed } = require("./database");
+const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { fetchPublic, readTextLimited } = require("./security");
 
@@ -13,31 +14,63 @@ const PLATFORM_LIMITS = {
   reddit: 15,
   kick: 10,
 };
+const ytHandleCache = new TtlCache(6 * 60 * 60_000, 500);
 let feedsInterval = null;
+let isPollingFeeds = false;
+
+function decodeXmlEntities(str) {
+  return String(str ?? "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;|&apos;/g, "'");
+}
+
+function neutralizeMentions(str) {
+  return String(str ?? "")
+    .replace(/@(everyone|here)/gi, "@\u200b$1")
+    .replace(/<@&(\d+)>/g, "<@\u200b&$1>");
+}
 
 async function fetchYouTubeLatest(account) {
   let channelId = account.trim();
   if (!/^UC[a-zA-Z0-9_-]{20,}$/.test(channelId)) {
     const clean = channelId.replace(/^@/, "");
-    const pageRes = await fetchPublic(`https://www.youtube.com/@${encodeURIComponent(clean)}`, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    }, 8000);
-    if (!pageRes.ok) return null;
-    const html = await readTextLimited(pageRes, 512 * 1024);
-    const m = html.match(/"channelId":"(UC[a-zA-Z0-9_-]+)"/) || html.match(/channel_id=(UC[a-zA-Z0-9_-]+)/);
-    if (!m?.[1]) return null;
-    channelId = m[1];
+    const cacheKey = clean.toLowerCase();
+    const cachedId = ytHandleCache.get(cacheKey);
+    if (cachedId) {
+      channelId = cachedId;
+    } else {
+      const pageRes = await fetchPublic(`https://www.youtube.com/@${encodeURIComponent(clean)}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      }, 8000);
+      if (!pageRes.ok) {
+        await pageRes.body?.cancel?.().catch(() => {});
+        return null;
+      }
+      const html = await readTextLimited(pageRes, 512 * 1024);
+      const m = html.match(/"channelId":"(UC[a-zA-Z0-9_-]+)"/) || html.match(/channel_id=(UC[a-zA-Z0-9_-]+)/);
+      if (!m?.[1]) return null;
+      channelId = m[1];
+      ytHandleCache.set(cacheKey, channelId);
+    }
   }
 
   const res = await fetchPublic(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`, {}, 8000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    return null;
+  }
   const xml = await readTextLimited(res, 512 * 1024);
   const entry = xml.match(/<entry>([\s\S]*?)<\/entry>/)?.[1];
   if (!entry) return null;
 
   const videoId = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1]?.trim();
-  const title = entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]?.trim() || "Nuevo video en YouTube";
-  const author = entry.match(/<name>([\s\S]*?)<\/name>/)?.[1]?.trim() || account;
+  const rawTitle = entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]?.trim();
+  const rawAuthor = entry.match(/<name>([\s\S]*?)<\/name>/)?.[1]?.trim();
+  const title = rawTitle ? decodeXmlEntities(rawTitle) : "Nuevo video en YouTube";
+  const author = rawAuthor ? decodeXmlEntities(rawAuthor) : account;
   if (!videoId) return null;
 
   return {
@@ -55,11 +88,16 @@ async function fetchRedditLatest(subreddit) {
   const res = await fetchPublic(`https://www.reddit.com/r/${encodeURIComponent(cleanSub)}/new.json?limit=2`, {
     headers: { "User-Agent": "RedBot/1.0" },
   }, 8000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    return null;
+  }
   const raw = await readTextLimited(res, 512 * 1024);
   const data = JSON.parse(raw);
   const post = data?.data?.children?.[0]?.data;
   if (!post?.id) return null;
+
+  const rawThumb = typeof post.thumbnail === "string" ? post.thumbnail.replace(/&amp;/g, "&") : null;
 
   return {
     itemId: post.id,
@@ -67,7 +105,7 @@ async function fetchRedditLatest(subreddit) {
     title: post.title || `Nuevo post en r/${cleanSub}`,
     author: `r/${cleanSub}`,
     platformLabel: "Reddit",
-    thumbnail: /^https?:\/\//i.test(post.thumbnail) ? post.thumbnail : null,
+    thumbnail: rawThumb && /^https?:\/\//i.test(rawThumb) ? rawThumb : null,
   };
 }
 
@@ -76,7 +114,10 @@ async function fetchKickLatest(username) {
   const res = await fetchPublic(`https://kick.com/api/v2/channels/${encodeURIComponent(clean)}`, {
     headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
   }, 8000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    return null;
+  }
   const raw = await readTextLimited(res, 512 * 1024);
   const data = JSON.parse(raw);
   const live = data?.livestream;
@@ -98,9 +139,15 @@ async function fetchTwitchLatest(username) {
   const res = await fetchPublic(`https://decapi.me/twitch/uptime/${encodeURIComponent(clean)}`, {
     headers: { "User-Agent": "RedBot/1.0" },
   }, 8000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    return null;
+  }
   const uptimeText = (await readTextLimited(res, 16 * 1024)).trim();
-  if (!uptimeText || /offline|not live|error/i.test(uptimeText)) {
+  if (!uptimeText || /^(?:an )?error\b|not found|failed/i.test(uptimeText)) {
+    return null;
+  }
+  if (/offline|not live/i.test(uptimeText)) {
     return { offline: true };
   }
 
@@ -108,7 +155,9 @@ async function fetchTwitchLatest(username) {
   const titleRes = await fetchPublic(`https://decapi.me/twitch/title/${encodeURIComponent(clean)}`, {}, 5000).catch(() => null);
   if (titleRes?.ok) {
     const t = (await readTextLimited(titleRes, 16 * 1024)).trim();
-    if (t && !/error/i.test(t)) title = t;
+    if (t && !/^(?:an )?error\b|not found|failed/i.test(t)) title = t;
+  } else if (titleRes) {
+    await titleRes.body?.cancel?.().catch(() => {});
   }
 
   return {
@@ -127,7 +176,10 @@ async function fetchTikTokLatest(username) {
   const res = await fetchPublic(`https://www.tiktok.com/@${encodeURIComponent(clean)}`, {
     headers: { "User-Agent": "Mozilla/5.0" },
   }, 8000);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    return null;
+  }
   const html = await readTextLimited(res, 1024 * 1024);
   const vidMatch = html.match(/\/video\/(\d{15,25})/);
   if (!vidMatch?.[1]) return null;
@@ -165,54 +217,73 @@ async function dispatchFeedNotification(client, feed, item) {
     .setTimestamp();
   if (item.thumbnail) embed.setImage(item.thumbnail);
 
-  const customMsg = (feed.customMessage || "")
-    .replace(/\{author\}/g, item.author)
-    .replace(/\{url\}/g, item.url)
-    .replace(/\{title\}/g, item.title)
-    .replace(/\{platform\}/g, item.platformLabel);
+  const safeAuthor = neutralizeMentions(item.author);
+  const safeTitle = neutralizeMentions(item.title);
+  const safePlatform = neutralizeMentions(item.platformLabel);
 
-  await ch.send({
-    content: customMsg || item.url,
+  const customMsg = (feed.customMessage || "")
+    .replace(/\{author\}/g, () => safeAuthor)
+    .replace(/\{url\}/g, () => item.url)
+    .replace(/\{title\}/g, () => safeTitle)
+    .replace(/\{platform\}/g, () => safePlatform);
+
+  const content = (customMsg || item.url).slice(0, 2000);
+  const sent = await ch.send({
+    content,
     embeds: [embed],
     allowedMentions: { parse: ["roles", "everyone"] },
-  }).catch(() => {});
-  return true;
+  }).catch(() => null);
+  return Boolean(sent);
 }
 
 async function pollSocialFeeds(client) {
-  if (!client?.channels || mongoose.connection.readyState !== 1) return;
-  const feeds = await SocialFeed.find().lean().catch(() => []);
-  if (!feeds.length) return;
+  if (isPollingFeeds || !client?.channels || mongoose.connection.readyState !== 1) return;
+  isPollingFeeds = true;
+  try {
+    const feeds = await SocialFeed.find().lean().catch(() => []);
+    if (!feeds.length) return;
 
-  for (const feed of feeds) {
-    try {
-      const latest = await fetchLatestForFeed(feed.platform, feed.account).catch(() => null);
-      if (!latest) continue;
+    const cycleResults = new Map();
 
-      if (latest.offline) {
-        if (feed.isLive) {
-          await SocialFeed.updateOne({ _id: feed._id }, { $set: { isLive: false } }).catch(() => {});
+    for (const feed of feeds) {
+      try {
+        const cacheKey = `${feed.platform}:${String(feed.account || "").toLowerCase()}`;
+        let latest;
+        if (cycleResults.has(cacheKey)) {
+          latest = cycleResults.get(cacheKey);
+        } else {
+          latest = await fetchLatestForFeed(feed.platform, feed.account).catch(() => null);
+          cycleResults.set(cacheKey, latest);
         }
-        continue;
-      }
+        if (!latest) continue;
 
-      const isStream = feed.platform === "twitch" || feed.platform === "kick";
-      if (!feed.lastItemId && !isStream) {
-        await SocialFeed.updateOne({ _id: feed._id }, { $set: { lastItemId: latest.itemId } }).catch(() => {});
-        continue;
-      }
+        if (latest.offline) {
+          if (feed.isLive) {
+            await SocialFeed.updateOne({ _id: feed._id }, { $set: { isLive: false } }).catch(() => {});
+          }
+          continue;
+        }
 
-      if (isStream) {
-        if (feed.isLive) continue;
-        await SocialFeed.updateOne({ _id: feed._id }, { $set: { isLive: true, lastItemId: latest.itemId } }).catch(() => {});
-        await dispatchFeedNotification(client, feed, latest);
-      } else if (latest.itemId !== feed.lastItemId) {
-        await SocialFeed.updateOne({ _id: feed._id }, { $set: { lastItemId: latest.itemId } }).catch(() => {});
-        await dispatchFeedNotification(client, feed, latest);
+        const isStream = feed.platform === "twitch" || feed.platform === "kick";
+        if (!feed.lastItemId && !isStream) {
+          await SocialFeed.updateOne({ _id: feed._id }, { $set: { lastItemId: latest.itemId } }).catch(() => {});
+          continue;
+        }
+
+        if (isStream) {
+          if (feed.isLive) continue;
+          await SocialFeed.updateOne({ _id: feed._id }, { $set: { isLive: true, lastItemId: latest.itemId } }).catch(() => {});
+          await dispatchFeedNotification(client, feed, latest);
+        } else if (latest.itemId !== feed.lastItemId) {
+          await SocialFeed.updateOne({ _id: feed._id }, { $set: { lastItemId: latest.itemId } }).catch(() => {});
+          await dispatchFeedNotification(client, feed, latest);
+        }
+      } catch (err) {
+        log.debug("Error consultando feed social", { platform: feed.platform, account: feed.account, err: err?.message });
       }
-    } catch (err) {
-      log.debug("Error consultando feed social", { platform: feed.platform, account: feed.account, err: err?.message });
     }
+  } finally {
+    isPollingFeeds = false;
   }
 }
 
@@ -235,7 +306,6 @@ module.exports = {
   PLATFORM_LIMITS,
   fetchLatestForFeed,
   dispatchFeedNotification,
-  pollSocialFeeds,
   startSocialFeedWorker,
   stopSocialFeedWorker,
 };

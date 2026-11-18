@@ -4,8 +4,19 @@ const { isPromise } = require("util/types");
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const RELEASE_NOTICE_VERSION = "0.4.0";
+const MAX_SEEN_RELEASE_USERS = 10_000;
 const seenReleaseUsers = new Set();
 const handledReleaseCtx = new WeakSet();
+const WRAPPED_CMD = Symbol.for("redbot.commandWrapped");
+
+function rememberReleaseUser(userId) {
+  if (seenReleaseUsers.has(userId)) return;
+  if (seenReleaseUsers.size >= MAX_SEEN_RELEASE_USERS) {
+    const oldest = seenReleaseUsers.values().next().value;
+    if (oldest !== undefined) seenReleaseUsers.delete(oldest);
+  }
+  seenReleaseUsers.add(userId);
+}
 
 function buildReleaseNoticeEmbed(lang = null) {
   const { EmbedBuilder } = require("discord.js");
@@ -41,18 +52,13 @@ async function maybeSendReleaseNotice(ctx) {
     if (mongoose.connection.readyState !== 1) return;
 
     const { ReleaseNotice } = require("./database");
-    const exists = await ReleaseNotice.exists({ userId, version: RELEASE_NOTICE_VERSION });
-    if (exists) {
-      seenReleaseUsers.add(userId);
-      return;
-    }
-
-    seenReleaseUsers.add(userId);
-    await ReleaseNotice.updateOne(
+    const res = await ReleaseNotice.updateOne(
       { userId, version: RELEASE_NOTICE_VERSION },
       { $setOnInsert: { userId, version: RELEASE_NOTICE_VERSION } },
       { upsert: true }
     );
+    rememberReleaseUser(userId);
+    if (!res?.upsertedCount) return;
 
     const payload = { embeds: [buildReleaseNoticeEmbed()] };
     if (ctx.interaction && (ctx.interaction.replied || ctx.interaction.deferred)) {
@@ -168,7 +174,6 @@ const PREFIXED_TO_SLASH_MAP = {
   invitereward: "community/invitereward",
 };
 
-const wrappedOriginalCodes = new WeakSet();
 const slashCommandMap = new Map();
 
 async function resolveMember(ctx, input) {
@@ -184,6 +189,15 @@ async function resolveMember(ctx, input) {
       (await ctx.guild.members.fetch(targetId).catch(() => null))
     );
   }
+
+  const lower = token.toLowerCase();
+  const exactCached = ctx.guild.members.cache.find((m) => {
+    const u = m.user?.username?.toLowerCase() ?? "";
+    const g = m.user?.globalName?.toLowerCase() ?? "";
+    const n = m.nickname?.toLowerCase() ?? "";
+    return u === lower || g === lower || n === lower;
+  });
+  if (exactCached) return exactCached;
 
   const byQuery = await ctx.guild.members.fetch({ query: token, limit: 1 }).catch(() => null);
   return byQuery?.first() ?? null;
@@ -204,7 +218,7 @@ async function resolveMemberFlexible(ctx, input, { strictMentionOrId = false } =
   }
 
   if (!ctx?.guild && idMatch) {
-    const client = ctx.bot?.client ?? ctx.client ?? ctx.message?.client;
+    const client = ctx.bot ?? ctx.message?.client;
     const user = await client?.users?.fetch?.(idMatch).catch(() => null);
     if (user) return user;
   }
@@ -642,10 +656,35 @@ async function parseCustomPrefixedArgs(ctx, slashKey, rawArgs) {
     return { values: { canal, rol, mensaje, estado }, missingRequired: false, notFound: false };
   }
 
+  if (slashKey === "server/custombot") {
+    const avatar = flags.avatar ? buildAttachmentFromUrl(flags.avatar, "avatar") : null;
+    const banner = flags.banner ? buildAttachmentFromUrl(flags.banner, "banner") : null;
+    const apodo = flags.apodo ?? flags.nick ?? (positional.length ? positional.join(" ") : null);
+    const biografia = flags.biografia ?? flags.bio ?? null;
+    return { values: { avatar, banner, apodo, biografia }, missingRequired: false, notFound: false };
+  }
+
   return null;
 }
 
-async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey = "") {
+function validateParsedChoices(defs, values) {
+  for (const def of defs) {
+    if (!def.choices?.length) continue;
+    const raw = values[def.name];
+    if (raw === null || raw === undefined || raw === "") continue;
+    const normalized = String(raw).toLowerCase().trim();
+    const matched = def.choices.find(
+      (c) => String(c.value).toLowerCase() === normalized || String(c.name).toLowerCase() === normalized
+    );
+    if (!matched) {
+      return { param: def, choices: def.choices };
+    }
+    values[def.name] = matched.value;
+  }
+  return null;
+}
+
+async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey = "", lang = "es") {
   const defs = slashCommand?.params?.params ?? [];
   const args = [...(ctx.args ?? [])];
   const replyMsg = ctx?.message?.reference?.messageId
@@ -666,7 +705,14 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
   if (slashName === "poll") return parsePollArgs(args);
 
   const customParsed = await parseCustomPrefixedArgs(ctx, slashKey, args);
-  if (customParsed) return customParsed;
+  if (customParsed) {
+    if (slashKey === "server/custombot") {
+      if (!customParsed.values.avatar && attachments.length) customParsed.values.avatar = attachments.shift();
+      if (!customParsed.values.banner && attachments.length) customParsed.values.banner = attachments.shift();
+    }
+    const invalidChoice = validateParsedChoices(defs, customParsed.values);
+    return { ...customParsed, invalidChoice };
+  }
 
   if (slashName === "purge" && args.length >= 2 && !/^\d{1,3}$/.test(args[0]) && /^\d{1,3}$/.test(args[1])) {
     [args[0], args[1]] = [args[1], args[0]];
@@ -695,6 +741,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
       if (token) {
         value = await resolveChannelFlexible(ctx, token);
         if (value) args.shift();
+        else if (def.required && slashName === "rename" && ctx.channel) value = ctx.channel;
       } else if (def.required && slashName === "rename" && ctx.channel) {
         value = ctx.channel;
       }
@@ -734,7 +781,7 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
       } else if (def.required && def.name !== "tiempo" && getMessageText(replyMsg)) {
         value = getMessageText(replyMsg);
       } else if (def.required && slashName === "ask" && attachments.length) {
-        value = "Analiza esta imagen.";
+        value = lang === "en" ? "Analyze this image." : "Analiza esta imagen.";
       } else if (def.required && slashName === "download") {
         const replyAtt = getFirstAttachment(replyMsg);
         if (replyAtt?.url) value = replyAtt.url;
@@ -747,7 +794,8 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
     if (def.required && values[def.name] === null) missingRequired = true;
   }
 
-  return { values, missingRequired, notFound };
+  const invalidChoice = validateParsedChoices(defs, values);
+  return { values, missingRequired, notFound, invalidChoice };
 }
 
 const CTX_I18N_WRAPPED = Symbol.for("redbot.ctxI18nWrapped");
@@ -771,18 +819,18 @@ function wrapCtxForLang(ctx, lang) {
     return msg;
   };
 
-  for (const fnName of ["send", "ephemeral"]) {
-    if (typeof ctx[fnName] === "function") {
-      const orig = ctx[fnName].bind(ctx);
-      ctx[fnName] = async (payload, ...rest) => {
-        const cur = activeLang();
-        if (payload && typeof payload === "object" && typeof payload.toPayload === "function") {
-          payload._i18nLang = cur;
-          return wrapSentMsg(await orig(payload, ...rest));
-        }
-        return wrapSentMsg(await orig(cur === "en" ? translatePayload(payload, cur) : payload, ...rest));
-      };
-    }
+  // En Gralonium, ctx.ephemeral() y ctx.reply() delegan internamente en ctx.send(),
+  // por lo que envolver solo send evita traducciones duplicadas.
+  if (typeof ctx.send === "function") {
+    const origSend = ctx.send.bind(ctx);
+    ctx.send = async (payload, ...rest) => {
+      const cur = activeLang();
+      if (payload && typeof payload === "object" && typeof payload.toPayload === "function") {
+        payload._i18nLang = cur;
+        return wrapSentMsg(await origSend(payload, ...rest));
+      }
+      return wrapSentMsg(await origSend(cur === "en" ? translatePayload(payload, cur) : payload, ...rest));
+    };
   }
 
   if (ctx.interaction && lang === "en") wrapInteractionForLang(ctx.interaction, lang);
@@ -791,9 +839,9 @@ function wrapCtxForLang(ctx, lang) {
 
 function wrapSlashCommand(cmd) {
   const originalCode = cmd?.code;
-  if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
+  if (typeof originalCode !== "function" || originalCode[WRAPPED_CMD]) return;
 
-  cmd.code = async function (ctx, ...args) {
+  const wrapped = async function (ctx, ...args) {
     const { runWithLang } = require("./i18n");
     const { resolveContextLang } = require("./guild");
     const guildId = ctx?.guild?.id ?? ctx?.interaction?.guildId ?? null;
@@ -807,8 +855,8 @@ function wrapSlashCommand(cmd) {
       return result;
     });
   };
-
-  wrappedOriginalCodes.add(originalCode);
+  wrapped[WRAPPED_CMD] = true;
+  cmd.code = wrapped;
 }
 
 function loadSlashCommandMap(log) {
@@ -827,7 +875,7 @@ function loadSlashCommandMap(log) {
         const groupName = rootData.name ?? entry.name.slice(0, -3);
         for (const cmd of rootData.commands) {
           wrapSlashCommand(cmd);
-          if (cmd?.data?.name) slashCommandMap.set(`${groupName}/${cmd.data.name}`, cmd);
+          if (cmd?.data?.name) slashCommandMap.set(`${groupName}/${cmd.data.name}`, { command: cmd, group: exported });
         }
       } else if (typeof exported?.code === "function") {
         wrapSlashCommand(exported);
@@ -868,24 +916,49 @@ async function applyDelegatedCooldown(ctx, slashCommand, slashKey = null) {
   await cooldowns.setCooldownSource(cmdKey, source, bucket, cooldownMs);
 }
 
-async function runCommandPlugins(ctx, slashCommand) {
-  const plugins = [...(slashCommand.plugins ?? []), ...(ctx?.bot?.loader?.globalPlugins ?? [])];
-  for (const plugin of plugins) {
+async function runDelegatedPreChecks(ctx, slashCommand, slashGroup) {
+  const { Errors } = require("gralonium");
+
+  if ((slashGroup?.data?.guildOnly === true || slashCommand?.data?.guildOnly === true) && !ctx.guild) {
+    throw new Errors.GuildOnly(ctx);
+  }
+
+  if (ctx.guild) {
+    const userPerms = [...(slashGroup?.data?.userPermissions ?? []), ...(slashCommand?.data?.userPermissions ?? [])];
+    if (userPerms.length && !ctx.member?.permissions?.has?.(userPerms)) {
+      throw new Errors.MissingPermission(ctx, userPerms);
+    }
+    const botPerms = [...(slashGroup?.data?.botPermissions ?? []), ...(slashCommand?.data?.botPermissions ?? [])];
+    if (botPerms.length && !ctx.guild.members.me?.permissions?.has?.(botPerms)) {
+      throw new Errors.MissingBotPermission(ctx, botPerms);
+    }
+  }
+
+  for (const plugin of slashCommand?.plugins ?? []) {
     const fn = isPromise(plugin) ? await plugin : plugin;
     if (!(await fn(ctx))) return false;
   }
+
+  const guards = [...(slashGroup?.data?.guards ?? []), ...(slashCommand?.data?.guards ?? [])];
+  for (const guard of guards) {
+    if (!guard) continue;
+    if (!(await guard(ctx))) return false;
+  }
+
   return true;
 }
 
 function wrapSingleCommand(command, file, log) {
   const originalCode = command?.code;
-  if (typeof originalCode !== "function" || wrappedOriginalCodes.has(originalCode)) return;
+  if (typeof originalCode !== "function" || originalCode[WRAPPED_CMD]) return;
 
-  command.code = async function (ctx, ...args) {
+  const wrapped = async function (ctx, ...args) {
     const prefixedName = command?.data?.name;
     const slashKey = resolveSlashKeyForPrefixedName(prefixedName);
     const slashName = slashKey?.split("/")[1];
-    const slashCommand = slashKey ? slashCommandMap.get(slashKey) : null;
+    const slashEntry = slashKey ? slashCommandMap.get(slashKey) : null;
+    const slashCommand = slashEntry?.command ?? null;
+    const slashGroup = slashEntry?.group ?? null;
 
     // dmall usa su propio parser (titulo,texto + flags --); no se delega al slash
     if (slashCommand?.code && prefixedName !== "dmall") {
@@ -893,7 +966,7 @@ function wrapSingleCommand(command, file, log) {
         const prevCommand = ctx.command;
         ctx.command = slashCommand;
         try {
-          if (!(await runCommandPlugins(ctx, slashCommand))) return;
+          if (!(await runDelegatedPreChecks(ctx, slashCommand, slashGroup))) return;
         } finally {
           ctx.command = prevCommand;
         }
@@ -905,8 +978,12 @@ function wrapSingleCommand(command, file, log) {
           userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
         });
         wrapCtxForLang(ctx, lang);
-        const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey);
+        const parsedValues = await parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey, lang);
         if (parsedValues.notFound) return ctx.send(lang === "en" ? "Could not find that user" : "No encontré a ese usuario");
+        if (parsedValues.invalidChoice) {
+          const { Errors } = require("gralonium");
+          throw new Errors.InvalidParamChoice(ctx, parsedValues.invalidChoice.param, parsedValues.invalidChoice.choices);
+        }
         if (parsedValues.missingRequired) {
           const fallbackResult = await runWithLang(lang, () => originalCode.call(this, ctx, ...args));
           if (fallbackResult !== undefined) return fallbackResult;
@@ -931,23 +1008,31 @@ function wrapSingleCommand(command, file, log) {
         const isExpectedFrameworkError =
           (Errors?.MissingPermission && err instanceof Errors.MissingPermission) ||
           (Errors?.MissingBotPermission && err instanceof Errors.MissingBotPermission) ||
-          (Errors?.CommandMissingPermissions && err instanceof Errors.CommandMissingPermissions) ||
-          (Errors?.CommandMissingBotPermissions && err instanceof Errors.CommandMissingBotPermissions) ||
+          (Errors?.MissingChannelPermission && err instanceof Errors.MissingChannelPermission) ||
+          (Errors?.MissingBotChannelPermission && err instanceof Errors.MissingBotChannelPermission) ||
           (Errors?.CommandInCooldown && err instanceof Errors.CommandInCooldown) ||
           (Errors?.GuildOnly && err instanceof Errors.GuildOnly) ||
-          (Errors?.NotOwner && err instanceof Errors.NotOwner);
+          (Errors?.NotOwner && err instanceof Errors.NotOwner) ||
+          (Errors?.OnlyForIDs && err instanceof Errors.OnlyForIDs) ||
+          (Errors?.NotNSFW && err instanceof Errors.NotNSFW) ||
+          (Errors?.NotInChannelType && err instanceof Errors.NotInChannelType) ||
+          (Errors?.RestrictedUser && err instanceof Errors.RestrictedUser) ||
+          (Errors?.RestrictedGuild && err instanceof Errors.RestrictedGuild) ||
+          (Errors?.InvalidParam && err instanceof Errors.InvalidParam) ||
+          (Errors?.InvalidParamChoice && err instanceof Errors.InvalidParamChoice);
         if (!isExpectedFrameworkError) {
+          const { sanitizeError } = require("./runtime");
           log?.error(`[adapter:${slashName ?? prefixedName ?? "unknown"}]`, {
-            err: err?.stack || err?.message || String(err),
+            err: sanitizeError(err),
           });
         }
         throw err;
       }
     }
 
+    const { runWithLang, getCurrentLang } = require("./i18n");
+    const { resolveContextLang } = require("./guild");
     try {
-      const { runWithLang, getCurrentLang } = require("./i18n");
-      const { resolveContextLang } = require("./guild");
       const lang = await resolveContextLang({
         guildId: ctx?.guild?.id ?? null,
         userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
@@ -959,16 +1044,17 @@ function wrapSingleCommand(command, file, log) {
         return result;
       });
     } catch (err) {
-      log?.error(`[${command?.data?.name ?? file}]`, { err: err.message });
-      const errLang = await require("./guild").resolveContextLang({
+      const { sanitizeError } = require("./runtime");
+      log?.error(`[${command?.data?.name ?? file}]`, { err: sanitizeError(err) });
+      const errLang = await resolveContextLang({
         guildId: ctx?.guild?.id ?? null,
         userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
       }).catch(() => getCurrentLang());
       return ctx.send(errLang === "en" ? "An error occurred while running the command" : "Ocurrió un error ejecutando el comando");
     }
   };
-
-  wrappedOriginalCodes.add(originalCode);
+  wrapped[WRAPPED_CMD] = true;
+  command.code = wrapped;
 }
 
 function wrapPrefixedCommands(log) {
@@ -986,4 +1072,4 @@ function wrapPrefixedCommands(log) {
   }
 }
 
-module.exports = { wrapPrefixedCommands, resolveMemberFlexible, parsePrefixedArgsForSlash, getMessageText };
+module.exports = { wrapPrefixedCommands, resolveMemberFlexible, getMessageText };

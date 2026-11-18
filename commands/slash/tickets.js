@@ -1,5 +1,5 @@
 const { ChannelType, PermissionFlagsBits } = require("discord.js");
-const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
 const { Ticket } = require("../../src/database");
 const { getCurrentLang } = require("../../src/i18n");
@@ -17,6 +17,13 @@ const {
 
 const log = new Logger("CMD_TICKETS", process.env.LOG_LEVEL);
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
+
+function isTicketStaff(ctx, cfg) {
+  return Boolean(
+    ctx.member?.permissions?.has?.(PermissionFlagsBits.ManageChannels) ||
+    (cfg?.supportRoleId && ctx.member?.roles?.cache?.has?.(cfg.supportRoleId))
+  );
+}
 
 const data = {
   data: new GroupBuilder({
@@ -80,13 +87,6 @@ const data = {
         const opcionesRaw = ctx.get("opciones");
         const parsedOptions = parseTicketMenuOptions(opcionesRaw);
         const buttonOrPlaceholder = ctx.get("boton");
-        if (parsedOptions.length) {
-          await updateTicketConfig(ctx.guild.id, {
-            enabled: true,
-            categories: parsedOptions,
-            ...(buttonOrPlaceholder ? { panelPlaceholder: String(buttonOrPlaceholder).slice(0, 100) } : {}),
-          });
-        }
         const payload = buildTicketPanelPayload({
           title: ctx.get("titulo"),
           description: ctx.get("descripcion"),
@@ -97,6 +97,13 @@ const data = {
           lang: getCurrentLang(),
         });
         await ch.send(payload);
+        if (parsedOptions.length) {
+          await updateTicketConfig(ctx.guild.id, {
+            enabled: true,
+            categories: parsedOptions,
+            ...(buttonOrPlaceholder ? { panelPlaceholder: String(buttonOrPlaceholder).slice(0, 100) } : {}),
+          });
+        }
         await ctx.ephemeral(`Panel de tickets enviado en ${ch}`);
       },
     })
@@ -122,7 +129,7 @@ const data = {
         const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
         if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
         const cfg = await getTicketConfig(ctx.guild.id);
-        const isStaff = ctx.member?.permissions?.has(PermissionFlagsBits.ManageChannels) || (cfg.supportRoleId && ctx.member?.roles?.cache?.has(cfg.supportRoleId));
+        const isStaff = isTicketStaff(ctx, cfg);
         if (!isStaff && ctx.user.id !== ticket.openerId) {
           return ctx.ephemeral("No tienes permisos para cerrar este ticket");
         }
@@ -138,6 +145,10 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
         if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
+        const cfg = await getTicketConfig(ctx.guild.id);
+        if (!isTicketStaff(ctx, cfg)) {
+          return ctx.ephemeral("Solo el equipo de soporte puede añadir usuarios al ticket");
+        }
         const member = ctx.get("usuario");
         await ctx.channel.permissionOverwrites.edit(member.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true });
         await ctx.send(ComponentsV2Builder.card({ title: "Usuario añadido", description: `${member} fue añadido al ticket.`, color: GREEN }));
@@ -151,7 +162,14 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
         if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
+        const cfg = await getTicketConfig(ctx.guild.id);
+        if (!isTicketStaff(ctx, cfg)) {
+          return ctx.ephemeral("Solo el equipo de soporte puede retirar usuarios del ticket");
+        }
         const member = ctx.get("usuario");
+        if (member.id === ticket.openerId || member.id === ctx.guild.members.me?.id) {
+          return ctx.ephemeral("No puedes retirar al creador del ticket ni al bot");
+        }
         await ctx.channel.permissionOverwrites.delete(member.id);
         await ctx.send(ComponentsV2Builder.card({ title: "Usuario retirado", description: `${member} ya no tiene acceso al ticket.`, color: RED }));
       },
@@ -163,6 +181,10 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
         if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
+        const cfg = await getTicketConfig(ctx.guild.id);
+        if (!isTicketStaff(ctx, cfg)) {
+          return ctx.ephemeral("Solo el equipo de soporte puede reclamar tickets");
+        }
         await Ticket.updateOne({ channelId: ctx.channel.id }, { $set: { claimedBy: ctx.user.id } });
         await ctx.send(ComponentsV2Builder.card({ title: "Ticket reclamado", description: `Atendido por ${ctx.user}.`, color: GREEN }));
       },
@@ -175,6 +197,10 @@ const data = {
         await ctx.defer();
         const ticket = await Ticket.findOne({ channelId: ctx.channel.id }).lean();
         if (!ticket) return ctx.ephemeral("Este canal no es un ticket registrado");
+        const cfg = await getTicketConfig(ctx.guild.id);
+        if (!isTicketStaff(ctx, cfg) && ctx.user.id !== ticket.openerId) {
+          return ctx.ephemeral("No tienes permisos para exportar este historial");
+        }
         try {
           const t = await generateTicketTranscript(ctx.channel, ticket);
           await ctx.send({

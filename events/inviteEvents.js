@@ -1,5 +1,6 @@
 const {
   cacheInviteEntry,
+  clearGuildInviteCache,
   removeCachedInvite,
   sendWelcomeOrGoodbye,
   trackMemberLeaveInvite,
@@ -21,11 +22,20 @@ const data = [
     },
   },
   {
+    name: "guildDelete",
+    once: false,
+    async code(_bot, guild) {
+      clearGuildInviteCache(guild?.id);
+    },
+  },
+  {
     name: "guildMemberRemove",
     once: false,
     async code(_bot, member) {
       if (!member?.guild?.id) return;
-      await trackMemberLeaveInvite(member).catch(() => {});
+      if (!member.user?.bot) {
+        await trackMemberLeaveInvite(member).catch(() => {});
+      }
       await sendWelcomeOrGoodbye(member, "goodbye").catch(() => {});
     },
   },

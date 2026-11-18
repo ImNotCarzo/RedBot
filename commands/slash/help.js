@@ -6,7 +6,7 @@ const {
   V2View,
 } = require("gralonium");
 const { getId, RED, USER_APP_CONFIG } = require("../../src/config");
-const { getPrefix, resolveContextLang } = require("../../src/guild");
+const { getPrefix } = require("../../src/guild");
 const { Logger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../../src/runtime");
 const log = new Logger("CMD_HELP", process.env.LOG_LEVEL);
 
@@ -58,7 +58,7 @@ const CATEGORY_LABELS = {
 //  COMANDOS
 // ─────────────────────────────────────────────
 
-const getBaseCommands = () => ({
+const getCommands = () => ({
   ai: {
     ask:        { short: "ask",        slash: "ai ask",        id: IDS.ai(), usage: ".ask <pregunta>",            aliases: ["ai", "ia"],          description: "Hazle una pregunta o envíale una imagen a la IA." },
     askreset:   { short: "askreset",   slash: "ai askreset",   id: IDS.ai(), usage: ".askreset",                  aliases: ["aireset", "reset"],  description: "Limpia tu historial de conversación con la IA." },
@@ -73,17 +73,21 @@ const getBaseCommands = () => ({
     roast:      { short: "roast",      slash: "ai roast",      id: IDS.ai(), usage: ".roast [@usuario]",          aliases: ["burn"],              description: "Critica despiadadamente a un usuario." },
   },
   utilidad: {
-    afk:       { short: "afk",       slash: "util afk",       id: IDS.util(), usage: ".afk [razón]",               aliases: ["ausente"],                     description: "Establece tu estado como ausente (AFK)." },
-    jumbo:     { short: "jumbo",     slash: "util jumbo",     id: IDS.util(), usage: ".jumbo <emoji>",             aliases: ["emojijumbo", "bigemoji"],      description: "Muestra un emoji en tamaño grande." },
-    ping:      { short: "ping",      slash: "util ping",      id: IDS.util(), usage: ".ping",                      aliases: [],                              description: "Muestra la latencia actual del bot." },
-    botinfo:   { short: "botinfo",   slash: "util botinfo",   id: IDS.util(), usage: ".botinfo",                   aliases: ["bot", "info"],                 description: "Muestra información general del bot." },
-    invite:    { short: "invite",    slash: "util invite",    id: IDS.util(), usage: ".invite",                    aliases: ["inv"],                         description: "Envía la invitación del bot y el servidor de soporte." },
-    setprefix: { short: "setprefix", slash: "util setprefix", id: IDS.util(), usage: ".setprefix <nuevo>",         aliases: ["prefix"],                      description: "Cambia o muestra el prefijo del bot en este servidor." },
-    translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",aliases: ["traducir", "trans"],           description: "Traduce texto a otro idioma." },
-    download:  { short: "download",  slash: "util download",  id: IDS.util(), usage: ".download <url>",            aliases: ["dl", "video", "bajar"],        description: "Descarga un video desde un enlace." },
-    dm:        { short: "dmall",     slash: "util dm",        id: IDS.util(), usage: ".dmall <mensaje>",           aliases: ["dm"],                          description: "Envía un mensaje privado a miembros del servidor." },
-    choose:    { short: "choose",    slash: "util choose",    id: IDS.util(), usage: ".choose <op1, op2, ...>",    aliases: ["elegir", "escoger", "pick"],   description: "Elige una opción al azar entre varias." },
-    lol:       { short: "lol",       slash: "util lol",       id: IDS.util(), usage: ".lol",                       aliases: [],                              description: "Ríete de algo así bien jaja." },
+    afk:       { short: "afk",       slash: "util afk",       id: IDS.util(), usage: ".afk [razón]",                     aliases: ["ausente"],                              description: "Establece tu estado como ausente (AFK)." },
+    jumbo:     { short: "jumbo",     slash: "util jumbo",     id: IDS.util(), usage: ".jumbo <emoji>",                   aliases: ["emojijumbo", "bigemoji"],               description: "Muestra un emoji en tamaño grande." },
+    ping:      { short: "ping",      slash: "util ping",      id: IDS.util(), usage: ".ping",                            aliases: [],                                       description: "Muestra la latencia actual del bot." },
+    botinfo:   { short: "botinfo",   slash: "util botinfo",   id: IDS.util(), usage: ".botinfo",                         aliases: ["bot", "info"],                          description: "Muestra información general del bot." },
+    invite:    { short: "invite",    slash: "util invite",    id: IDS.util(), usage: ".invite",                          aliases: ["inv"],                                  description: "Envía la invitación del bot y el servidor de soporte." },
+    setprefix: { short: "setprefix", slash: "util setprefix", id: IDS.util(), usage: ".setprefix <nuevo>",               aliases: ["prefix"],                               description: "Cambia o muestra el prefijo del bot en este servidor." },
+    translate: { short: "translate", slash: "util translate", id: IDS.util(), usage: ".translate <texto> [idioma]",      aliases: ["traducir", "trans"],                    description: "Traduce texto a otro idioma." },
+    download:  { short: "download",  slash: "util download",  id: IDS.util(), usage: ".download <url>",                  aliases: ["dl", "video", "bajar"],                 description: "Descarga un video desde un enlace." },
+    dm:        { short: "dmall",     slash: "util dm",        id: IDS.util(), usage: ".dm <titulo>,<texto> [--solo @rol]", aliases: ["dm", "dmeveryone"],                   description: "Envía un mensaje privado a miembros del servidor." },
+    choose:    { short: "choose",    slash: "util choose",    id: IDS.util(), usage: ".choose <op1, op2, ...>",          aliases: ["elegir", "escoger", "pick"],            description: "Elige una opción al azar entre varias." },
+    lol:       { short: "lol",       slash: "util lol",       id: IDS.util(), usage: ".lol",                             aliases: [],                                       description: "Ríete de algo así bien jaja." },
+    poll:      { short: "poll",      slash: "util poll",      id: IDS.util(), usage: ".poll <pregunta> / <op1> / <op2>", aliases: ["encuesta"],                             description: "Crea una encuesta nativa de Discord." },
+    remind:    { short: "remind",    slash: "util remind",    id: IDS.util(), usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." },
+    reminders: { short: "reminders", slash: "util reminders", id: IDS.util(), usage: ".reminders",                       aliases: ["recordatorios", "myreminders"],         description: "Lista o cancela tus recordatorios activos." },
+    setlang:   { short: "setlang",   slash: "util setlang",   id: IDS.util(), usage: ".setlang [es|en]",                 aliases: ["lang", "idioma"],                       description: "Cambia o muestra el idioma del servidor o personal." },
   },
   usuario: {
     info:        { short: "user",       slash: "user info",        id: IDS.user(), usage: ".user [@usuario]",      aliases: ["userinfo", "ui", "whois"],    description: "Muestra información general de un usuario." },
@@ -158,6 +162,7 @@ const getBaseCommands = () => ({
     sticky:    { short: "sticky",    slash: "channel sticky",    id: IDS.channel(), usage: ".sticky <set|remove|list> [mensaje] [#canal]", aliases: ["stickymessage", "fijar"],         description: "Fija un mensaje anclado al final del canal." },
     temp:      { short: "temp",      slash: "channel temp",      id: IDS.channel(), usage: ".temp <timed|hub|off> [duracion|#voz] [nombre]",aliases: ["tempchannel", "tempch", "voicehub"], description: "Crea canales temporales o un Voice Hub Join-to-Create." },
     voicelink: { short: "voicelink", slash: "channel voicelink", id: IDS.channel(), usage: ".voicelink <add|remove|list> [#voz] [#texto]", aliases: ["voicetext", "vtext", "vlink"],    description: "Vincula un canal de voz a un canal de texto privado." },
+    recap:     { short: "recap",     slash: "channel recap",     id: IDS.channel(), usage: ".recap [cantidad]",                            aliases: ["resumen", "tldr"],                description: "Resume los últimos mensajes del canal." },
   },
   tickets: {
     setup:      { short: "ticketsetup",  slash: "tickets setup",      id: IDS.tickets(), usage: ".ticketsetup [#categoria] [#logs] [@rol]",       aliases: ["tsetup"],                       description: "Configura categoría, rol soporte y canal de transcripciones." },
@@ -200,16 +205,6 @@ const getBaseCommands = () => ({
     invitereward:      { short: "invitereward",  slash: "community invitereward",      id: IDS.community(), usage: ".invitereward <invitaciones> [@rol]",        aliases: ["rewardinvites"],                 description: "Configura roles de recompensa por invitaciones." },
   },
 });
-
-const getCommands = () => {
-  const commands = getBaseCommands();
-  commands.utilidad.poll      = { short: "poll",      slash: "util poll",      id: IDS.util(),    usage: ".poll <pregunta> / <op1> / <op2>", aliases: ["encuesta"],                            description: "Crea una encuesta nativa de Discord." };
-  commands.utilidad.remind    = { short: "remind",    slash: "util remind",    id: IDS.util(),    usage: ".remind <tiempo> <texto>",         aliases: ["recordar", "recordatorio", "reminder"], description: "Te recuerda algo por mensaje privado." };
-  commands.utilidad.reminders = { short: "reminders", slash: "util reminders", id: IDS.util(),    usage: ".reminders",                       aliases: ["recordatorios", "myreminders"],         description: "Lista o cancela tus recordatorios activos." };
-  commands.utilidad.setlang   = { short: "setlang",   slash: "util setlang",   id: IDS.util(),    usage: ".setlang [es|en]",                 aliases: ["lang", "idioma"],                       description: "Cambia o muestra el idioma del servidor o personal." };
-  commands.canal.recap        = { short: "recap",     slash: "channel recap",  id: IDS.channel(), usage: ".recap [cantidad]",                aliases: ["resumen", "tldr"],                      description: "Resume los últimos mensajes del canal." };
-  return commands;
-};
 
 const COLLECTOR_TIMEOUT = 5 * 60 * 1000;
 const SEP = "||";
@@ -305,6 +300,7 @@ const data = {
           },
           del: async ({ interaction, view }) => {
             if (!(await ensureAuthor(interaction))) return false;
+            await interaction.deferUpdate().catch(() => {});
             view.stop("deleted");
             await interaction.message?.delete?.().catch(() => {});
             return false;

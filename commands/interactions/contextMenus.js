@@ -89,11 +89,6 @@ const contextMenuModules = CONTEXT_MENU_SPECS.map((spec) => ({
   code: async (bot, interaction) => spec.run(bot, interaction),
 }));
 
-function buildContextMenuPayloads() {
-  return contextMenuModules.map((entry) => entry.data.toCommandJSON()).filter(Boolean);
-}
-
 module.exports = {
   data: contextMenuModules,
-  buildContextMenuPayloads,
 };

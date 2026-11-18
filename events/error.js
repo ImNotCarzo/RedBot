@@ -1,7 +1,6 @@
-const { Errors, ComponentsV2Builder } = require("gralonium");
-const { RED } = require("../src/config");
-const { getLang } = require("../src/guild");
-const { detectLocaleLang, t } = require("../src/i18n");
+const { Errors } = require("gralonium");
+const { resolveContextLang } = require("../src/guild");
+const { t } = require("../src/i18n");
 const { Logger, sanitizeError } = require("../src/runtime");
 
 const log = new Logger("EVENT_FRAMEWORK_ERROR", process.env.LOG_LEVEL);
@@ -59,30 +58,36 @@ const event = {
     const ctx = err?.ctx ?? emittedCtx ?? null;
     if (err && typeof err === "object" && !err.ctx && ctx) err.ctx = ctx;
 
-    const guildId = ctx?.guild?.id ?? ctx?.data?.guildId;
-    const userId = ctx?.user?.id;
+    const guildId = ctx?.guild?.id ?? ctx?.data?.guildId ?? null;
+    const userId = ctx?.user?.id ?? null;
     const commandName = ctx?.command?.data?.name;
-    const lang = guildId
-      ? await getLang(guildId)
-      : detectLocaleLang(ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale);
+    const lang = await resolveContextLang({
+      guildId,
+      userId,
+      locale: ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale,
+    }).catch(() => "es");
 
     const safeSend = async (payload) => {
+      const normalized =
+        payload && typeof payload === "object" && typeof payload.toPayload === "function"
+          ? payload.toPayload()
+          : payload;
       try {
         if (typeof ctx?.send === "function") {
-          return await ctx.send(payload);
+          return await ctx.send(normalized);
         }
 
-        const data = typeof payload === "string" ? { content: payload } : payload;
+        const data = typeof normalized === "string" ? { content: normalized } : normalized;
         if (ctx?.channel?.send) {
           return await ctx.channel.send(data);
         }
       } catch {
         try {
           if (ctx?.interaction?.replied && typeof ctx?.ephemeral === "function") {
-            return await ctx.ephemeral(payload, { followUp: true });
+            return await ctx.ephemeral(normalized, { followUp: true });
           }
           if (ctx?.channel?.send) {
-            const text = typeof payload === "string" ? payload : payload?.content || "";
+            const text = typeof normalized === "string" ? normalized : normalized?.content || "";
             if (text) return await ctx.channel.send(text);
           }
         } catch {}
@@ -121,7 +126,11 @@ const event = {
       return safeSend(t(lang, "error.missing_channel_perm", { perms: permisos }));
     }
 
-    if (is(err, Errors.OnlyForIDs)) {
+    if (
+      is(err, Errors.OnlyForIDs) ||
+      is(err, Errors.RestrictedUser) ||
+      is(err, Errors.RestrictedGuild)
+    ) {
       return safeSend(t(lang, "error.only_ids"));
     }
 
@@ -132,34 +141,6 @@ const event = {
 
     if (is(err, Errors.MissingRequiredParam)) {
       if (!err.ctx) return;
-      const bot = err.ctx?.bot?.user ?? _client?.user;
-
-      if (commandName === "ask" || err.param?.name === "pregunta") {
-        const isEn = lang === "en";
-        const askTitle = isEn ? "Ask Command" : "Comando Ask";
-        const askDesc = isEn
-          ? "**Usage:**\nAsk the AI a question\n\n**Aliases:**\n`ia`, `ai`\n\n```js\n.ask <question>\nExample: .ask why is the sky blue\n```"
-          : "**Usos:**\nHazle una pregunta a la IA\n\n**Aliases:**\n`ia`, `ai`\n\n```js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\n```";
-        const canEmbed = !ctx?.guild || ctx.channel?.permissionsFor?.(ctx.guild.members.me || _client?.user)?.has("EmbedLinks");
-        if (!canEmbed) {
-          return safeSend(
-            isEn
-              ? `**Ask Command**\n**Usage:** Ask the AI a question\n**Aliases:** \`ia\`, \`ai\`\n\`\`\`js\n.ask <question>\nExample: .ask why is the sky blue\`\`\``
-              : `**Comando Ask**\n**Usos:** Hazle una pregunta a la IA\n**Aliases:** \`ia\`, \`ai\`\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
-          );
-        }
-
-        const paramErrorCard = ComponentsV2Builder.card({
-          title: askTitle,
-          thumbnail: bot?.displayAvatarURL?.() ?? null,
-          description: askDesc,
-          color: RED,
-          headerSeparator: false,
-        });
-
-        return safeSend(paramErrorCard);
-      }
-
       const paramName = err.param?.name ?? (lang === "en" ? "required" : "requerido");
       return safeSend(t(lang, "error.missing_param", { param: paramName }));
     }
@@ -185,9 +166,11 @@ const event = {
     }
 
     if (
+      is(err, Errors.InvalidParam) ||
       is(err, Errors.InvalidParamBoolean) ||
       is(err, Errors.InvalidParamNumber) ||
       is(err, Errors.InvalidParamChoice) ||
+      is(err, Errors.InvalidParamAttachment) ||
       is(err, Errors.InvalidChannelType)
     ) {
       const detail = err.message ?? (lang === "en" ? "invalid value" : "valor incorrecto");

@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const { ChannelType } = require("discord.js");
 const { applyOauthGuildLang } = require("./guild");
 const { INVITE_URL, Logger } = require("./runtime");
+const { escapeHtml } = require("./security");
 const { version: PACKAGE_VERSION } = require("../package.json");
 
 let server = null;
@@ -14,6 +15,8 @@ let log = null;
 const rateStore = new Map();
 const oauthStates = new Map();
 const dashboardSessions = new Map();
+const revokedSessions = new Map();
+const EPHEMERAL_SESSION_SECRET = crypto.randomBytes(32).toString("hex");
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 30;
 const MAX_RATE_ENTRIES = 5000;
@@ -21,6 +24,7 @@ const OAUTH_STATE_TTL_MS = 10 * 60_000;
 const MAX_OAUTH_STATES = 2000;
 const DASHBOARD_SESSION_TTL_MS = 24 * 60 * 60_000;
 const MAX_DASHBOARD_SESSIONS = 2000;
+const MAX_REVOKED_SESSIONS = 5000;
 const PUBLIC_BROWSER_ROUTES = new Set([
   "/invite",
   "/api/invite",
@@ -92,15 +96,6 @@ function formatUptime(ms) {
   if (minutes) parts.push(`${minutes}m`);
   parts.push(`${seconds}s`);
   return parts.join(" ");
-}
-
-function escapeHtml(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function sendHtml(res, status, title, heading, message, extraHeaders = {}) {
@@ -199,7 +194,18 @@ function handleStats() {
 
   const guilds = client.guilds?.cache;
   const channels = client.channels?.cache;
-  const totalUsers = guilds?.reduce((acc, g) => acc + (g.memberCount ?? 0), 0) ?? 0;
+  let totalUsers = 0;
+  let totalEmojis = 0;
+  let totalRoles = 0;
+  let totalStickers = 0;
+  if (guilds) {
+    for (const g of guilds.values()) {
+      totalUsers += g.memberCount ?? 0;
+      totalEmojis += g.emojis?.cache?.size ?? 0;
+      totalRoles += g.roles?.cache?.size ?? 0;
+      totalStickers += g.stickers?.cache?.size ?? 0;
+    }
+  }
 
   let textChannels = 0;
   let voiceChannels = 0;
@@ -252,9 +258,9 @@ function handleStats() {
       forum: forumChannels,
       categories: categoryChannels,
     },
-    emojis: guilds?.reduce((acc, g) => acc + (g.emojis?.cache?.size ?? 0), 0) ?? 0,
-    roles: guilds?.reduce((acc, g) => acc + (g.roles?.cache?.size ?? 0), 0) ?? 0,
-    stickers: guilds?.reduce((acc, g) => acc + (g.stickers?.cache?.size ?? 0), 0) ?? 0,
+    emojis: totalEmojis,
+    roles: totalRoles,
+    stickers: totalStickers,
     commands: commandInfo,
     uptime: client.uptime ?? 0,
     uptimeFormatted: formatUptime(client.uptime ?? 0),
@@ -301,7 +307,6 @@ function handleCommands() {
 
 function handleBot() {
   const user = botClient?.user;
-  const clientId = user?.id ?? apiConfig?.CLIENT_ID ?? process.env.CLIENT_ID ?? "1020772849906098186";
 
   return {
     id: user?.id ?? null,
@@ -394,22 +399,20 @@ function consumeOAuthStateEntry(state) {
   return entry;
 }
 
-function consumeOAuthState(state) {
-  return Boolean(consumeOAuthStateEntry(state));
-}
-
 function getSessionSecret() {
-  return (
+  const explicit =
     apiConfig?.SESSION_SECRET ||
     process.env.SESSION_SECRET ||
     apiConfig?.CLIENT_SECRET ||
     process.env.CLIENT_SECRET ||
     apiConfig?.API_KEY ||
-    process.env.API_KEY ||
-    apiConfig?.TOKEN ||
-    process.env.TOKEN ||
-    "redbot-local-session-secret"
-  );
+    process.env.API_KEY;
+  if (explicit) return explicit;
+  const botToken = apiConfig?.TOKEN || process.env.TOKEN;
+  if (botToken) {
+    return crypto.createHash("sha256").update(`redbot-session:${botToken}`).digest("hex");
+  }
+  return EPHEMERAL_SESSION_SECRET;
 }
 
 function hasManageGuildBits(permissionsStr, isOwner = false) {
@@ -478,6 +481,7 @@ function verifyDashboardSessionToken(rawToken) {
     const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
     if (!payload || typeof payload !== "object" || !payload.uid || !payload.exp) return null;
     if (Number(payload.exp) <= Date.now()) return null;
+    if (payload.sid && revokedSessions.has(payload.sid)) return null;
     const cachedRaw = payload.sid ? dashboardSessions.get(payload.sid) : null;
     const cached = cachedRaw && cachedRaw.exp > Date.now() ? cachedRaw : null;
     return { ...payload, cached };
@@ -532,25 +536,31 @@ function resolveSafeReturnUrl(rawUrl) {
 }
 
 function resolveEffectiveRedirectUri(urlObj) {
+  const defaultRedirect = getOAuthSettings().redirectUri;
   const candidate = urlObj.searchParams.get("redirect_uri");
   if (candidate && typeof candidate === "string") {
     try {
       const parsed = new URL(candidate);
+      let defaultOrigin = null;
+      try { defaultOrigin = new URL(defaultRedirect).origin; } catch {}
+      const isProdOrigin = parsed.protocol === "https:" && (parsed.hostname === "redbot.me" || parsed.hostname === "www.redbot.me");
+      const isLocalOrigin = parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1");
+      const isConfiguredOrigin = Boolean(defaultOrigin && parsed.origin === defaultOrigin);
       if (
-        (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+        (isProdOrigin || isLocalOrigin || isConfiguredOrigin) &&
         (parsed.pathname.endsWith("/api/oauth/callback") || parsed.pathname.endsWith("/oauth/callback"))
       ) {
         return parsed.toString();
       }
     } catch {}
   }
-  return getOAuthSettings().redirectUri;
+  return defaultRedirect;
 }
 
 function isSecureRequest(req, redirectUri) {
   return Boolean(
     req.socket?.encrypted ||
-    req.headers?.["x-forwarded-proto"] === "https" ||
+    (apiConfig?.TRUST_PROXY && req.headers?.["x-forwarded-proto"] === "https") ||
     String(redirectUri || "").startsWith("https://")
   );
 }
@@ -586,7 +596,7 @@ function handleInviteRedirect(req, res, urlObj) {
   res.end();
 }
 
-async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri }) {
+async function exchangeDiscordToken({ code, clientId, clientSecret, redirectUri }) {
   const tokenRes = await fetch("https://discord.com/api/v10/oauth2/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -601,13 +611,19 @@ async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri 
   });
 
   if (!tokenRes.ok) {
+    await tokenRes.body?.cancel?.().catch(() => {});
     throw new Error(`Discord token exchange failed (${tokenRes.status})`);
   }
   const tokenData = await tokenRes.json();
-  const accessToken = tokenData?.access_token;
-  if (!accessToken) {
+  if (!tokenData?.access_token) {
     throw new Error("Discord token exchange missing access_token");
   }
+  return tokenData;
+}
+
+async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri }) {
+  const tokenData = await exchangeDiscordToken({ code, clientId, clientSecret, redirectUri });
+  const accessToken = tokenData.access_token;
 
   const userRes = await fetch("https://discord.com/api/v10/users/@me", {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -615,6 +631,7 @@ async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri 
   });
 
   if (!userRes.ok) {
+    await userRes.body?.cancel?.().catch(() => {});
     throw new Error(`Discord user profile fetch failed (${userRes.status})`);
   }
   const userData = await userRes.json();
@@ -626,27 +643,8 @@ async function exchangeDiscordOAuth({ code, clientId, clientSecret, redirectUri 
 }
 
 async function exchangeDiscordDashboardOAuth({ code, clientId, clientSecret, redirectUri }) {
-  const tokenRes = await fetch("https://discord.com/api/v10/oauth2/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-    }).toString(),
-    signal: AbortSignal.timeout(10_000),
-  });
-
-  if (!tokenRes.ok) {
-    throw new Error(`Discord token exchange failed (${tokenRes.status})`);
-  }
-  const tokenData = await tokenRes.json();
-  const accessToken = tokenData?.access_token;
-  if (!accessToken) {
-    throw new Error("Discord token exchange missing access_token");
-  }
+  const tokenData = await exchangeDiscordToken({ code, clientId, clientSecret, redirectUri });
+  const accessToken = tokenData.access_token;
 
   const [userRes, guildsRes] = await Promise.all([
     fetch("https://discord.com/api/v10/users/@me", {
@@ -660,9 +658,13 @@ async function exchangeDiscordDashboardOAuth({ code, clientId, clientSecret, red
   ]);
 
   if (!userRes.ok) {
+    await userRes.body?.cancel?.().catch(() => {});
+    await guildsRes.body?.cancel?.().catch(() => {});
     throw new Error(`Discord user profile fetch failed (${userRes.status})`);
   }
   if (!guildsRes.ok) {
+    await userRes.body?.cancel?.().catch(() => {});
+    await guildsRes.body?.cancel?.().catch(() => {});
     throw new Error(`Discord user guilds fetch failed (${guildsRes.status})`);
   }
 
@@ -715,8 +717,8 @@ function handleAuthLoginRedirect(req, res, urlObj) {
   res.end();
 }
 
-function handleDashboardGuilds(req, res) {
-  const session = getRequestSession(req);
+function handleDashboardGuilds(req, res, preloadedSession = undefined) {
+  const session = preloadedSession !== undefined ? preloadedSession : getRequestSession(req);
   if (!session) {
     return json(res, 401, { error: "Unauthorized" }, { noStore: true });
   }
@@ -741,14 +743,7 @@ function handleDashboardGuilds(req, res) {
     const adminSet = new Set((session.adminGuildIds || []).map(String));
     for (const bg of botGuilds.values()) {
       const id = String(bg.id);
-      if (byId.has(id)) {
-        const existing = byId.get(id);
-        existing.botPresent = true;
-        existing.name = bg.name ?? existing.name;
-        existing.icon = bg.iconURL?.({ size: 128 }) ?? existing.icon;
-        existing.memberCount = bg.memberCount ?? existing.memberCount;
-        continue;
-      }
+      if (byId.has(id)) continue;
       const member = bg.members?.cache?.get?.(String(session.uid));
       const isAllowed =
         adminSet.has(id) ||
@@ -792,6 +787,11 @@ function handleAuthLogout(req, res) {
   const session = getRequestSession(req);
   if (session?.sid) {
     dashboardSessions.delete(session.sid);
+    if (revokedSessions.size >= MAX_REVOKED_SESSIONS) {
+      const oldest = revokedSessions.keys().next().value;
+      if (oldest !== undefined) revokedSessions.delete(oldest);
+    }
+    revokedSessions.set(session.sid, Number(session.exp) || (Date.now() + DASHBOARD_SESSION_TTL_MS));
   }
   const { redirectUri } = getOAuthSettings();
   const secureAttr = isSecureRequest(req, redirectUri) ? "; Secure" : "";
@@ -846,7 +846,9 @@ async function handleOAuthCallback(req, res, urlObj) {
 
   let stateEntry = null;
   if (isDashboardFlow || requireState || stateParam || cookieState) {
-    const cookieMatches = !cookieState || safeEqualString(stateParam, cookieState);
+    const cookieMatches = (isDashboardFlow || requireState)
+      ? Boolean(cookieState) && safeEqualString(stateParam, cookieState)
+      : (!cookieState || safeEqualString(stateParam, cookieState));
     stateEntry = cookieMatches ? consumeOAuthStateEntry(stateParam) : null;
     if (!stateEntry || (isDashboardFlow && stateEntry.mode !== "dashboard")) {
       return sendHtml(
@@ -946,8 +948,8 @@ function readJsonBody(req, maxBytes = 64 * 1024) {
         settled = true;
         const err = new Error("Payload too large");
         err.statusCode = 413;
+        req.pause();
         reject(err);
-        req.destroy();
         return;
       }
       chunks.push(chunk);
@@ -975,7 +977,7 @@ function readJsonBody(req, maxBytes = 64 * 1024) {
   });
 }
 
-async function handleTicketsRoute(req, res, pathname) {
+async function handleTicketsRoute(req, res, pathname, preloadedSession = undefined) {
   const match = pathname.match(/^\/api\/tickets\/(\d{17,22})(?:\/(config|panel))?$/);
   if (!match) return false;
 
@@ -983,7 +985,7 @@ async function handleTicketsRoute(req, res, pathname) {
   const sub = match[2] || "";
   const guild = botClient?.guilds?.cache?.get(guildId) ?? null;
 
-  const session = getRequestSession(req);
+  const session = preloadedSession !== undefined ? preloadedSession : getRequestSession(req);
   const hasApiKey = Boolean(apiConfig?.API_KEY) && isAuthorized(req);
   if (session) {
     if (!canManageGuild(session, guildId, guild)) {
@@ -991,11 +993,8 @@ async function handleTicketsRoute(req, res, pathname) {
       return true;
     }
   } else if (!hasApiKey) {
-    const requireAuth = Boolean(apiConfig?.API_KEY || apiConfig?.CLIENT_SECRET || process.env.CLIENT_SECRET);
-    if (requireAuth) {
-      json(res, 401, { error: "Unauthorized" });
-      return true;
-    }
+    json(res, 401, { error: "Unauthorized" });
+    return true;
   }
 
   if (!sub) {
@@ -1181,17 +1180,6 @@ async function handleTicketsRoute(req, res, pathname) {
       }
     }
 
-    if (body.saveConfig !== false) {
-      const savePatch = { enabled: true };
-      if (Array.isArray(effectiveOptions) && effectiveOptions.length) {
-        savePatch.categories = effectiveOptions;
-      }
-      if (typeof body.placeholder === "string" && body.placeholder.trim()) {
-        savePatch.panelPlaceholder = body.placeholder.trim().slice(0, 100);
-      }
-      await updateTicketConfig(guildId, savePatch).catch(() => {});
-    }
-
     const payload = buildTicketPanelPayload({
       title: body.title ? String(body.title).slice(0, 100) : null,
       description: body.description ? String(body.description).slice(0, 2000) : null,
@@ -1212,6 +1200,17 @@ async function handleTicketsRoute(req, res, pathname) {
     }
     if (!sent) {
       sent = await targetCh.send(payload);
+    }
+
+    if (body.saveConfig !== false) {
+      const savePatch = { enabled: true };
+      if (Array.isArray(effectiveOptions) && effectiveOptions.length) {
+        savePatch.categories = effectiveOptions;
+      }
+      if (typeof body.placeholder === "string" && body.placeholder.trim()) {
+        savePatch.panelPlaceholder = body.placeholder.trim().slice(0, 100);
+      }
+      await updateTicketConfig(guildId, savePatch).catch(() => {});
     }
 
     json(res, 200, { ok: true, channelId: targetCh.id, messageId: sent?.id ?? null }, { noStore: true });
@@ -1273,14 +1272,15 @@ async function handleRequest(req, res) {
     return json(res, 429, { error: "Too many requests", retryAfter: 60 });
   }
 
-  const hasSession = isSessionRoute ? Boolean(getRequestSession(req)) : false;
+  const requestSession = isSessionRoute ? getRequestSession(req) : null;
+  const hasSession = Boolean(requestSession);
   if (!PUBLIC_BROWSER_ROUTES.has(pathname) && !hasSession && !isAuthorized(req)) {
     return json(res, 401, { error: "Unauthorized" });
   }
 
   if (isTicketRoute) {
     try {
-      const handled = await handleTicketsRoute(req, res, pathname);
+      const handled = await handleTicketsRoute(req, res, pathname, requestSession);
       if (handled) return;
     } catch (err) {
       log?.error("Error en endpoint de tickets", { endpoint: pathname, err: err?.message ?? String(err) });
@@ -1295,7 +1295,7 @@ async function handleRequest(req, res) {
     return handleAuthLoginRedirect(req, res, urlObj);
   }
   if (pathname === "/api/auth/me" || pathname === "/api/dashboard/guilds") {
-    return handleDashboardGuilds(req, res);
+    return handleDashboardGuilds(req, res, requestSession);
   }
   if (isLogoutRoute) {
     return handleAuthLogout(req, res);
@@ -1350,14 +1350,26 @@ function startApi(client, config, logger) {
       });
     });
 
+    let settled = false;
+    const settleOnce = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+
     server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
         log.warn(`Puerto ${port} en uso, API no iniciada`);
         server = null;
-        resolve();
+        settleOnce();
         return;
       }
       log.error("Error en servidor API", { err: err.message });
+      if (!server?.listening) {
+        server = null;
+        settleOnce();
+      }
     });
 
     const onListen = () => {
@@ -1368,6 +1380,7 @@ function startApi(client, config, logger) {
         cors: config?.API_CORS_ORIGIN || "*",
       });
 
+      if (ratePruneTimer) clearInterval(ratePruneTimer);
       ratePruneTimer = setInterval(() => {
         const now = Date.now();
         for (const [ip, entry] of rateStore) {
@@ -1380,10 +1393,13 @@ function startApi(client, config, logger) {
         for (const [sid, session] of dashboardSessions) {
           if (!session || session.exp <= now) dashboardSessions.delete(sid);
         }
+        for (const [sid, exp] of revokedSessions) {
+          if (!exp || exp <= now) revokedSessions.delete(sid);
+        }
       }, 5 * 60_000);
       ratePruneTimer.unref();
 
-      resolve();
+      settleOnce();
     };
 
     if (host) server.listen(port, host, onListen);
@@ -1400,6 +1416,7 @@ function stopApi() {
     rateStore.clear();
     oauthStates.clear();
     dashboardSessions.clear();
+    revokedSessions.clear();
 
     if (!server) return resolve();
 
@@ -1412,4 +1429,4 @@ function stopApi() {
   });
 }
 
-module.exports = { startApi, stopApi, handleRequest, setApiContext };
+module.exports = { startApi, stopApi };

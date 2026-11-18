@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
 const { GuildConfig, UserConfig, Log, Afk } = require("./database");
-const { Logger, parsePositiveInt, withTimeout } = require("./runtime");
+const { Logger, parsePositiveInt, withTimeout, sanitizeError } = require("./runtime");
 
 const log = new Logger("GUILD_SERVICE");
 
@@ -45,7 +45,7 @@ class TtlCache {
   }
 }
 
-const { detectLocaleLang, normalizeLang } = require("./i18n");
+const { detectLocaleLang, normalizeLang, translateEmbed } = require("./i18n");
 
 const prefixCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const langCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
@@ -55,7 +55,7 @@ const recentWelcomeCache = new TtlCache(3 * 60_000, 500);
 const userLangCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const aiContextCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const warnPolicyCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
-const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS);
+const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const afkCache = new TtlCache(AFK_CACHE_TTL_MS, AFK_CACHE_MAX);
 
 const DEFAULT_WARN_MUTE_MS = 10 * 60 * 1000;
@@ -68,7 +68,7 @@ function detectDefaultGuildLang(guild) {
 async function getLang(guildId) {
   if (!guildId) return "es";
   const cached = langCache.get(guildId);
-  if (cached) return cached;
+  if (cached !== undefined) return cached;
   if (GuildConfig.db?.readyState !== 1) return "es";
   try {
     const doc = await withTimeout(
@@ -77,9 +77,7 @@ async function getLang(guildId) {
       "Lectura de idioma de servidor"
     );
     const lang = doc?.lang === "en" ? "en" : "es";
-    if (doc?.lang === "es" || doc?.lang === "en") {
-      langCache.set(guildId, lang);
-    }
+    langCache.set(guildId, lang);
     if (VALID_LANG_SOURCES.has(doc?.langSource)) {
       langSourceCache.set(guildId, doc.langSource);
     }
@@ -175,7 +173,7 @@ async function applyOauthGuildLang({ guildId = null, userId = null, locale = nul
 async function getUserLang(userId) {
   if (!userId) return null;
   const cached = userLangCache.get(userId);
-  if (cached) return cached;
+  if (cached !== undefined) return cached;
   if (UserConfig.db?.readyState !== 1) return null;
   try {
     const doc = await withTimeout(
@@ -183,11 +181,9 @@ async function getUserLang(userId) {
       PREFIX_QUERY_TIMEOUT_MS,
       "Lectura de idioma de usuario"
     );
-    if (doc?.lang === "es" || doc?.lang === "en") {
-      userLangCache.set(userId, doc.lang);
-      return doc.lang;
-    }
-    return null;
+    const resolved = doc?.lang === "es" || doc?.lang === "en" ? doc.lang : null;
+    userLangCache.set(userId, resolved);
+    return resolved;
   } catch {
     return null;
   }
@@ -289,6 +285,7 @@ async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_
 async function getPrefix(guildId) {
   const cached = prefixCache.get(guildId);
   if (cached !== undefined) return cached;
+  if (GuildConfig.db?.readyState !== 1) return DEFAULT_PREFIX;
   try {
     const doc = await withTimeout(
       GuildConfig.findOne({ guildId }).lean(),
@@ -325,8 +322,13 @@ async function getAfk(guildId, userId) {
   const key = `${guildId}:${userId}`;
   const cached = afkCache.get(key);
   if (cached !== undefined) return cached;
+  if (Afk.db?.readyState !== 1) return null;
   try {
-    const doc = await Afk.findOne({ guildId, userId }).lean();
+    const doc = await withTimeout(
+      Afk.findOne({ guildId, userId }).lean(),
+      PREFIX_QUERY_TIMEOUT_MS,
+      "Lectura de AFK"
+    );
     const val = doc ? { reason: doc.reason, createdAt: doc.createdAt } : null;
     afkCache.set(key, val);
     return val;
@@ -399,7 +401,7 @@ async function sendLog(guild, embed, context = {}) {
 
     if (!channel.isTextBased()) return false;
     const lang = await getLang(guild.id);
-    const finalEmbed = lang === "en" ? require("./i18n").translateEmbed(embed, "en") : embed;
+    const finalEmbed = lang === "en" ? translateEmbed(embed, "en") : embed;
     await channel.send({ embeds: [finalEmbed] });
     return true;
   } catch (err) {
@@ -407,7 +409,7 @@ async function sendLog(guild, embed, context = {}) {
       guildId: guild?.id,
       action: context?.action,
       userId: context?.userId,
-      err: err?.message ?? String(err),
+      err: sanitizeError(err),
     });
     return false;
   }
@@ -425,12 +427,12 @@ function logAction(guild, { title = null, description = null, color = null, fiel
 }
 
 module.exports = {
+  TtlCache,
   DEFAULT_PREFIX,
   getPrefix,
   setPrefix,
   detectDefaultGuildLang,
   getLang,
-  getLangSource,
   setLang,
   getOauthGuildLang,
   registerWelcomeCard,
