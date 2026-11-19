@@ -360,13 +360,18 @@ async function removeAfk(guildId, userId) {
 }
 
 async function getLogChannelId(guildId) {
+  if (!guildId) return null;
   const cached = logChannelCache.get(guildId);
   if (cached !== undefined) return cached;
   if (Log.db?.readyState !== 1) return null;
-  const doc = await Log.findOne({ guildId }).lean();
-  const channelId = doc?.channelId ?? null;
-  logChannelCache.set(guildId, channelId);
-  return channelId;
+  try {
+    const doc = await Log.findOne({ guildId }).lean();
+    const channelId = doc?.channelId ?? null;
+    logChannelCache.set(guildId, channelId);
+    return channelId;
+  } catch {
+    return null;
+  }
 }
 
 async function setLogChannel(guildId, channelId) {
@@ -447,6 +452,7 @@ module.exports = {
   getAfk,
   setAfk,
   removeAfk,
+  getLogChannelId,
   setLogChannel,
   clearLogChannel,
   sendLog,

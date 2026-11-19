@@ -26,6 +26,8 @@ const DASHBOARD_SESSION_TTL_MS = 24 * 60 * 60_000;
 const MAX_DASHBOARD_SESSIONS = 2000;
 const MAX_REVOKED_SESSIONS = 5000;
 const PUBLIC_BROWSER_ROUTES = new Set([
+  "/api/stats",
+  "/api/commands",
   "/invite",
   "/api/invite",
   "/oauth/callback",
