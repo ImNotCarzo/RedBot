@@ -2,6 +2,10 @@
 
 A Discord bot built with [discord.js](https://discord.js.org) and [gralonium](https://www.npmjs.com/package/gralonium).
 
+- **Website:** [redbot.me](https://redbot.me)
+- **Web Repository:** [ImNotCarzo/RedBot-Web](https://github.com/ImNotCarzo/RedBot-Web)
+- **LLM Documentation:** [`llms.txt`](https://redbot.me/llms.txt) · [`llms-full.txt`](https://redbot.me/llms-full.txt) (available in the web repository)
+
 ---
 
 ## Requirements
