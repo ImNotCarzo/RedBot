@@ -428,6 +428,27 @@ const DEFINITIONS = [
     authorName: "Comando Invitereward",
     descriptionText: "**Usos:**\nConfigura un rol automático al alcanzar invitaciones\n\n**Aliases:**\n`rewardinvites`\n\n```js\n.invitereward <invitaciones> [@rol]\nEjemplo: .invitereward 10 @VIP```",
   },
+  {
+    name: "aisearch",
+    description: "Busca mensajes en el historial del servidor con búsqueda nativa e IA",
+    aliases: ["buscar", "searchmsg", "findmsg"],
+    authorName: "Comando Aisearch",
+    descriptionText: "**Usos:**\nBusca y resume mensajes del servidor usando la búsqueda nativa de Discord + IA\n\n**Aliases:**\n`buscar`, `searchmsg`, `findmsg`\n\n```js\n.aisearch <consulta>\nEjemplo: .aisearch qué decidimos sobre el torneo```",
+  },
+  {
+    name: "automodai",
+    description: "Convierte lenguaje natural en reglas nativas de Discord AutoMod",
+    aliases: ["amai", "automodnative", "nativeautomod"],
+    authorName: "Comando Automodai",
+    descriptionText: "**Usos:**\nCrea o gestiona reglas nativas de Discord AutoMod desde lenguaje natural\n\n**Aliases:**\n`amai`, `automodnative`, `nativeautomod`\n\n```js\n.automodai <regla en lenguaje natural>\nEjemplo: .automodai bloquea links acortados e invitaciones excepto @Mods```",
+  },
+  {
+    name: "voicestatus",
+    description: "Cambia el estado de un canal de voz o activa el auto-estado por juego",
+    aliases: ["vstatus", "vcstatus"],
+    authorName: "Comando Voicestatus",
+    descriptionText: "**Usos:**\nEstablece el estado de un canal de voz o usa clear para limpiarlo\n\n**Aliases:**\n`vstatus`, `vcstatus`\n\n```js\n.voicestatus <texto | clear>\nEjemplo: .voicestatus Jugando ranked```",
+  },
 ];
 
 module.exports = {

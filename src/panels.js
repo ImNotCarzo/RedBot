@@ -3,10 +3,12 @@ const {
   LabelBuilder,
   MessageFlags,
   ModalBuilder,
+  PermissionFlagsBits,
   TextInputBuilder,
   TextInputStyle,
 } = require("discord.js");
 const { ComponentsV2Builder, V2Text, V2View } = require("gralonium");
+const { applyIncidentActionsFromModal, buildIncidentActionsModal } = require("./automodAi");
 const { JoinRole, Log } = require("./database");
 const { GREEN, RED } = require("./config");
 const { getPrefix, setPrefix, setLogChannel, clearLogChannel, logAction, getLang, setLang, getWarnPolicy, setWarnPolicy, getAiContext, setAiContext } = require("./guild");
@@ -42,6 +44,17 @@ function buildSetupCard({
     ? V2Text.clip(aiContext, 80)
     : (lang === "en" ? "Not configured" : "Sin definir");
 
+  const now = Date.now();
+  const invUntil = guild?.incidentsData?.invitesDisabledUntil;
+  const dmsUntil = guild?.incidentsData?.dmsDisabledUntil;
+  const incParts = [];
+  if (invUntil && new Date(invUntil).getTime() > now) {
+    incParts.push(`Invites <t:${Math.floor(new Date(invUntil).getTime() / 1000)}:R>`);
+  }
+  if (dmsUntil && new Date(dmsUntil).getTime() > now) {
+    incParts.push(`DMs <t:${Math.floor(new Date(dmsUntil).getTime() / 1000)}:R>`);
+  }
+
   const builder = new ComponentsV2Builder({ color: RED })
     .addSection(
       [
@@ -58,7 +71,8 @@ function buildSetupCard({
       [t(lang, "setup.lang_label"), lang === "en" ? "English (`en`)" : "Español (`es`)"],
       [t(lang, "setup.warn_auto_label"), warnValue],
       [lang === "en" ? "AI Context" : "Contexto IA", aiCtxValue],
-    ]);
+      incParts.length ? [lang === "en" ? "Security pauses" : "Seguridad activa", incParts.join(" · ")] : null,
+    ].filter(Boolean));
 
   if (!isEnded && view) {
     builder
@@ -102,6 +116,7 @@ function buildSetupCard({
         { customId: view.id("lang"), label: t(lang, "setup.btn_lang", { lang: lang.toUpperCase() }), style: "danger" },
         { customId: view.id("warnauto"), label: t(lang, "setup.btn_warn_auto"), style: "secondary" },
         { customId: view.id("aicontext"), label: lang === "en" ? "AI Context" : "Contexto IA", style: "secondary" },
+        { customId: view.id("incidents"), label: lang === "en" ? "Security" : "Seguridad", style: "secondary" },
       ]);
   }
 
@@ -345,6 +360,43 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
           send: (payload) => interaction.followUp(typeof payload?.toPayload === "function" ? payload.toPayload() : payload),
         });
         await onOpenCustomBot(proxyCtx);
+        return false;
+      },
+      incidents: async ({ interaction, state, view: activeView }) => {
+        const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+        if (!me?.permissions?.has?.(PermissionFlagsBits.ManageGuild)) {
+          await interaction.reply({
+            content: state.lang === "en"
+              ? "I need **Manage Server** permission to manage invites/DMs security pauses."
+              : "Necesito el permiso **Administrar servidor** (`ManageGuild`) para gestionar pausas de seguridad.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return false;
+        }
+        const modalId = activeView.id("incmodal", Date.now().toString(36));
+        await interaction.showModal(buildIncidentActionsModal(modalId, guild, state.lang));
+
+        const submitted = await interaction
+          .awaitModalSubmit({
+            time: 2 * 60_000,
+            filter: (i) => i.customId === modalId && i.user.id === author.id,
+          })
+          .catch(() => null);
+        if (!submitted) return false;
+
+        await submitted.deferUpdate().catch(() => {});
+        try {
+          await applyIncidentActionsFromModal({ submitted, guild, moderator: author });
+          activeView.setState({ _incRefresh: Date.now() });
+          if (activeView.message?.editable) {
+            await activeView.message.edit(activeView.toPayload()).catch(() => {});
+          }
+        } catch {
+          await submitted.followUp({
+            content: state.lang === "en" ? "Could not update security pauses." : "No se pudieron actualizar las medidas de seguridad.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+        }
         return false;
       },
     },

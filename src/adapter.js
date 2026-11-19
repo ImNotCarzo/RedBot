@@ -123,6 +123,7 @@ const PREFIXED_TO_SLASH_MAP = {
   setup: "server/setup",
   snipe: "channel/snipe",
   teoria: "ai/teoria",
+  aisearch: "ai/search",
   transcribe: "ai/transcribe",
   ubanner: "user/banner",
   unlock: "channel/unlock",
@@ -132,6 +133,7 @@ const PREFIXED_TO_SLASH_MAP = {
   ticket: "tickets/create",
   invites: "community/invites",
   automod: "mod/automod",
+  automodai: "mod/automod-ai",
   dramawatcher: "mod/dramawatcher",
   reactionrole: "role/reaction",
   voicerole: "role/voicelink",
@@ -140,6 +142,7 @@ const PREFIXED_TO_SLASH_MAP = {
   sticky: "channel/sticky",
   temp: "channel/temp",
   voicelink: "channel/voicelink",
+  voicestatus: "channel/voicestatus",
   ticketsetup: "tickets/setup",
   ticketpanel: "tickets/panel",
   ticketclose: "tickets/close",
@@ -252,7 +255,16 @@ async function resolveRoleFlexible(ctx, input) {
 }
 
 async function resolveChannelFlexible(ctx, input) {
-  return resolveGuildEntity(ctx?.guild?.channels, /^<#(\d{17,20})>$/, input);
+  const manager = ctx?.guild?.channels;
+  if (!manager || !input) return null;
+  const { isObfuscatedChannel } = require("./runtime");
+  const entityId = input.match(/^<#(\d{17,20})>$/)?.[1] ?? (DISCORD_ID_PATTERN.test(input) ? input : null);
+  if (entityId) {
+    const byId = await manager.fetch(entityId).catch(() => null);
+    if (byId && !isObfuscatedChannel(byId)) return byId;
+  }
+  const lower = input.toLowerCase();
+  return manager.cache.find((entity) => !isObfuscatedChannel(entity) && entity.name?.toLowerCase?.().includes(lower)) ?? null;
 }
 
 function buildAttachmentFromUrl(input, paramName = "") {
@@ -773,7 +785,14 @@ async function parsePrefixedArgsForSlash(ctx, slashCommand, slashName, slashKey 
           } else {
             value = args.splice(0).join(" ");
           }
-        } else if (isLast || slashName === "resume" || slashName === "ask") {
+        } else if (
+          isLast ||
+          slashName === "resume" ||
+          slashName === "ask" ||
+          (slashName === "search" && def.name === "consulta") ||
+          (slashName === "automod-ai" && def.name === "instruccion") ||
+          (slashName === "voicestatus" && def.name === "estado")
+        ) {
           value = args.splice(0).join(" ");
         } else {
           value = args.shift();

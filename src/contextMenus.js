@@ -2,6 +2,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  CheckboxBuilder,
   LabelBuilder,
   MessageFlags,
   ModalBuilder,
@@ -520,7 +521,10 @@ async function handleModDossierContext(interaction) {
                     .setRequired(true)
                     .setMaxLength(300)
                     .setPlaceholder("Escribe el motivo...")
-                )
+                ),
+              new LabelBuilder()
+                .setLabel("Notificar al usuario por DM")
+                .setCheckboxComponent(new CheckboxBuilder().setCustomId("notify_dm").setDefault(true))
             );
 
           await btn.showModal(modal);
@@ -533,6 +537,7 @@ async function handleModDossierContext(interaction) {
           if (!sub) return;
 
           const reason = sub.fields.getTextInputValue("razon")?.trim() || "Sin razón";
+          const notifyDm = sub.fields.getCheckbox("notify_dm");
           const currentPerms = sub.memberPermissions ?? btn.memberPermissions ?? interaction.member.permissions;
 
           if (isKick) {
@@ -543,6 +548,11 @@ async function handleModDossierContext(interaction) {
               return sub.reply({ content: "No puedo expulsar a este usuario (jerarquía o permisos)", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
             await sub.deferReply({ flags: MessageFlags.Ephemeral });
+            if (notifyDm) {
+              await targetUser.send({
+                content: `Fuiste expulsado de **${guild.name}**\nRazón: ${reason}`,
+              }).catch(() => {});
+            }
             await member.kick(`${interaction.user.tag}: ${reason}`);
             await addModCase({
               guildId: guild.id,
@@ -577,6 +587,11 @@ async function handleModDossierContext(interaction) {
             reason,
             warnId,
           });
+          if (notifyDm) {
+            await targetUser.send({
+              content: `Fuiste advertido en **${guild.name}**\nRazón: ${reason}\nTotal warns: \`${total}\` · ID: \`${warnId}\``,
+            }).catch(() => {});
+          }
           if (member) await applyWarnEscalation(guild, member, total);
           await logAction(guild, {
             title: "Usuario Advertido (Expediente)",

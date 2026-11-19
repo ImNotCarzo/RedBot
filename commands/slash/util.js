@@ -711,6 +711,27 @@ const data = {
 //  COMANDOS EXTRA
 // ─────────────────────────────────────────────
 
+function parsePollOption(raw) {
+  const clean = String(raw ?? "").trim();
+  const customMatch = clean.match(/^<(a)?:[a-zA-Z0-9_]+:(\d{17,22})>\s+(.+)$/);
+  if (customMatch && customMatch[3].trim()) {
+    return {
+      text: customMatch[3].trim().slice(0, 55),
+      emoji: { id: customMatch[2] },
+    };
+  }
+  const unicodeMatch = clean.match(
+    /^((?:\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\u200D(?:\p{Extended_Pictographic}|[0-9#*]\uFE0F?\u20E3))*))\s+(.+)$/u
+  );
+  if (unicodeMatch && unicodeMatch[2].trim()) {
+    return {
+      text: unicodeMatch[2].trim().slice(0, 55),
+      emoji: unicodeMatch[1],
+    };
+  }
+  return { text: clean.slice(0, 55) };
+}
+
 const pollCommand = {
   data: new CommandBuilder({
     name: "poll",
@@ -725,7 +746,7 @@ const pollCommand = {
     })
     .addString({
       name: "opciones",
-      description: "Opciones separadas por / (de 2 a 10)",
+      description: "Opciones separadas por / (de 2 a 10, soporta emoji al inicio)",
       required: true,
     })
     .addString({
@@ -754,21 +775,91 @@ const pollCommand = {
       if (opciones.length < 2 || opciones.length > 10) {
         return ctx.ephemeral("Debes dar entre 2 y 10 opciones separadas por `/`");
       }
-      if (opciones.some((o) => o.length > 55)) {
+      const parsedOptions = opciones.map(parsePollOption);
+      if (parsedOptions.some((o) => !o.text || o.text.length > 55)) {
         return ctx.ephemeral("Cada opción puede tener como máximo 55 caracteres");
       }
 
       const horas = Math.min(768, Math.max(1, Number.parseInt(ctx.get("duracion"), 10) || 24));
 
-      await ctx.send({
+      const sent = await ctx.send({
         poll: {
           question: { text: pregunta },
-          answers: opciones.map((text) => ({ text })),
+          answers: parsedOptions,
           duration: horas,
           allowMultiselect: ctx.get("multiple") === "true",
         },
         allowedMentions: { parse: [], repliedUser: false },
       });
+
+      if (ctx.interaction?.followUp && sent?.id) {
+        const sessionId = ctx.interaction.id;
+        const btnVotersId = `pollctl:voters:${sessionId}`;
+        const btnEndId = `pollctl:end:${sessionId}`;
+        const lang = ctx.guild?.id ? (await resolveContextLang({ guildId: ctx.guild.id, userId: ctx.user?.id })) : "es";
+
+        const buildControlCard = (extraBody = null, ended = false) => {
+          const b = new ComponentsV2Builder({ color: ended ? GREEN : RED });
+          b._i18nLang = lang;
+          b.addText(`${V2Text.heading("Control de encuesta", 3)}\n${V2Text.subtext(V2Text.clip(pregunta, 90))}`);
+          if (extraBody) b.addSeparator("small").addText(V2Text.clip(extraBody, 2500));
+          if (!ended) {
+            b.addSpacer("small").addButtonsRow([
+              { customId: btnVotersId, emoji: "📊", label: "Ver votantes", style: "secondary" },
+              { customId: btnEndId, emoji: "⏹️", label: "Finalizar encuesta", style: "danger" },
+            ]);
+          }
+          return b;
+        };
+
+        const ctrlMsg = await ctx.interaction
+          .followUp(buildControlCard("Usa estos controles privados para revisar votantes o cerrar la encuesta antes de tiempo.").toPayload({ ephemeral: true }))
+          .catch(() => null);
+
+        if (ctrlMsg && typeof ctrlMsg.createMessageComponentCollector === "function") {
+          const collector = ctrlMsg.createMessageComponentCollector({
+            time: 15 * 60_000,
+            filter: (i) => i.user.id === ctx.user?.id && (i.customId === btnVotersId || i.customId === btnEndId),
+          });
+
+          collector.on("collect", async (btn) => {
+            try {
+              const fresh = await sent.fetch().catch(() => null);
+              if (!fresh?.poll) {
+                await btn.reply({ content: "No pude consultar esta encuesta (puede haber sido borrada).", flags: MessageFlags.Ephemeral }).catch(() => {});
+                return;
+              }
+
+              if (btn.customId === btnVotersId) {
+                const answers = [...fresh.poll.answers.values()];
+                const summaryLines = await Promise.all(
+                  answers.map(async (ans) => {
+                    const votersCol = await ans.voters.fetch({ limit: 25 }).catch(() => null);
+                    const votersList = votersCol?.size
+                      ? [...votersCol.values()].slice(0, 12).map((u) => `<@${u.id}>`).join(", ") + (votersCol.size > 12 ? ` +${votersCol.size - 12}` : "")
+                      : "*Sin votos*";
+                    return `• **${V2Text.clip(ans.text, 55)}** (\`${ans.voteCount ?? 0}\`): ${votersList}`;
+                  })
+                );
+                await btn.update(buildControlCard(summaryLines.join("\n"), Boolean(fresh.poll.resultsFinalized)).toPayload({ ephemeral: true })).catch(() => {});
+                return;
+              }
+
+              if (btn.customId === btnEndId) {
+                if (!fresh.poll.resultsFinalized) {
+                  await fresh.poll.end();
+                }
+                await btn.update(buildControlCard("Encuesta finalizada manualmente.", true).toPayload({ ephemeral: true })).catch(() => {});
+                collector.stop("ended");
+              }
+            } catch {
+              if (!btn.replied && !btn.deferred) {
+                await btn.reply({ content: "No se pudo actualizar la encuesta.", flags: MessageFlags.Ephemeral }).catch(() => {});
+              }
+            }
+          });
+        }
+      }
     } catch (err) {
       log.error("[util poll]", { err: err?.message ?? String(err) });
       handleCommandError(ctx, err);
@@ -1164,4 +1255,4 @@ data.data
   .addCommand(lolCommand)
   .addCommand(setlangCommand);
 
-module.exports = { data };
+module.exports = { data, parsePollOption };

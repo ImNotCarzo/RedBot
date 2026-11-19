@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { ChannelType } = require("discord.js");
 const { applyOauthGuildLang } = require("./guild");
-const { INVITE_URL, Logger } = require("./runtime");
+const { INVITE_URL, Logger, isObfuscatedChannel } = require("./runtime");
 const { escapeHtml } = require("./security");
 const { version: PACKAGE_VERSION } = require("../package.json");
 
@@ -209,6 +209,7 @@ function handleStats() {
     }
   }
 
+  let visibleChannels = 0;
   let textChannels = 0;
   let voiceChannels = 0;
   let categoryChannels = 0;
@@ -217,6 +218,8 @@ function handleStats() {
 
   if (channels) {
     for (const ch of channels.values()) {
+      if (isObfuscatedChannel(ch)) continue;
+      visibleChannels++;
       switch (ch.type) {
         case ChannelType.GuildText:
         case ChannelType.GuildAnnouncement:
@@ -253,7 +256,7 @@ function handleStats() {
     users: totalUsers,
     averageUsersPerGuild: guilds?.size ? Math.round(totalUsers / guilds.size) : 0,
     channels: {
-      total: channels?.size ?? 0,
+      total: visibleChannels,
       text: textChannels,
       voice: voiceChannels,
       stage: stageChannels,
@@ -1021,7 +1024,7 @@ async function handleTicketsRoute(req, res, pathname, preloadedSession = undefin
       ]);
     }
 
-    const allChannels = [...(guild.channels?.cache?.values?.() ?? [])];
+    const allChannels = [...(guild.channels?.cache?.values?.() ?? [])].filter((c) => !isObfuscatedChannel(c));
     const categories = allChannels
       .filter((c) => c.type === ChannelType.GuildCategory)
       .map((c) => ({ id: c.id, name: c.name }));

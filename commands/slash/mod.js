@@ -1,9 +1,30 @@
-const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text } = require("gralonium");
+const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const {
+  AutoModerationActionType,
+  AutoModerationRuleTriggerType,
+  ChannelSelectMenuBuilder,
   ChannelType,
+  CheckboxGroupBuilder,
+  CheckboxGroupOptionBuilder,
   EmbedBuilder,
+  LabelBuilder,
+  MessageFlags,
+  ModalBuilder,
+  RadioGroupBuilder,
+  RadioGroupOptionBuilder,
+  RoleSelectMenuBuilder,
 } = require("discord.js");
-const { buildActionCard, createListPaginator, avatarUrl, failWith, noGuildReply } = require("../../src/runtime");
+const { Logger, buildActionCard, createListPaginator, avatarUrl, failWith, noGuildReply, THINKING_TEXT } = require("../../src/runtime");
+const log = new Logger("CMD_MOD", process.env.LOG_LEVEL);
+const {
+  TRIGGER_QUOTAS,
+  TRIGGER_LABELS,
+  buildAutoModEditModal,
+  buildNativeRuleEditPayload,
+  buildNativeRulePayload,
+  buildNativeRulePreviewCard,
+  compileNaturalLanguageRule,
+} = require("../../src/automodAi");
 const { RED, YELLOW, GREEN } = require("../../src/config");
 const {
   generateId,
@@ -32,8 +53,8 @@ const CASE_TYPE_LABELS = {
   unban: "Unban",
 };
 const { GuildConfig } = require("../../src/database");
-const { getAutomodConfig, invalidateDramaChannelCache, updateAutomodConfig } = require("../../src/moderationExtra");
-const { logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
+const { getAutomodConfig, getDramaChannelId, invalidateDramaChannelCache, updateAutomodConfig } = require("../../src/moderationExtra");
+const { getLogChannelId, logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
 
 function notifyUser(user, { description, color = RED, fields = null }) {
   const { getCurrentLang, translateEmbed } = require("../../src/i18n");
@@ -1018,28 +1039,513 @@ const data = {
           patch.customMessage = String(ctx.get("mensaje_custom")).trim().slice(0, 400);
         }
 
-        const cfg = (Object.keys(patch).length
+        const initialCfg = (Object.keys(patch).length
           ? await updateAutomodConfig(ctx.guild.id, patch)
           : null) ?? (await getAutomodConfig(ctx.guild.id));
 
-        await ctx.send(buildActionCard({
-          title: "Configuración AutoMod",
-          fields: [
-            ["Estado", V2Text.code(cfg.enabled ? "Activado" : "Desactivado")],
-            ["Acción", V2Text.code(cfg.action)],
-            ["Filtros activos", V2Text.code([
-              cfg.antiSpam && "AntiSpam",
-              cfg.antiInvites && "AntiInvites",
-              cfg.antiLinks && "AntiLinks",
-              cfg.antiCaps && "AntiCaps",
-              cfg.antiMentions && "AntiMentions",
-              cfg.blockedWords?.length && `Palabras(${cfg.blockedWords.length})`,
-            ].filter(Boolean).join(", ") || "Ninguno")],
-            cfg.customMessage ? ["Mensaje custom", V2Text.clip(cfg.customMessage, 200)] : null,
-          ].filter(Boolean),
-          moderator: modTag(ctx),
-          color: cfg.enabled ? GREEN : RED,
-        }));
+        const buildAutomodFiltersModal = (modalId, currentCfg) => {
+          const chSelect = new ChannelSelectMenuBuilder()
+            .setCustomId("ignored_channels")
+            .setPlaceholder("Canales exentos del filtro...")
+            .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum)
+            .setMinValues(0)
+            .setMaxValues(10)
+            .setRequired(false);
+          if (currentCfg.ignoredChannels?.length) {
+            chSelect.setDefaultChannels(currentCfg.ignoredChannels.slice(0, 10));
+          }
+
+          const roleSelect = new RoleSelectMenuBuilder()
+            .setCustomId("ignored_roles")
+            .setPlaceholder("Roles exentos del filtro...")
+            .setMinValues(0)
+            .setMaxValues(10)
+            .setRequired(false);
+          if (currentCfg.ignoredRoles?.length) {
+            roleSelect.setDefaultRoles(currentCfg.ignoredRoles.slice(0, 10));
+          }
+
+          return new ModalBuilder()
+            .setCustomId(modalId)
+            .setTitle("Configurar AutoMod")
+            .addLabelComponents(
+              new LabelBuilder()
+                .setLabel("Filtros activos")
+                .setCheckboxGroupComponent(
+                  new CheckboxGroupBuilder()
+                    .setCustomId("filters")
+                    .setRequired(false)
+                    .setMinValues(0)
+                    .setMaxValues(5)
+                    .addOptions(
+                      new CheckboxGroupOptionBuilder().setLabel("AntiSpam").setValue("antiSpam").setDescription("Mensajes repetidos rápidos").setDefault(Boolean(currentCfg.antiSpam)),
+                      new CheckboxGroupOptionBuilder().setLabel("AntiInvites").setValue("antiInvites").setDescription("Invitaciones de Discord").setDefault(Boolean(currentCfg.antiInvites)),
+                      new CheckboxGroupOptionBuilder().setLabel("AntiLinks").setValue("antiLinks").setDescription("Enlaces externos http/https").setDefault(Boolean(currentCfg.antiLinks)),
+                      new CheckboxGroupOptionBuilder().setLabel("AntiCaps").setValue("antiCaps").setDescription("Exceso de mayúsculas").setDefault(Boolean(currentCfg.antiCaps)),
+                      new CheckboxGroupOptionBuilder().setLabel("AntiMentions").setValue("antiMentions").setDescription("Menciones masivas (>=5)").setDefault(Boolean(currentCfg.antiMentions))
+                    )
+                ),
+              new LabelBuilder()
+                .setLabel("Sanción por infracción")
+                .setRadioGroupComponent(
+                  new RadioGroupBuilder()
+                    .setCustomId("action")
+                    .setRequired(true)
+                    .addOptions(
+                      new RadioGroupOptionBuilder().setLabel("Solo borrar mensaje").setValue("delete").setDefault(currentCfg.action === "delete"),
+                      new RadioGroupOptionBuilder().setLabel("Borrar + Warn").setValue("warn").setDefault(!currentCfg.action || currentCfg.action === "warn"),
+                      new RadioGroupOptionBuilder().setLabel("Borrar + Mute 5m").setValue("mute").setDefault(currentCfg.action === "mute"),
+                      new RadioGroupOptionBuilder().setLabel("Borrar + Kick").setValue("kick").setDefault(currentCfg.action === "kick")
+                    )
+                ),
+              new LabelBuilder()
+                .setLabel("Canales ignorados (opcional)")
+                .setChannelSelectMenuComponent(chSelect),
+              new LabelBuilder()
+                .setLabel("Roles ignorados (opcional)")
+                .setRoleSelectMenuComponent(roleSelect)
+            );
+        };
+
+        const renderAutomodCard = ({ state, view, isEnded }) => {
+          const currentCfg = state.cfg;
+          const activeFilters = [
+            currentCfg.antiSpam && "AntiSpam",
+            currentCfg.antiInvites && "AntiInvites",
+            currentCfg.antiLinks && "AntiLinks",
+            currentCfg.antiCaps && "AntiCaps",
+            currentCfg.antiMentions && "AntiMentions",
+            currentCfg.blockedWords?.length && `Palabras(${currentCfg.blockedWords.length})`,
+          ].filter(Boolean).join(", ") || "Ninguno";
+
+          const card = buildActionCard({
+            title: "Configuración AutoMod",
+            fields: [
+              ["Estado", V2Text.code(currentCfg.enabled ? "Activado" : "Desactivado")],
+              ["Acción", V2Text.code(currentCfg.action)],
+              ["Filtros activos", V2Text.code(activeFilters)],
+              currentCfg.customMessage ? ["Mensaje custom", V2Text.clip(currentCfg.customMessage, 200)] : null,
+              currentCfg.ignoredChannels?.length ? ["Canales exentos", currentCfg.ignoredChannels.slice(0, 5).map((id) => `<#${id}>`).join(", ")] : null,
+              currentCfg.ignoredRoles?.length ? ["Roles exentos", currentCfg.ignoredRoles.slice(0, 5).map((id) => `<@&${id}>`).join(", ")] : null,
+            ].filter(Boolean),
+            moderator: modTag(ctx),
+            color: currentCfg.enabled ? GREEN : RED,
+          });
+
+          if (!isEnded && view) {
+            card.addSpacer("small").addButtonsRow([
+              { customId: view.id("filters"), label: "Configurar filtros", style: "secondary" },
+              {
+                customId: view.id("toggle"),
+                label: currentCfg.enabled ? "Desactivar" : "Activar",
+                style: currentCfg.enabled ? "secondary" : "danger",
+              },
+            ]);
+          }
+          return card;
+        };
+
+        const view = new V2View({
+          authorId: ctx.user?.id,
+          timeout: 3 * 60_000,
+          thirdPartyMode: "reject",
+          thirdPartyMessage: "No puedes usar este panel",
+          onEnd: "static",
+          state: { cfg: initialCfg },
+          render: renderAutomodCard,
+          renderStatic: (args) => renderAutomodCard({ ...args, isEnded: true }),
+          actions: {
+            toggle: async ({ state, setState }) => {
+              const updated = await updateAutomodConfig(ctx.guild.id, { enabled: !state.cfg.enabled });
+              if (updated) setState({ cfg: updated });
+            },
+            filters: async ({ interaction, state, view: activeView }) => {
+              const modalId = activeView.id("ammodal", Date.now().toString(36));
+              await interaction.showModal(buildAutomodFiltersModal(modalId, state.cfg));
+
+              const submitted = await interaction
+                .awaitModalSubmit({
+                  time: 3 * 60_000,
+                  filter: (i) => i.customId === modalId && i.user.id === ctx.user?.id,
+                })
+                .catch(() => null);
+              if (!submitted) return false;
+
+              const selectedFilters = new Set(submitted.fields.getCheckboxGroup("filters") ?? []);
+              const selectedAction = submitted.fields.getRadioGroup("action") || state.cfg.action;
+              const chCol = submitted.fields.getSelectedChannels("ignored_channels", false);
+              const roleCol = submitted.fields.getSelectedRoles("ignored_roles", false);
+
+              const nextPatch = {
+                antiSpam: selectedFilters.has("antiSpam"),
+                antiInvites: selectedFilters.has("antiInvites"),
+                antiLinks: selectedFilters.has("antiLinks"),
+                antiCaps: selectedFilters.has("antiCaps"),
+                antiMentions: selectedFilters.has("antiMentions"),
+                action: selectedAction,
+                ignoredChannels: chCol ? [...chCol.keys()].slice(0, 20) : [],
+                ignoredRoles: roleCol ? [...roleCol.keys()].filter((id) => id !== ctx.guild.id).slice(0, 20) : [],
+              };
+
+              const saved = await updateAutomodConfig(ctx.guild.id, nextPatch);
+              await submitted.deferUpdate().catch(() => {});
+              if (saved) {
+                activeView.setState({ cfg: saved });
+                if (activeView.message?.editable) {
+                  await activeView.message.edit(activeView.toPayload()).catch(() => {});
+                }
+              }
+              return false;
+            },
+          },
+        });
+
+        await view.send(ctx);
+      },
+    })
+    .addCommand({
+      data: new CommandBuilder({
+        name: "automod-ai",
+        description: "Convierte lenguaje natural en reglas nativas de Discord AutoMod (0ms)",
+        cooldown: { seconds: 8, bucket: "GUILD" },
+      }),
+      params: new ParamsBuilder()
+        .addString({
+          name: "instruccion",
+          description: "Describe la regla (ej: bloquea links acortados e invitaciones excepto @Mods)",
+          required: false,
+          max_length: 500,
+        })
+        .addString({
+          name: "accion",
+          description: "Crear regla con IA o gestionar reglas nativas existentes",
+          required: false,
+          choices: [
+            { name: "Crear con IA", value: "create" },
+            { name: "Listar / Gestionar reglas", value: "list" },
+          ],
+        })
+        .addChannel({
+          name: "canal_alerta",
+          description: "Canal donde Discord enviará alertas de esta regla (opcional)",
+          required: false,
+          channel_types: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+        })
+        .addRole({
+          name: "rol_exento",
+          description: "Rol que ignorará esta regla (opcional)",
+          required: false,
+        })
+        .addChannel({
+          name: "canal_exento",
+          description: "Canal donde esta regla no aplicará (opcional)",
+          required: false,
+        }),
+      plugins: [Plugins.hasPerms("ManageGuild"), Plugins.hasBotPerms("ManageGuild")],
+      async code(ctx) {
+        if (!ctx.guild) return noGuildReply(ctx);
+
+        const actionMode = ctx.get("accion") || (ctx.get("instruccion") ? "create" : "list");
+        const instruction = String(ctx.get("instruccion") ?? "").trim().slice(0, 500);
+        const guild = ctx.guild;
+        const modUserTag = modTag(ctx);
+
+        if (actionMode === "list" || !instruction) {
+          await ctx.defer();
+          let fetched;
+          try {
+            fetched = await guild.autoModerationRules.fetch({ cache: false });
+          } catch (err) {
+            return failWith(ctx, err, "No pude leer las reglas de AutoMod nativo de este servidor.");
+          }
+
+          const rules = [...fetched.values()];
+          if (!rules.length) {
+            return ctx.send(
+              ComponentsV2Builder.card({
+                title: "AutoMod nativo de Discord",
+                description:
+                  "Este servidor aún no tiene reglas nativas de AutoMod configuradas.\n\n" +
+                  "Usa `/mod automod-ai instruccion:\"bloquea estafas de nitro y links acortados excepto @Staff\"` para crear una en segundos.",
+                color: RED,
+              })
+            );
+          }
+
+          const formatRuleLine = (r, idx) => {
+            const statusDot = r.enabled ? "🟢" : "🔴";
+            const trig = TRIGGER_LABELS[r.triggerType] ?? `Tipo ${r.triggerType}`;
+            const acts = (r.actions ?? []).map((a) => {
+              if (a.type === AutoModerationActionType.BlockMessage) return "Bloquear";
+              if (a.type === AutoModerationActionType.Timeout) return `Timeout ${a.metadata?.durationSeconds ?? 60}s`;
+              if (a.type === AutoModerationActionType.SendAlertMessage) return a.metadata?.channelId ? `Alerta <#${a.metadata.channelId}>` : "Alerta";
+              return "Acción";
+            }).join(" + ");
+            return `**${idx + 1}.** ${statusDot} **${V2Text.clip(r.name, 55)}** · \`${trig}\`\n> ${acts}`;
+          };
+
+          const renderList = ({ state, view, isEnded }) => {
+            const selected = state.rules.find((r) => r.id === state.selectedId) ?? state.rules[0];
+            const lines = state.rules.map(formatRuleLine);
+            const builder = new ComponentsV2Builder({ color: RED })
+              .addText(`${V2Text.heading(`Reglas AutoMod Nativas (${state.rules.length})`, 3)}\n${V2Text.subtext(guild.name)}`)
+              .addSeparator("small")
+              .addText(V2Text.clip(lines.join("\n"), 3200));
+
+            if (!isEnded && view && state.rules.length) {
+              builder.addSpacer("small").addSelectMenu({
+                customId: view.id("pick"),
+                placeholder: "Selecciona una regla para gestionar...",
+                options: state.rules.slice(0, 25).map((r) => ({
+                  label: `${r.enabled ? "🟢" : "🔴"} ${V2Text.clip(r.name, 70)}`,
+                  value: r.id,
+                  description: TRIGGER_LABELS[r.triggerType] ?? "Regla AutoMod",
+                  default: r.id === selected?.id,
+                })),
+              });
+              if (selected) {
+                builder.addSpacer("small").addButtonsRow([
+                  {
+                    customId: view.id("toggle"),
+                    label: selected.enabled ? "Desactivar regla" : "Activar regla",
+                    style: selected.enabled ? "secondary" : "danger",
+                  },
+                  {
+                    customId: view.id("remove"),
+                    label: "Eliminar regla",
+                    style: "danger",
+                  },
+                ]);
+              }
+            }
+            return builder;
+          };
+
+          const listView = new V2View({
+            authorId: ctx.user?.id,
+            timeout: 3 * 60_000,
+            thirdPartyMode: "reject",
+            thirdPartyMessage: "No puedes gestionar este panel",
+            onEnd: "static",
+            state: { rules, selectedId: rules[0]?.id ?? null },
+            render: renderList,
+            renderStatic: (args) => renderList({ ...args, isEnded: true }),
+            actions: {
+              pick: ({ values, setState }) => {
+                if (!values[0]) return false;
+                setState({ selectedId: values[0] });
+              },
+              toggle: async ({ state, setState, interaction }) => {
+                const target = state.rules.find((r) => r.id === state.selectedId) ?? state.rules[0];
+                if (!target) return false;
+                try {
+                  const updated = await guild.autoModerationRules.edit(target.id, {
+                    enabled: !target.enabled,
+                    reason: `${modUserTag}: automod-ai toggle`,
+                  });
+                  const nextRules = state.rules.map((r) => (r.id === updated.id ? updated : r));
+                  setState({ rules: nextRules, selectedId: updated.id });
+                } catch {
+                  await interaction.reply({ content: "No pude modificar esa regla en Discord.", flags: MessageFlags.Ephemeral }).catch(() => {});
+                  return false;
+                }
+              },
+              remove: async ({ state, setState, interaction }) => {
+                const target = state.rules.find((r) => r.id === state.selectedId) ?? state.rules[0];
+                if (!target) return false;
+                try {
+                  await guild.autoModerationRules.delete(target.id, `${modUserTag}: automod-ai delete`);
+                  const nextRules = state.rules.filter((r) => r.id !== target.id);
+                  setState({ rules: nextRules, selectedId: nextRules[0]?.id ?? null });
+                } catch {
+                  await interaction.reply({ content: "No pude eliminar esa regla en Discord.", flags: MessageFlags.Ephemeral }).catch(() => {});
+                  return false;
+                }
+              },
+            },
+          });
+
+          return listView.send(ctx);
+        }
+
+        await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
+
+        try {
+          const alertChannel = ctx.get("canal_alerta") ?? null;
+          const exemptRole = ctx.get("rol_exento") ?? null;
+          const exemptChannel = ctx.get("canal_exento") ?? null;
+
+          const [existingRules, dramaId, logId] = await Promise.all([
+            guild.autoModerationRules.fetch({ cache: false }).catch(() => null),
+            getDramaChannelId(guild.id),
+            getLogChannelId(guild.id),
+          ]);
+
+          const defaultAlertChannelId = dramaId || logId || null;
+          const compiled = await compileNaturalLanguageRule({
+            guild,
+            instruction,
+            alertChannel,
+            exemptRole,
+            exemptChannel,
+            defaultAlertChannelId,
+          });
+
+          if (compiled.error === "ai_failed") {
+            return ctx.ephemeral("La IA no pudo interpretar esa instrucción en este momento. Intenta describir la regla más directo.");
+          }
+          if (compiled.error === "empty_trigger") {
+            return ctx.ephemeral("No detecté palabras clave, patrones ni tipo de filtro válidos en tu descripción. Sé un poco más específico.");
+          }
+          if (!compiled.ok || !compiled.spec) {
+            return ctx.ephemeral("No se pudo generar la regla de AutoMod.");
+          }
+
+          const existingArr = existingRules ? [...existingRules.values()] : [];
+          const sameType = existingArr.filter((r) => r.triggerType === compiled.spec.triggerType);
+          const quota = TRIGGER_QUOTAS[compiled.spec.triggerType] ?? 1;
+          const willReplaceExisting = quota === 1 && sameType.length >= 1 ? sameType[0] : null;
+
+          if (quota > 1 && sameType.length >= quota) {
+            return ctx.ephemeral(
+              `Ya alcanzaste el límite nativo de Discord (${sameType.length}/${quota}) para reglas de **${TRIGGER_LABELS[compiled.spec.triggerType]}**. Usa \`/mod automod-ai accion:list\` para eliminar o editar alguna.`
+            );
+          }
+
+          const renderPreview = ({ state, view, isEnded }) => {
+            if (state.status === "applied") {
+              return buildActionCard({
+                title: state.replaced ? "Regla AutoMod actualizada" : "Regla AutoMod creada",
+                subtitle: `${TRIGGER_LABELS[state.spec.triggerType] ?? "AutoMod"} · Latencia 0 ms`,
+                fields: [
+                  ["Regla", V2Text.code(state.spec.name)],
+                  ["Estado", V2Text.code("Activa en Discord")],
+                  state.spec.alertChannelId && state.spec.sendAlert ? ["Alertas", `<#${state.spec.alertChannelId}>`] : null,
+                ].filter(Boolean),
+                moderator: modUserTag,
+                color: GREEN,
+              });
+            }
+            if (state.status === "cancelled") {
+              return ComponentsV2Builder.card({ title: "AutoMod IA cancelado", description: "No se aplicaron cambios en Discord.", color: RED });
+            }
+            const controls = !isEnded && view
+              ? [
+                  {
+                    customId: view.id("apply"),
+                    label: willReplaceExisting ? "Reemplazar regla en Discord" : "Aplicar en Discord",
+                    style: "danger",
+                  },
+                  { customId: view.id("edit"), label: "Editar opciones", style: "secondary" },
+                  { customId: view.id("cancel"), label: "Cancelar", style: "secondary" },
+                ]
+              : null;
+            return buildNativeRulePreviewCard(state.spec, {
+              sameTypeCount: sameType.length,
+              existingRuleName: willReplaceExisting?.name ?? null,
+              warnings: state.warnings,
+              controls,
+              color: RED,
+            });
+          };
+
+          const previewView = new V2View({
+            authorId: ctx.user?.id,
+            timeout: 3 * 60_000,
+            thirdPartyMode: "reject",
+            thirdPartyMessage: "No puedes confirmar esta regla",
+            onEnd: "static",
+            state: { spec: compiled.spec, warnings: compiled.warnings ?? [], status: "pending", replaced: false },
+            render: renderPreview,
+            renderStatic: (args) => renderPreview({ ...args, isEnded: true }),
+            actions: {
+              cancel: ({ setState, view }) => {
+                setState({ status: "cancelled" });
+                view.stop("cancelled");
+              },
+              apply: async ({ state, setState, view, interaction }) => {
+                try {
+                  let savedRule;
+                  if (willReplaceExisting) {
+                    savedRule = await guild.autoModerationRules.edit(
+                      willReplaceExisting.id,
+                      buildNativeRuleEditPayload(state.spec)
+                    );
+                  } else {
+                    savedRule = await guild.autoModerationRules.create(buildNativeRulePayload(state.spec));
+                  }
+                  await logAction(guild, {
+                    title: willReplaceExisting ? "Regla AutoMod Nativa actualizada" : "Regla AutoMod Nativa creada",
+                    color: GREEN,
+                    fields: [
+                      { name: "Regla", value: `${savedRule.name} (\`${savedRule.id}\`)`, inline: true },
+                      { name: "Tipo", value: TRIGGER_LABELS[state.spec.triggerType] ?? String(state.spec.triggerType), inline: true },
+                      { name: "Moderador", value: modUserTag, inline: true },
+                    ],
+                  });
+                  setState({ status: "applied", replaced: Boolean(willReplaceExisting) });
+                  view.stop("applied");
+                } catch (apiErr) {
+                  log.error?.("[mod automod-ai apply]", { err: apiErr?.message ?? String(apiErr) });
+                  await interaction.reply({
+                    content: `Discord rechazó la regla: \`${V2Text.clip(apiErr?.message ?? "Error de permisos o formato", 160)}\``,
+                    flags: MessageFlags.Ephemeral,
+                  }).catch(() => {});
+                  return false;
+                }
+              },
+              edit: async ({ state, interaction, view: activeView }) => {
+                const modalId = activeView.id("amai_edit", Date.now().toString(36));
+                await interaction.showModal(buildAutoModEditModal(modalId, state.spec));
+
+                const submitted = await interaction
+                  .awaitModalSubmit({
+                    time: 3 * 60_000,
+                    filter: (i) => i.customId === modalId && i.user.id === ctx.user?.id,
+                  })
+                  .catch(() => null);
+                if (!submitted) return false;
+
+                const nextName = submitted.fields.getTextInputValue("name")?.trim().slice(0, 100) || state.spec.name;
+                const nextMsg = submitted.fields.getTextInputValue("custom_message")?.trim().slice(0, 150) ?? "";
+                const chosenActions = new Set(submitted.fields.getCheckboxGroup("actions") ?? []);
+                const rolesCol = submitted.fields.getSelectedRoles("exempt_roles", false);
+                const chCol = submitted.fields.getSelectedChannels("exempt_channels", false);
+
+                const canTimeout =
+                  state.spec.triggerType === AutoModerationRuleTriggerType.Keyword ||
+                  state.spec.triggerType === AutoModerationRuleTriggerType.MentionSpam;
+
+                const nextSpec = {
+                  ...state.spec,
+                  name: nextName,
+                  customMessage: nextMsg,
+                  blockMessage: chosenActions.has("block"),
+                  sendAlert: Boolean(chosenActions.has("alert") && state.spec.alertChannelId),
+                  timeoutSeconds: canTimeout && chosenActions.has("timeout")
+                    ? (state.spec.timeoutSeconds || 300)
+                    : null,
+                  exemptRoleIds: rolesCol ? [...rolesCol.keys()].filter((id) => id !== guild.id).slice(0, 20) : [],
+                  exemptChannelIds: chCol ? [...chCol.keys()].slice(0, 50) : [],
+                };
+                if (!nextSpec.blockMessage && !nextSpec.sendAlert && !nextSpec.timeoutSeconds) {
+                  nextSpec.blockMessage = true;
+                }
+
+                await submitted.deferUpdate().catch(() => {});
+                activeView.setState({ spec: nextSpec });
+                if (activeView.message?.editable) {
+                  await activeView.message.edit(activeView.toPayload()).catch(() => {});
+                }
+                return false;
+              },
+            },
+          });
+
+          await previewView.send(ctx);
+        } catch (err) {
+          return failWith(ctx, err, "No se pudo procesar la regla de AutoMod con IA");
+        }
       },
     })
     .addCommand({

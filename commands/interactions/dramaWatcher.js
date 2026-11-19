@@ -1,5 +1,7 @@
-const { MessageFlags } = require("discord.js");
-const { InteractionBuilder, Interactions } = require("gralonium");
+const { MessageFlags, PermissionFlagsBits } = require("discord.js");
+const { ComponentsV2Builder, InteractionBuilder, Interactions } = require("gralonium");
+const { buildIncidentActionsModal, applyIncidentActionsFromModal } = require("../../src/automodAi");
+const { GREEN } = require("../../src/config");
 const { getLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
 const { executeDramaAction } = require("../../src/moderationExtra");
@@ -20,6 +22,70 @@ const data = {
     const lang = await getLang(interaction.guildId).catch(() => "es");
     return runWithLang(lang, async () => {
       const isEn = lang === "en";
+
+      if (action === "incident") {
+        const perms = interaction.memberPermissions ?? interaction.member?.permissions;
+        const canManage =
+          interaction.user?.id === interaction.guild.ownerId ||
+          perms?.has?.(PermissionFlagsBits.ManageGuild) ||
+          perms?.has?.(PermissionFlagsBits.Administrator);
+        if (!canManage) {
+          return interaction.reply({
+            content: isEn ? "You need Manage Server permission to use Security Actions." : "Necesitas el permiso **Administrar servidor** para usar Seguridad.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+        }
+        const me = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
+        if (!me?.permissions?.has?.(PermissionFlagsBits.ManageGuild)) {
+          return interaction.reply({
+            content: isEn ? "I need Manage Server permission to pause invites or DMs." : "Necesito el permiso **Administrar servidor** para pausar invitaciones o DMs.",
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+        }
+
+        const modalId = `drama_incident:${interaction.guildId}:${interaction.id}`;
+        await interaction.showModal(buildIncidentActionsModal(modalId, interaction.guild, lang));
+
+        const submitted = await interaction
+          .awaitModalSubmit({
+            time: 2 * 60_000,
+            filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
+          })
+          .catch(() => null);
+        if (!submitted) return;
+
+        await submitted.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+        try {
+          const res = await applyIncidentActionsFromModal({
+            submitted,
+            guild: interaction.guild,
+            moderator: interaction.user,
+          });
+          const invText = res.invitesDisabledUntil
+            ? `Pausadas hasta <t:${Math.floor(new Date(res.invitesDisabledUntil).getTime() / 1000)}:R>`
+            : "Activas (normal)";
+          const dmText = res.dmsDisabledUntil
+            ? `Pausados hasta <t:${Math.floor(new Date(res.dmsDisabledUntil).getTime() / 1000)}:R>`
+            : "Activos (normal)";
+
+          await submitted.editReply(
+            ComponentsV2Builder.card({
+              title: res.cleared ? "Seguridad restaurada" : "Protecciones de seguridad actualizadas",
+              fields: [
+                ["Invitaciones", invText],
+                ["DMs de miembros", dmText],
+              ],
+              color: GREEN,
+            }).toPayload({ ephemeral: true })
+          ).catch(() => {});
+        } catch {
+          await submitted.editReply({
+            content: isEn ? "Could not update server security incident actions." : "No pude actualizar las medidas de seguridad del servidor.",
+          }).catch(() => {});
+        }
+        return;
+      }
+
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
       const replyErr = (content) =>

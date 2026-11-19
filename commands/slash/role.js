@@ -1,4 +1,4 @@
-const { ChannelType } = require("discord.js");
+const { ChannelType, Constants, GuildFeature, PermissionFlagsBits } = require("discord.js");
 const {
   GroupBuilder,
   CommandBuilder,
@@ -20,6 +20,9 @@ const {
   roleIconUrl,
   failWith,
   wait,
+  formatRoleColorInfo,
+  fetchComputedChannelPermissions,
+  isObfuscatedChannel,
 } = require("../../src/runtime");
 const { JoinRole, ReactionRolePanel, VoiceLink } = require("../../src/database");
 const { logAction } = require("../../src/guild");
@@ -176,17 +179,18 @@ async function executeBulkRole({
   }
 }
 
-function buildRoleInfoCard(role) {
-  const hex = role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "Sin color";
-  const color = role.color || DARK;
+function buildRoleInfoCard(role, memberCount = null) {
+  const colorInfo = formatRoleColorInfo(role);
+  const color = colorInfo.primary || DARK;
   const rows = [
     ["ID", V2Text.code(role.id)],
-    ["Color", V2Text.code(hex)],
+    memberCount !== null && memberCount !== undefined ? ["Miembros", V2Text.code(memberCount)] : null,
+    ["Color", V2Text.code(colorInfo.display)],
     ["Posición", V2Text.code(role.position)],
     ["Mencionable", V2Text.code(role.mentionable)],
     ["Gestionado", V2Text.code(role.managed)],
     ["Separado", V2Text.code(role.hoist)],
-  ];
+  ].filter(Boolean);
 
   return new ComponentsV2Builder({ color }).addSection(
     [V2Text.heading(role.name, 3, 100), V2Text.sectionBlock("Información", rows)],
@@ -204,17 +208,28 @@ function buildRoleIconCard(role) {
 }
 
 function buildRoleColorCard(role) {
-  const hex = `#${role.color.toString(16).padStart(6, "0")}`;
-  return new ComponentsV2Builder({ color: role.color }).addSection(
+  const info = formatRoleColorInfo(role);
+  const fields = [
+    ["Estilo", V2Text.code(info.styleLabel)],
+    ["Primario", `${V2Text.code(info.primaryHex ?? "#000000")} (${V2Text.code(info.primary)})`],
+    info.secondaryHex ? ["Secundario", V2Text.code(info.secondaryHex)] : null,
+    info.tertiaryHex ? ["Terciario", V2Text.code(info.tertiaryHex)] : null,
+  ].filter(Boolean);
+
+  return new ComponentsV2Builder({ color: info.primary || DARK }).addSection(
     [
       V2Text.heading(role.name, 3, 100),
-      V2Text.fields([
-        ["Hex", V2Text.code(hex)],
-        ["Decimal", V2Text.code(role.color)],
-      ]),
+      V2Text.fields(fields),
     ],
     { thumbnail: roleIconUrl(role, 1024), fallbackToText: true }
   );
+}
+
+function parseHexInt(raw) {
+  if (raw === null || raw === undefined) return null;
+  const match = String(raw).trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!match) return null;
+  return Number.parseInt(match[1], 16);
 }
 
 function buildRoleListCard({ role, title, lines, pageIndex, totalPages, footer = null, controls = null }) {
@@ -415,6 +430,8 @@ const data = {
         const allNavOptions = [{ label: "Info", value: "info", description: "Información del rol" }, ...navOptions];
 
         const perms = role.permissions.toArray().sort().map(formatPerm);
+        const memberCounts = await ctx.guild.roles.fetchMemberCounts().catch(() => null);
+        const roleMemberCount = memberCounts?.get?.(role.id) ?? null;
         let cachedUsers = null;
         const loadUsers = async () => {
           if (cachedUsers) return cachedUsers;
@@ -463,7 +480,7 @@ const data = {
                   controls,
                 });
           } else {
-            builder = buildRoleInfoCard(role);
+            builder = buildRoleInfoCard(role, roleMemberCount);
           }
 
           if (!isEnded) {
@@ -493,7 +510,7 @@ const data = {
                 await interaction.reply({ content: "Este rol no tiene icono", flags: MessageFlags.Ephemeral }).catch(() => {});
                 return false;
               }
-              if (selected === "color" && !role.color) {
+              if (selected === "color" && !formatRoleColorInfo(role).hasColor) {
                 await interaction.reply({ content: "Sin color asignado", flags: MessageFlags.Ephemeral }).catch(() => {});
                 return false;
               }
@@ -540,8 +557,17 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "color", description: "Color hexadecimal y vista previa de un rol" }),
-      params: new ParamsBuilder().addRole({ name: "rol", description: "Rol a inspeccionar", required: true }),
+      data: new CommandBuilder({ name: "color", description: "Consulta o edita el color (sólido, degradado o holográfico) de un rol" }),
+      params: new ParamsBuilder()
+        .addRole({ name: "rol", description: "Rol a consultar o editar", required: true })
+        .addString({ name: "primario", description: "Nuevo color hex primario para editar el rol (ej: #ff383d)", required: false })
+        .addString({ name: "secundario", description: "Color hex secundario para estilo degradado (opcional)", required: false })
+        .addString({
+          name: "holografico",
+          description: "Aplicar estilo holográfico oficial de Discord",
+          required: false,
+          choices: [{ name: "Sí (estilo holográfico)", value: "true" }],
+        }),
 
       async code(ctx) {
         await ctx.defer();
@@ -549,9 +575,76 @@ const data = {
 
         const role = ctx.get("rol");
         if (!role) return ctx.ephemeral("No encontré ese rol");
-        if (!role.color) return ctx.ephemeral("Este rol no tiene color asignado");
 
-        await ctx.send(buildRoleColorCard(role));
+        const rawPrimary = ctx.get("primario");
+        const rawSecondary = ctx.get("secundario");
+        const isHolo = ctx.get("holografico") === "true";
+
+        if (!rawPrimary && !rawSecondary && !isHolo) {
+          if (!formatRoleColorInfo(role).hasColor) return ctx.ephemeral("Este rol no tiene color asignado");
+          return ctx.send(buildRoleColorCard(role));
+        }
+
+        if (ctx.member?.id !== ctx.guild.ownerId && !ctx.member?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) {
+          return ctx.ephemeral("Necesitas el permiso **Administrar roles** (`ManageRoles`) para editar colores de rol");
+        }
+        const me = ctx.guild.members.me ?? await ctx.guild.members.fetchMe().catch(() => null);
+        if (!me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) {
+          return ctx.ephemeral("Necesito el permiso **Administrar roles** (`ManageRoles`) para editar el color del rol");
+        }
+
+        const hierr = roleHierarchyCheck(ctx, role);
+        if (hierr) return ctx.ephemeral(hierr);
+
+        const wantsEnhanced = isHolo || Boolean(rawSecondary);
+        if (wantsEnhanced && !ctx.guild.features?.includes?.(GuildFeature.EnhancedRoleColors)) {
+          return ctx.ephemeral("Este servidor no tiene activado **Enhanced Role Styles** para colores degradados u holográficos.");
+        }
+
+        let colorsPayload;
+        if (isHolo) {
+          colorsPayload = {
+            primaryColor: Constants.HolographicStyle.Primary,
+            secondaryColor: Constants.HolographicStyle.Secondary,
+            tertiaryColor: Constants.HolographicStyle.Tertiary,
+          };
+        } else {
+          const primaryInt = rawPrimary ? parseHexInt(rawPrimary) : (role.colors?.primaryColor ?? role.color ?? null);
+          if (primaryInt === null || !Number.isFinite(primaryInt)) {
+            return ctx.ephemeral("Color hex primario inválido. Usa el formato `#ff383d`.");
+          }
+          if (rawSecondary) {
+            if (!primaryInt || primaryInt <= 0) {
+              return ctx.ephemeral("Indica también un color hex `primario` válido (ej: `#ff383d`) para crear el degradado.");
+            }
+            const secondaryInt = parseHexInt(rawSecondary);
+            if (secondaryInt === null) {
+              return ctx.ephemeral("Color hex secundario inválido. Usa el formato `#ff9900`.");
+            }
+            colorsPayload = { primaryColor: primaryInt, secondaryColor: secondaryInt };
+          } else {
+            colorsPayload = { primaryColor: primaryInt };
+          }
+        }
+
+        try {
+          const modTag = ctx.user?.tag;
+          const updatedRole = await role.setColors(colorsPayload, `${modTag}: role color`);
+          await ctx.send(buildRoleColorCard(updatedRole));
+
+          const info = formatRoleColorInfo(updatedRole);
+          await logAction(ctx.guild, {
+            title: "Color de rol actualizado",
+            color: info.primary || DARK,
+            fields: [
+              { name: "Rol", value: `${updatedRole.name} (\`${updatedRole.id}\`)`, inline: true },
+              { name: "Moderador", value: modTag, inline: true },
+              { name: "Estilo", value: info.display, inline: true },
+            ],
+          });
+        } catch (err) {
+          return failWith(ctx, err, "No se pudo actualizar el color del rol");
+        }
       },
     })
     .addCommand({
@@ -853,14 +946,20 @@ const data = {
     .addCommand({
       data: new CommandBuilder({
         name: "permissions",
-        description: "Lista de permisos de un rol",
+        description: "Lista de permisos de un rol (globales o en un canal específico)",
         guildOnly: true,
       }),
-      params: new ParamsBuilder().addRole({
-        name: "rol",
-        description: "Rol a consultar",
-        required: true,
-      }),
+      params: new ParamsBuilder()
+        .addRole({
+          name: "rol",
+          description: "Rol a consultar",
+          required: true,
+        })
+        .addChannel({
+          name: "canal",
+          description: "Canal específico para ver permisos efectivos (opcional)",
+          required: false,
+        }),
 
       async code(ctx) {
         await ctx.defer();
@@ -870,23 +969,54 @@ const data = {
           const role = ctx.get("rol");
           if (!role) return ctx.send("No pude encontrar el rol");
 
-          const invoker = ctx.user ?? ctx.member?.user;
-          const perms = role.permissions.toArray().sort().map(formatPerm);
-          if (!perms.length) return ctx.send("Este rol no tiene permisos");
+          const canal = ctx.get("canal") ?? null;
+          if (canal && (canal.guildId !== ctx.guild.id || isObfuscatedChannel(canal))) {
+            return ctx.ephemeral("No tengo acceso a ese canal");
+          }
 
+          const invoker = ctx.user ?? ctx.member?.user;
+          let perms = [];
+          let maskedNote = null;
+
+          if (canal) {
+            const computed = await fetchComputedChannelPermissions({
+              client: ctx.guild.client,
+              channel: canal,
+              targetType: "role",
+              targetId: role.id,
+              fallbackPerms: canal.permissionsFor?.(role) ?? null,
+            });
+            perms = computed.effectiveList.map(formatPerm);
+            if (computed.maskedList.length) {
+              const preview = computed.maskedList.slice(0, 3).map(formatPerm).join(", ");
+              const extra = computed.maskedList.length > 3 ? ` +${computed.maskedList.length - 3}` : "";
+              maskedNote = `⚠️ Enmascarados implícitamente (${computed.maskedList.length}): ${preview}${extra}`;
+            }
+            if (!perms.length && !maskedNote) return ctx.send(`Este rol no tiene permisos en ${canal}`);
+            if (!perms.length) perms = ["*(Sin permisos efectivos en este canal)*"];
+          } else {
+            perms = role.permissions.toArray().sort().map(formatPerm);
+            if (!perms.length) return ctx.send("Este rol no tiene permisos");
+          }
+
+          const title = canal ? `Permisos de ${role.name} en #${canal.name}` : `Permisos de ${role.name}`;
           const paginator = createListPaginator({
             items: perms,
             perPage: PAGE_SIZE,
             ownerId: invoker.id,
-            render: ({ items: pageItems, pageIndex, totalPages, controls }) =>
-              buildRoleListCard({
+            render: ({ items: pageItems, pageIndex, totalPages, controls }) => {
+              const pageFooter = totalPages > 1 ? `Página ${pageIndex + 1}/${totalPages}` : null;
+              const combinedFooter = [pageFooter, maskedNote].filter(Boolean).join(" · ") || null;
+              return buildRoleListCard({
                 role,
-                title: `Permisos de ${role.name}`,
+                title,
                 lines: pageItems,
                 pageIndex,
                 totalPages,
+                footer: combinedFooter,
                 controls,
-              }),
+              });
+            },
           });
 
           await paginator.send(ctx);

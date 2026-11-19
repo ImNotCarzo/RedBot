@@ -1,3 +1,4 @@
+const { PermissionFlagsBits } = require("discord.js");
 const {
   CommandBuilder,
   GroupBuilder,
@@ -14,6 +15,9 @@ const {
   handleCommandError,
   createListPaginator,
   formatSortedRoles,
+  formatRoleColorInfo,
+  fetchComputedChannelPermissions,
+  isObfuscatedChannel,
 } = require("../../src/runtime");
 const { resolveMemberFlexible: resolveMember } = require("../../src/adapter");
 const { RED, DARK, BADGE_NAMES, USER_APP_CONFIG } = require("../../src/config");
@@ -92,11 +96,14 @@ function buildRolesCard(member, user, roles, pageIndex, totalPages, { controls =
   });
 }
 
-function buildPermsCard(user, perms, pageIndex, totalPages, color, { controls = null } = {}) {
+function buildPermsCard(user, perms, pageIndex, totalPages, color, { controls = null, subtitle = null, extraFooter = null } = {}) {
+  const pageFooter = totalPages > 1 ? `Página ${pageIndex + 1}/${totalPages}` : null;
+  const footer = [pageFooter, extraFooter].filter(Boolean).join(" · ") || null;
   return buildListCard({
     title: `Permisos de ${user.username}`,
+    subtitle,
     lines: perms,
-    footer: totalPages > 1 ? `Página ${pageIndex + 1}/${totalPages}` : null,
+    footer,
     thumbnail: user.displayAvatarURL({ size: 256 }),
     color: color || DARK,
     controls,
@@ -217,9 +224,11 @@ async function sendMemberListCommand(ctx, { logName, getItems, emptyMessage, ren
 function buildUserInfoCard({ user, member = null, color = RED } = {}) {
   const createdTs = Math.floor(user.createdTimestamp / 1000);
   const insignias = formatUserBadges(user);
+  const roleColorInfo = member?.roles?.color ? formatRoleColorInfo(member.roles.color) : null;
+  const colorDisplay = roleColorInfo?.hasColor ? roleColorInfo.display : color;
   const generalRows = [
     ["ID", V2Text.code(user.id)],
-    member ? ["Color del rol", V2Text.code(color)] : null,
+    member ? ["Color del rol", V2Text.code(colorDisplay)] : null,
     ["Insignias", insignias],
     ["Cuenta creada", `<t:${createdTs}:F> (<t:${createdTs}:R>)`],
   ];
@@ -231,11 +240,13 @@ function buildUserInfoCard({ user, member = null, color = RED } = {}) {
 
   if (member) {
     const joinedTs = member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null;
+    const isMuted = Boolean(member.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now());
     builder.addSectionBlock(
       "Servidor",
       [
         ["Apodo", member.nickname ?? "Sin apodo"],
         ["Ingreso", joinedTs ? `<t:${joinedTs}:F> (<t:${joinedTs}:R>)` : "No disponible"],
+        isMuted ? ["Silenciado hasta", `<t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R>`] : null,
       ],
       { separator: true }
     );
@@ -278,7 +289,7 @@ function buildExtendedFields(member, user) {
   const avatarDecURL = member
     ? member.displayAvatarDecorationURL?.({ size: 4096 }) ?? user.avatarDecorationURL?.({ size: 4096 })
     : user.avatarDecorationURL?.({ size: 4096 });
-  const nameplate = user.collectibles?.nameplate ?? null;
+  const nameplate = member?.collectibles?.nameplate ?? user.collectibles?.nameplate ?? null;
 
   const decoLines = [];
   if (activeDecData || avatarDecURL) {
@@ -607,17 +618,78 @@ const data = {
       },
     })
     .addCommand({
-      data: new CommandBuilder({ name: "permissions", description: "Lista de permisos de un usuario" }),
-      params: new ParamsBuilder().addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false }),
+      data: new CommandBuilder({ name: "permissions", description: "Lista de permisos de un usuario (en el servidor o en un canal)" }),
+      params: new ParamsBuilder()
+        .addMember({ name: "usuario", description: "Usuario a consultar (opcional)", required: false })
+        .addChannel({ name: "canal", description: "Canal específico para ver permisos efectivos (opcional)", required: false }),
 
-      code(ctx) {
-        return sendMemberListCommand(ctx, {
-          logName: "user permissions",
-          getItems: (member) => member.permissions.toArray().sort().map(formatPermName),
-          emptyMessage: "Este usuario no tiene permisos",
-          render: ({ member, pageItems, pageIndex, totalPages, controls }) =>
-            buildPermsCard(member.user, pageItems, pageIndex, totalPages, getMemberColor(member, DARK), { controls }),
-        });
+      async code(ctx) {
+        const canal = ctx.get("canal") ?? null;
+        if (!canal) {
+          return sendMemberListCommand(ctx, {
+            logName: "user permissions",
+            getItems: (member) => member.permissions.toArray().sort().map(formatPermName),
+            emptyMessage: "Este usuario no tiene permisos",
+            render: ({ member, pageItems, pageIndex, totalPages, controls }) =>
+              buildPermsCard(member.user, pageItems, pageIndex, totalPages, getMemberColor(member, DARK), { controls }),
+          });
+        }
+
+        await ctx.defer();
+        try {
+          if (!ctx.guild) return noGuildReply(ctx);
+          if (canal.guildId !== ctx.guild.id || isObfuscatedChannel(canal)) {
+            return ctx.ephemeral("No tengo acceso a ese canal");
+          }
+          if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof canal.permissionsFor === "function") {
+            const callerPerms = canal.permissionsFor(ctx.member);
+            if (callerPerms && !callerPerms.has(PermissionFlagsBits.ViewChannel)) {
+              return ctx.ephemeral("No tienes permisos para ver ese canal");
+            }
+          }
+
+          const input = ctx.get("usuario") ?? null;
+          const invoker = ctx.user ?? ctx.member?.user;
+          const member = await resolveMember(ctx, input);
+          if (!isGuildMember(member)) return ctx.send("No pude encontrar al usuario en el servidor");
+
+          const computed = await fetchComputedChannelPermissions({
+            client: ctx.guild.client,
+            channel: canal,
+            targetType: "member",
+            targetId: member.id,
+            fallbackPerms: canal.permissionsFor?.(member) ?? null,
+          });
+
+          let items = computed.effectiveList.map(formatPermName);
+          let maskedNote = null;
+          if (computed.maskedList.length) {
+            const preview = computed.maskedList.slice(0, 3).map(formatPermName).join(", ");
+            const extra = computed.maskedList.length > 3 ? ` +${computed.maskedList.length - 3}` : "";
+            maskedNote = `⚠️ Enmascarados implícitamente (${computed.maskedList.length}): ${preview}${extra}`;
+          }
+
+          if (!items.length && !maskedNote) return ctx.send(`Este usuario no tiene permisos en ${canal}`);
+          if (!items.length) items = ["*(Sin permisos efectivos en este canal)*"];
+
+          const paginator = createListPaginator({
+            items,
+            perPage: PAGE_SIZE,
+            ownerId: invoker.id,
+            timeout: 2 * 60_000,
+            render: ({ items: pageItems, pageIndex, totalPages, controls }) =>
+              buildPermsCard(member.user, pageItems, pageIndex, totalPages, getMemberColor(member, DARK), {
+                controls,
+                subtitle: `Canal #${canal.name}`,
+                extraFooter: maskedNote,
+              }),
+          });
+
+          await paginator.send(ctx);
+        } catch (err) {
+          log.error("Error en user permissions", { err: err?.message ?? String(err) });
+          return handleCommandError(ctx, err);
+        }
       },
     })
     .addCommand({

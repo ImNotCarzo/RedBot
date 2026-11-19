@@ -1,4 +1,4 @@
-const { ChannelType, PermissionFlagsBits } = require("discord.js");
+const { ActivityType, ChannelType, PermissionFlagsBits, Routes } = require("discord.js");
 const mongoose = require("mongoose");
 const { AutopurgeRule, GuildConfig, StickyMessage, TempChannel, VoiceLink } = require("./database");
 const { TtlCache } = require("./guild");
@@ -7,10 +7,14 @@ const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./t
 
 const log = new Logger("CHANNELS_EXTRA", process.env.LOG_LEVEL);
 const MAX_TEMP_CHANNELS_PER_GUILD = 100;
+const MAX_MANAGED_VOICE_STATUS = 2000;
 const stickyDebounceTimers = new Map();
 const stickyInFlight = new Set();
 const stickyPresenceCache = new TtlCache(60_000, 4000);
 const tempChannelTimers = new Map();
+const voiceAutoStatusCache = new TtlCache(2 * 60_000, 2000);
+const voiceStatusTimers = new Map();
+const autoManagedVoiceStatus = new Map();
 let autopurgeInterval = null;
 let isSweepingAutopurge = false;
 
@@ -277,7 +281,12 @@ async function handleVoiceHubTransition(oldState, newState) {
         permissionOverwrites: [
           {
             id: newState.member.id,
-            allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.Connect],
+            allow: [
+              PermissionFlagsBits.ManageChannels,
+              PermissionFlagsBits.MoveMembers,
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.SetVoiceChannelStatus,
+            ],
           },
         ],
         reason: `Voice Hub temporal para ${newState.member.user.tag || newState.member.user.username}`,
@@ -293,6 +302,137 @@ async function handleVoiceHubTransition(oldState, newState) {
       }
     }
   }
+}
+
+const VOICE_ACTIVITY_META = {
+  [ActivityType.Playing]: { icon: "🎮", priority: 5 },
+  [ActivityType.Streaming]: { icon: "🔴", priority: 4 },
+  [ActivityType.Competing]: { icon: "🏆", priority: 3 },
+  [ActivityType.Watching]: { icon: "📺", priority: 2 },
+  [ActivityType.Listening]: { icon: "🎵", priority: 1 },
+};
+
+function invalidateVoiceAutoStatusCache(guildId) {
+  if (guildId) voiceAutoStatusCache.delete(guildId);
+}
+
+async function isVoiceAutoStatusEnabled(guildId) {
+  if (!guildId || mongoose.connection.readyState !== 1) return false;
+  const cached = voiceAutoStatusCache.get(guildId);
+  if (cached !== undefined) return cached;
+  const doc = await GuildConfig.findOne({ guildId }).select("voiceAutoStatus").lean().catch(() => null);
+  const enabled = Boolean(doc?.voiceAutoStatus);
+  voiceAutoStatusCache.set(guildId, enabled);
+  return enabled;
+}
+
+function getManagedVoiceStatus(channelId) {
+  return channelId ? (autoManagedVoiceStatus.get(channelId) ?? null) : null;
+}
+
+function clearManagedVoiceStatus(channelId) {
+  if (channelId) autoManagedVoiceStatus.delete(channelId);
+}
+
+function rememberManagedVoiceStatus(channelId, status) {
+  if (!channelId) return;
+  if (!status) {
+    autoManagedVoiceStatus.delete(channelId);
+    return;
+  }
+  if (autoManagedVoiceStatus.size >= MAX_MANAGED_VOICE_STATUS && !autoManagedVoiceStatus.has(channelId)) {
+    const oldest = autoManagedVoiceStatus.keys().next().value;
+    if (oldest !== undefined) autoManagedVoiceStatus.delete(oldest);
+  }
+  autoManagedVoiceStatus.delete(channelId);
+  autoManagedVoiceStatus.set(channelId, status);
+}
+
+async function setVoiceChannelStatus(client, channelId, status, reason = undefined) {
+  const clean = status && String(status).trim() ? String(status).trim().slice(0, 500) : null;
+  await client.rest.put(Routes.channelVoiceStatus(channelId), {
+    body: { status: clean },
+    ...(reason ? { reason } : {}),
+  });
+  return clean;
+}
+
+function computeAutoVoiceStatus(voiceChannel) {
+  if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) return null;
+  const humans = [...(voiceChannel.members?.values?.() ?? [])].filter((m) => m && !m.user?.bot);
+  if (!humans.length) return null;
+
+  const counts = new Map();
+  for (const member of humans) {
+    const activities = member.presence?.activities ?? [];
+    const seenForMember = new Set();
+    for (const act of activities) {
+      const meta = VOICE_ACTIVITY_META[act?.type];
+      const name = String(act?.name ?? "").trim();
+      if (!meta || !name || act.type === ActivityType.Custom) continue;
+      const key = `${act.type}:${name.toLowerCase()}`;
+      if (seenForMember.has(key)) continue;
+      seenForMember.add(key);
+
+      const cur = counts.get(key) ?? { name, type: act.type, icon: meta.icon, priority: meta.priority, count: 0 };
+      cur.count += 1;
+      counts.set(key, cur);
+    }
+  }
+
+  if (!counts.size) return null;
+  const sorted = [...counts.values()].sort((a, b) => (b.count - a.count) || (b.priority - a.priority));
+  const top = sorted[0];
+  let formatted;
+  if (top.count > 1) {
+    formatted = `${top.icon} ${top.name} (${top.count})`;
+  } else if (sorted.length > 1) {
+    const second = sorted[1];
+    formatted = `${top.icon} ${top.name} · ${second.icon} ${second.name}`;
+  } else {
+    formatted = `${top.icon} ${top.name}`;
+  }
+  return formatted.slice(0, 120);
+}
+
+function scheduleVoiceAutoStatusSync(voiceChannel) {
+  const channelId = voiceChannel?.id;
+  const guild = voiceChannel?.guild;
+  if (!channelId || !guild?.id || voiceChannel.type !== ChannelType.GuildVoice) return;
+
+  const existing = voiceStatusTimers.get(channelId);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    voiceStatusTimers.delete(channelId);
+    try {
+      const ch = guild.channels?.cache?.get?.(channelId);
+      if (!ch || ch.type !== ChannelType.GuildVoice) {
+        autoManagedVoiceStatus.delete(channelId);
+        return;
+      }
+      if (!(await isVoiceAutoStatusEnabled(guild.id))) return;
+
+      const me = guild.members?.me ?? await guild.members?.fetchMe?.().catch(() => null);
+      const perms = me ? ch.permissionsFor?.(me) : null;
+      if (
+        !perms?.has?.(PermissionFlagsBits.ViewChannel) ||
+        (!perms?.has?.(PermissionFlagsBits.SetVoiceChannelStatus) && !perms?.has?.(PermissionFlagsBits.ManageChannels))
+      ) {
+        return;
+      }
+
+      const next = computeAutoVoiceStatus(ch);
+      const prev = autoManagedVoiceStatus.get(channelId);
+      if (next === null && prev === undefined) return;
+      if (next === prev) return;
+
+      await setVoiceChannelStatus(guild.client, channelId, next, "RedBot Auto Voice Status").catch(() => {});
+      rememberManagedVoiceStatus(channelId, next);
+    } catch {}
+  }, 4000);
+  timer.unref?.();
+  voiceStatusTimers.set(channelId, timer);
 }
 
 function startChannelsWorkers(client) {
@@ -312,6 +452,8 @@ function stopChannelsWorkers() {
   stickyDebounceTimers.clear();
   for (const t of tempChannelTimers.values()) clearTimeout(t);
   tempChannelTimers.clear();
+  for (const t of voiceStatusTimers.values()) clearTimeout(t);
+  voiceStatusTimers.clear();
 }
 
 module.exports = {
@@ -321,6 +463,13 @@ module.exports = {
   createTimedTempChannel,
   applyVoiceLinksForTransition,
   handleVoiceHubTransition,
+  invalidateVoiceAutoStatusCache,
+  isVoiceAutoStatusEnabled,
+  getManagedVoiceStatus,
+  clearManagedVoiceStatus,
+  setVoiceChannelStatus,
+  computeAutoVoiceStatus,
+  scheduleVoiceAutoStatusSync,
   startChannelsWorkers,
   stopChannelsWorkers,
 };

@@ -1,12 +1,21 @@
-const { ChannelType, PermissionFlagsBits } = require("discord.js");
+const { ChannelFlags, ChannelType, PermissionFlagsBits } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
 const { logAction } = require("../../src/guild");
-const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
+const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith, isObfuscatedChannel } = require("../../src/runtime");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
 const { AutopurgeRule, EmbedTemplate, GuildConfig, StickyMessage, VoiceLink } = require("../../src/database");
-const { createTimedTempChannel, invalidateStickyCache } = require("../../src/channelsExtra");
+const {
+  createTimedTempChannel,
+  invalidateStickyCache,
+  invalidateVoiceAutoStatusCache,
+  isVoiceAutoStatusEnabled,
+  getManagedVoiceStatus,
+  clearManagedVoiceStatus,
+  setVoiceChannelStatus,
+  scheduleVoiceAutoStatusSync,
+} = require("../../src/channelsExtra");
 const { getCurrentLang } = require("../../src/i18n");
 const { formatDuration, parseDuration } = require("../../src/moderation");
 const { listSnipedMessages } = require("../../src/snipe");
@@ -18,6 +27,7 @@ const MANAGE_CHANNELS_PLUGINS = [Plugins.hasPerms("ManageChannels"), Plugins.has
 
 function checkTargetChannelPerms(ctx, channel, requiredPerms = []) {
   if (!channel) return "No se pudo obtener el canal";
+  if (isObfuscatedChannel(channel)) return "No tengo acceso a ese canal";
   if (channel.guildId && ctx.guild?.id && channel.guildId !== ctx.guild.id) {
     return "Ese canal no pertenece a este servidor";
   }
@@ -196,6 +206,27 @@ const data = {
             ["Slowmode", V2Text.code(formatSlowmode(channel.rateLimitPerUser ?? 0))],
             ["NSFW", V2Text.code(channel.nsfw ? "Sí" : "No")],
           ];
+
+          if (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice) {
+            configRows.push(
+              ["Bitrate", V2Text.code(`${Math.round((channel.bitrate ?? 64000) / 1000)} kbps`)],
+              ["Límite", V2Text.code(channel.userLimit ? `${channel.userLimit} usuarios` : "Ilimitado")],
+              ["Conectados", V2Text.code(channel.members?.size ?? 0)]
+            );
+            if (channel.type === ChannelType.GuildVoice) {
+              const managedStatus = getManagedVoiceStatus(channel.id);
+              if (managedStatus) configRows.push(["Auto-estado", V2Text.clip(managedStatus, 120)]);
+            }
+          } else if (channel.type === ChannelType.GuildForum || channel.type === ChannelType.GuildMedia) {
+            configRows.push(["Etiquetas", V2Text.code(channel.availableTags?.length ?? 0)]);
+            if (channel.flags?.has?.(ChannelFlags.RequireTag)) {
+              configRows.push(["Requiere etiqueta", V2Text.code("Sí")]);
+            }
+          }
+
+          if (channel.flags?.has?.(ChannelFlags.IsSpoilerChannel)) {
+            configRows.push(["Spoiler", V2Text.code("Sí")]);
+          }
 
           const infoCard = new ComponentsV2Builder({ color: RED })
             .addSection(
@@ -933,12 +964,181 @@ const voiceTextLinkCommand = {
   },
 };
 
+const voiceStatusCommand = {
+  data: new CommandBuilder({
+    name: "voicestatus",
+    description: "Establece el estado de un canal de voz o activa el auto-estado por juego",
+  }),
+  params: new ParamsBuilder()
+    .addString({
+      name: "estado",
+      description: "Nuevo estado del canal de voz (usa clear para limpiarlo)",
+      required: false,
+      max_length: 500,
+    })
+    .addChannel({
+      name: "canal",
+      description: "Canal de voz objetivo (por defecto en el que estás conectado)",
+      required: false,
+      channel_types: [ChannelType.GuildVoice],
+    })
+    .addString({
+      name: "modo_auto",
+      description: "Activa o desactiva el auto-estado según el juego/actividad",
+      required: false,
+      choices: [
+        { name: "Activar auto-estado por juego", value: "on" },
+        { name: "Desactivar auto-estado", value: "off" },
+      ],
+    })
+    .addBoolean({
+      name: "limpiar",
+      description: "Limpia el estado actual del canal de voz",
+      required: false,
+    }),
+  async code(ctx) {
+    if (!ctx.guild) return noGuildReply(ctx);
+    await ctx.defer();
+
+    try {
+      const modTag = ctx.user?.tag;
+      const modoAuto = ctx.get("modo_auto");
+      const rawEstado = String(ctx.get("estado") ?? "").trim();
+      const clearFlag = Boolean(ctx.get("limpiar"));
+
+      if (modoAuto === "on" || modoAuto === "off") {
+        const canConfigAuto =
+          ctx.member?.id === ctx.guild.ownerId ||
+          ctx.member?.permissions?.has?.(PermissionFlagsBits.ManageChannels) ||
+          ctx.member?.permissions?.has?.(PermissionFlagsBits.ManageGuild);
+        if (!canConfigAuto) {
+          return ctx.ephemeral("Necesitas el permiso **Administrar canales** o **Administrar servidor** para cambiar el modo automático.");
+        }
+
+        const enabled = modoAuto === "on";
+        await GuildConfig.findOneAndUpdate(
+          { guildId: ctx.guild.id },
+          { $set: { voiceAutoStatus: enabled } },
+          { upsert: true, returnDocument: "after" }
+        );
+        invalidateVoiceAutoStatusCache(ctx.guild.id);
+
+        if (enabled) {
+          for (const ch of ctx.guild.channels.cache.values()) {
+            if (ch.type === ChannelType.GuildVoice && (ch.members?.size ?? 0) > 0) {
+              scheduleVoiceAutoStatusSync(ch);
+            }
+          }
+        }
+
+        await logAction(ctx.guild, {
+          title: enabled ? "Auto-estado de voz activado" : "Auto-estado de voz desactivado",
+          color: enabled ? GREEN : RED,
+          fields: [{ name: "Moderador", value: modTag, inline: true }],
+        });
+
+        if (!rawEstado && !clearFlag) {
+          return ctx.send(
+            buildActionCard({
+              title: enabled ? "Auto-estado de voz activado" : "Auto-estado de voz desactivado",
+              description: enabled
+                ? "Los canales de voz mostrarán automáticamente el juego o actividad principal de quienes estén conectados."
+                : "Ya no se actualizará automáticamente el estado de los canales de voz.",
+              moderator: modTag,
+              color: enabled ? GREEN : RED,
+            })
+          );
+        }
+      }
+
+      const targetCh =
+        ctx.get("canal") ??
+        ctx.member?.voice?.channel ??
+        (ctx.channel?.type === ChannelType.GuildVoice ? ctx.channel : null);
+
+      if (!rawEstado && !clearFlag) {
+        const autoEnabled = await isVoiceAutoStatusEnabled(ctx.guild.id);
+        const managed = targetCh ? getManagedVoiceStatus(targetCh.id) : null;
+        return ctx.send(
+          ComponentsV2Builder.card({
+            title: "Estado de canales de voz",
+            fields: [
+              ["Auto-estado por juego", V2Text.code(autoEnabled ? "Activado" : "Desactivado")],
+              targetCh ? ["Canal detectado", `${targetCh}`] : null,
+              managed ? ["Estado automático actual", V2Text.clip(managed, 120)] : null,
+            ].filter(Boolean),
+            footer: "Usa /channel voicestatus estado:<texto> o modo_auto:Activar",
+            color: autoEnabled ? GREEN : RED,
+          })
+        );
+      }
+
+      if (!targetCh || targetCh.type !== ChannelType.GuildVoice) {
+        return ctx.ephemeral("Debes indicar un canal de voz o estar conectado a uno");
+      }
+      if (isObfuscatedChannel(targetCh) || targetCh.guildId !== ctx.guild.id) {
+        return ctx.ephemeral("No tengo acceso a ese canal");
+      }
+
+      if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof targetCh.permissionsFor === "function") {
+        const userPerms = targetCh.permissionsFor(ctx.member);
+        const canUser =
+          userPerms?.has?.(PermissionFlagsBits.ViewChannel) &&
+          (userPerms?.has?.(PermissionFlagsBits.SetVoiceChannelStatus) || userPerms?.has?.(PermissionFlagsBits.ManageChannels));
+        if (!canUser) {
+          return ctx.ephemeral("Necesitas el permiso **Establecer estado del canal de voz** o **Administrar canales** en ese canal.");
+        }
+      }
+
+      const me = ctx.guild.members.me ?? await ctx.guild.members.fetchMe().catch(() => null);
+      const botPerms = me && typeof targetCh.permissionsFor === "function" ? targetCh.permissionsFor(me) : null;
+      if (
+        !botPerms?.has?.(PermissionFlagsBits.ViewChannel) ||
+        (!botPerms?.has?.(PermissionFlagsBits.SetVoiceChannelStatus) && !botPerms?.has?.(PermissionFlagsBits.ManageChannels))
+      ) {
+        return ctx.ephemeral("No tengo el permiso **Establecer estado del canal de voz** en ese canal.");
+      }
+
+      const shouldClear = clearFlag || /^(clear|off|none|quitar|limpiar)$/i.test(rawEstado);
+      const nextStatus = shouldClear ? null : rawEstado.slice(0, 500);
+
+      await setVoiceChannelStatus(ctx.guild.client, targetCh.id, nextStatus, `${modTag}: channel voicestatus`);
+      clearManagedVoiceStatus(targetCh.id);
+
+      await ctx.send(
+        buildActionCard({
+          title: nextStatus ? "Estado de voz actualizado" : "Estado de voz limpiado",
+          fields: [
+            ["Canal", `${targetCh}`],
+            ["Estado", nextStatus ? V2Text.clip(nextStatus, 200) : V2Text.code("Sin estado")],
+          ],
+          moderator: modTag,
+          color: nextStatus ? GREEN : RED,
+        })
+      );
+
+      await logAction(ctx.guild, {
+        title: nextStatus ? "Estado de voz actualizado" : "Estado de voz limpiado",
+        color: nextStatus ? GREEN : RED,
+        fields: [
+          { name: "Canal", value: `${targetCh} (\`${targetCh.id}\`)`, inline: true },
+          { name: "Moderador", value: modTag, inline: true },
+          { name: "Estado", value: nextStatus || "Sin estado", inline: false },
+        ],
+      });
+    } catch (err) {
+      return failWith(ctx, err, "No se pudo actualizar el estado del canal de voz");
+    }
+  },
+};
+
 data.data
   .addCommand(recapCommand)
   .addCommand(snipeCommand)
   .addCommand(autopurgeCommand)
   .addCommand(stickyCommand)
   .addCommand(tempChannelCommand)
-  .addCommand(voiceTextLinkCommand);
+  .addCommand(voiceTextLinkCommand)
+  .addCommand(voiceStatusCommand);
 
 module.exports = { data };

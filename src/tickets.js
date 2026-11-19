@@ -1,5 +1,6 @@
 const {
   AttachmentBuilder,
+  ChannelSelectMenuBuilder,
   ChannelType,
   LabelBuilder,
   MessageFlags,
@@ -465,7 +466,8 @@ function buildTicketPanelModal(customId, cfg = null, lang = "es") {
             )
         ),
       new LabelBuilder()
-        .setLabel(isEn ? "Dropdown options (optional)" : "Opciones de menú (emoji|Nombre|Subtexto|Detalle)")
+        .setLabel(isEn ? "Dropdown options (optional)" : "Opciones de menú (opcional)")
+        .setDescription(isEn ? "Format: emoji | Name | Subtext | Detail" : "Formato: emoji | Nombre | Subtexto | Detalle")
         .setTextInputComponent(optionsInput),
       new LabelBuilder()
         .setLabel(isEn ? "Menu placeholder / button text" : "Placeholder del menú o texto del botón")
@@ -477,6 +479,18 @@ function buildTicketPanelModal(customId, cfg = null, lang = "es") {
             .setMaxLength(80)
             .setRequired(false)
             .setValue(String(cfg?.panelPlaceholder || (isEn ? "Open Tickets" : "Abrir Tickets")).slice(0, 80))
+        ),
+      new LabelBuilder()
+        .setLabel(isEn ? "Target channel (optional)" : "Canal destino (opcional)")
+        .setDescription(isEn ? "Defaults to the current channel" : "Por defecto se envía en el canal actual")
+        .setChannelSelectMenuComponent(
+          new ChannelSelectMenuBuilder()
+            .setCustomId("target_channel")
+            .setPlaceholder(isEn ? "Select a text channel..." : "Selecciona un canal de texto...")
+            .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setMinValues(0)
+            .setMaxValues(1)
+            .setRequired(false)
         )
     );
 }
@@ -592,10 +606,13 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
         const buttonOrPlaceholder = submitted.fields.getTextInputValue("button")?.trim() || null;
 
         const parsedOptions = parseTicketMenuOptions(optionsRaw);
-        const targetChannel = ctx.channel;
+        const selectedCh = submitted.fields.getSelectedChannels("target_channel", false)?.first?.() ?? null;
+        const targetChannel = selectedCh
+          ? (guild.channels.cache.get(selectedCh.id) ?? await guild.channels.fetch(selectedCh.id).catch(() => null))
+          : ctx.channel;
         if (!targetChannel?.isTextBased?.()) {
           await submitted.editReply({
-            content: isEn ? "Could not send the panel to this channel." : "No pude enviar el panel en este canal.",
+            content: isEn ? "Could not send the panel to that channel." : "No pude enviar el panel en ese canal.",
           }).catch(() => {});
           return false;
         }
@@ -886,6 +903,7 @@ module.exports = {
   updateTicketConfig,
   parseTicketMenuOptions,
   buildTicketPanelPayload,
+  buildTicketPanelModal,
   buildTicketControlCard,
   sendTicketSetupPanel,
   openTicket,

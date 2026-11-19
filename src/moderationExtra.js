@@ -111,6 +111,9 @@ async function postToDramaWatcher({ guild, targetUser, channelId = null, reason,
       { customId: `drama:mute:${targetUser.id}`, emoji: "🔇", label: "Mute 10m", style: "secondary" },
       { customId: `drama:warn:${targetUser.id}`, emoji: "⚠️", label: "Warn", style: "secondary" },
       { customId: `drama:ignore:${targetUser.id}`, emoji: "✅", label: "Ignorar", style: "secondary" },
+    ])
+    .addButtonsRow([
+      { customId: `drama:incident:${targetUser.id}`, emoji: "🛡️", label: "Seguridad (Invites/DMs)", style: "secondary" },
     ]);
 
   const sent = await ch.send(builder.toPayload()).catch(() => null);
@@ -343,6 +346,7 @@ module.exports = {
   getAutomodConfig,
   updateAutomodConfig,
   invalidateDramaChannelCache,
+  getDramaChannelId,
   postToDramaWatcher,
   executeDramaAction,
   handleDramaReaction,

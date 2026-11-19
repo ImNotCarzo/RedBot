@@ -1,5 +1,6 @@
+const { ChannelType } = require("discord.js");
 const { dispatchAutoRules } = require("../src/automation");
-const { applyVoiceLinksForTransition, handleVoiceHubTransition } = require("../src/channelsExtra");
+const { applyVoiceLinksForTransition, handleVoiceHubTransition, scheduleVoiceAutoStatusSync } = require("../src/channelsExtra");
 
 const data = {
   name: "voiceStateUpdate",
@@ -20,6 +21,13 @@ const data = {
     }
 
     await handleVoiceHubTransition(oldState, newState).catch(() => {});
+
+    if (oldState?.channel?.type === ChannelType.GuildVoice) {
+      scheduleVoiceAutoStatusSync(oldState.channel);
+    }
+    if (newState?.channel?.type === ChannelType.GuildVoice) {
+      scheduleVoiceAutoStatusSync(newState.channel);
+    }
 
     if (!isBot && newChId) {
       await dispatchAutoRules("voice_join", {

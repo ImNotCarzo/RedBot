@@ -71,6 +71,7 @@ const getCommands = () => ({
     excusa:     { short: "excusa",     slash: "ai excusa",     id: IDS.ai(), usage: ".excusa [situacion]",        aliases: ["coartada"],          description: "Genera una excusa ridícula pero creativa." },
     teoria:     { short: "teoria",     slash: "ai teoria",     id: IDS.ai(), usage: ".teoria <tema>",             aliases: ["conspira"],          description: "Una teoría conspirativa sobre cualquier cosa." },
     roast:      { short: "roast",      slash: "ai roast",      id: IDS.ai(), usage: ".roast [@usuario]",          aliases: ["burn"],              description: "Critica despiadadamente a un usuario." },
+    search:     { short: "aisearch",   slash: "ai search",     id: IDS.ai(), usage: ".aisearch <consulta>",       aliases: ["buscar", "searchmsg", "findmsg"], description: "Busca mensajes en el servidor con búsqueda nativa e IA." },
   },
   utilidad: {
     afk:       { short: "afk",       slash: "util afk",       id: IDS.util(), usage: ".afk [razón]",                     aliases: ["ausente"],                              description: "Establece tu estado como ausente (AFK)." },
@@ -94,7 +95,7 @@ const getCommands = () => ({
     avatar:      { short: "avatar",     slash: "user avatar",      id: IDS.user(), usage: ".avatar [@usuario]",    aliases: ["av", "pfp"],                  description: "Muestra el avatar de un usuario." },
     banner:      { short: "banner",     slash: "user banner",      id: IDS.user(), usage: ".banner [@usuario]",    aliases: ["userbanner", "ub"],           description: "Muestra el banner de un usuario." },
     roles:       { short: "uroles",     slash: "user roles",       id: IDS.user(), usage: ".uroles [@usuario]",    aliases: ["userroles", "ur"],            description: "Muestra los roles de un usuario." },
-    permissions: { short: "perms",      slash: "user permissions", id: IDS.user(), usage: ".perms [@usuario]",     aliases: ["userperms", "up"],            description: "Muestra los permisos de un usuario en el servidor." },
+    permissions: { short: "perms",      slash: "user permissions", id: IDS.user(), usage: ".perms [@usuario] [#canal]", aliases: ["userperms", "up"],          description: "Muestra los permisos de un usuario en el servidor o en un canal." },
     random:      { short: "randomuser", slash: "user random",      id: IDS.user(), usage: ".randomuser [@rol]",    aliases: ["urandom", "userrandom", "ruser"], description: "Elige a un miembro del servidor al azar." },
   },
   moderacion: {
@@ -114,6 +115,7 @@ const getCommands = () => ({
     setlogs:      { short: "setlogs",      slash: "mod setlogs",      id: IDS.mod(), usage: ".setlogs <#canal>",          aliases: ["logs"],                   description: "Establece el canal de logs para RedBot." },
     removelogs:   { short: "removelogs",   slash: "mod removelogs",   id: IDS.mod(), usage: ".removelogs",                aliases: ["dellogs", "nologs"],       description: "Desactiva los logs de RedBot en el servidor." },
     automod:      { short: "automod",      slash: "mod automod",      id: IDS.mod(), usage: ".automod [on|off] [accion]", aliases: ["am"],                      description: "Configura el filtro automático ampliado y respuestas custom." },
+    "automod-ai": { short: "automodai",    slash: "mod automod-ai",   id: IDS.mod(), usage: ".automodai <regla>",         aliases: ["amai", "automodnative", "nativeautomod"], description: "Crea reglas nativas de Discord AutoMod desde lenguaje natural." },
     dramawatcher: { short: "dramawatcher", slash: "mod dramawatcher", id: IDS.mod(), usage: ".dramawatcher [#canal]",     aliases: ["drama", "dw"],             description: "Canal de alertas con sanciones por botones o emojis." },
   },
   servidor: {
@@ -129,7 +131,7 @@ const getCommands = () => ({
   roles: {
     info:        { short: "role",    slash: "role info",        id: IDS.role(), usage: ".role <@rol>",             aliases: ["roleinfo", "ri"],              description: "Muestra información de un rol." },
     icon:        { short: "ricon",   slash: "role icon",        id: IDS.role(), usage: ".ricon <@rol>",            aliases: ["roleicon"],                    description: "Muestra el icono de un rol." },
-    color:       { short: "rcolor",  slash: "role color",       id: IDS.role(), usage: ".rcolor <@rol>",           aliases: ["rolecolor", "rolcolor"],       description: "Muestra el color de un rol." },
+    color:       { short: "rcolor",  slash: "role color",       id: IDS.role(), usage: ".rcolor <@rol> [#hex1] [#hex2]", aliases: ["rolecolor", "rolcolor"],   description: "Consulta o edita el color (sólido, degradado o holográfico) de un rol." },
     users:       { short: "rusers",  slash: "role users",       id: IDS.role(), usage: ".rusers <@rol>",           aliases: ["roleusers", "rwho"],           description: "Lista usuarios con un rol." },
     add:         { short: "radd",    slash: "role add",         id: IDS.role(), usage: ".radd <@usuario> <@rol>",  aliases: ["roleadd", "addrole"],          description: "Añade un rol a un usuario." },
     remove:      { short: "rremove", slash: "role remove",      id: IDS.role(), usage: ".rremove <@usuario> <@rol>",aliases: ["roleremove", "delrole"],      description: "Quita un rol a un usuario." },
@@ -141,7 +143,7 @@ const getCommands = () => ({
     bots:        { short: "rolebots",slash: "role bots",        id: IDS.role(), usage: ".rolebots <@rol> <add|remove>", aliases: ["botsrole"],               description: "Añade o quita un rol a todos los bots." },
     humans:      { short: "rolehumans", slash: "role humans",   id: IDS.role(), usage: ".rolehumans <@rol> <add|remove>", aliases: ["humansrole"],            description: "Añade o quita un rol a todos los usuarios." },
     join:        { short: "rolejoin",slash: "role join",        id: IDS.role(), usage: ".rolejoin <@rol>",          aliases: ["joinrole", "autorole"],        description: "Configura o desactiva el rol automático al entrar." },
-    permissions: { short: "roleperms",    slash: "role permissions", id: IDS.role(), usage: ".roleperms <@rol>",                            aliases: ["rperms"],                           description: "Muestra los permisos de un rol." },
+    permissions: { short: "roleperms",    slash: "role permissions", id: IDS.role(), usage: ".roleperms <@rol> [#canal]",                    aliases: ["rperms"],                           description: "Muestra los permisos de un rol (globales o en un canal)." },
     reaction:    { short: "reactionrole", slash: "role reaction",    id: IDS.role(), usage: ".reactionrole <create|add|remove|send|list|delete>", aliases: ["rr", "reactionroles", "rpanel"],    description: "Paneles de roles por reacción o botón (normales y temporales)." },
     voicelink:   { short: "voicerole",    slash: "role voicelink",   id: IDS.role(), usage: ".voicerole <add|remove|list> [@rol] [#voz]",   aliases: ["vrole", "vr"],                      description: "Asigna un rol automáticamente al entrar a un canal de voz." },
     temprole:    { short: "temprole",     slash: "role temprole",    id: IDS.role(), usage: ".temprole <@usuario> <@rol> <duracion>",       aliases: ["trole"],                            description: "Asigna un rol temporal con expiración automática." },
@@ -161,8 +163,9 @@ const getCommands = () => ({
     autopurge: { short: "autopurge", slash: "channel autopurge", id: IDS.channel(), usage: ".autopurge <set|remove|list> [tiempo] [#canal]",aliases: ["ap"],                             description: "Elimina mensajes automáticamente tras un tiempo límite." },
     sticky:    { short: "sticky",    slash: "channel sticky",    id: IDS.channel(), usage: ".sticky <set|remove|list> [mensaje] [#canal]", aliases: ["stickymessage", "fijar"],         description: "Fija un mensaje anclado al final del canal." },
     temp:      { short: "temp",      slash: "channel temp",      id: IDS.channel(), usage: ".temp <timed|hub|off> [duracion|#voz] [nombre]",aliases: ["tempchannel", "tempch", "voicehub"], description: "Crea canales temporales o un Voice Hub Join-to-Create." },
-    voicelink: { short: "voicelink", slash: "channel voicelink", id: IDS.channel(), usage: ".voicelink <add|remove|list> [#voz] [#texto]", aliases: ["voicetext", "vtext", "vlink"],    description: "Vincula un canal de voz a un canal de texto privado." },
-    recap:     { short: "recap",     slash: "channel recap",     id: IDS.channel(), usage: ".recap [cantidad]",                            aliases: ["resumen", "tldr"],                description: "Resume los últimos mensajes del canal." },
+    voicelink:   { short: "voicelink",   slash: "channel voicelink",   id: IDS.channel(), usage: ".voicelink <add|remove|list> [#voz] [#texto]", aliases: ["voicetext", "vtext", "vlink"], description: "Vincula un canal de voz a un canal de texto privado." },
+    voicestatus: { short: "voicestatus", slash: "channel voicestatus", id: IDS.channel(), usage: ".voicestatus <texto | clear>",                 aliases: ["vstatus", "vcstatus"],         description: "Cambia el estado de un canal de voz o activa el auto-estado por juego." },
+    recap:       { short: "recap",       slash: "channel recap",       id: IDS.channel(), usage: ".recap [cantidad]",                            aliases: ["resumen", "tldr"],             description: "Resume los últimos mensajes del canal." },
   },
   tickets: {
     setup:      { short: "ticketsetup",  slash: "tickets setup",      id: IDS.tickets(), usage: ".ticketsetup [#categoria] [#logs] [@rol]",       aliases: ["tsetup"],                       description: "Configura categoría, rol soporte y canal de transcripciones." },

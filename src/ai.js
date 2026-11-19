@@ -500,6 +500,35 @@ async function generateText(prompt, systemInstruction) {
   return response.text?.trim() || null;
 }
 
+function parseJsonResponseText(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {}
+    }
+    return null;
+  }
+}
+
+async function generateJson(prompt, { systemInstruction = null, temperature = 0.1 } = {}) {
+  const response = await generateWithFallback({
+    model: FALLBACK_CHAIN[0],
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      temperature,
+      ...(systemInstruction ? { systemInstruction } : {}),
+    },
+  });
+  return parseJsonResponseText(response.text?.trim() || "");
+}
+
 async function generateVision(prompt, image) {
   const imagePart = typeof image === "string" ? await fetchImageAsInlineData(image) : image;
   const response = await generateWithFallback({
@@ -654,6 +683,8 @@ async function transcribeMedia(attachment, { maxBytes = 25 * 1024 * 1024 } = {})
 module.exports = {
   generateChatReply,
   generateText,
+  generateJson,
+  parseJsonResponseText,
   generateVision,
   fetchImageAsInlineData,
   transcribeMedia,

@@ -1,6 +1,6 @@
 const path = require("path");
 const fs = require("fs");
-const { EmbedBuilder } = require("discord.js");
+const { ChannelFlags, EmbedBuilder, PermissionsBitField, Routes } = require("discord.js");
 const { Gralonium, ComponentsV2Builder, V2Text, V2Paginator } = require("gralonium");
 const { botOptions, RED } = require("./config");
 const { closeDatabase } = require("./database");
@@ -299,6 +299,76 @@ function formatPermissionName(p) {
   return `\`${p.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}\``;
 }
 
+function isObfuscatedChannel(channel) {
+  return Boolean(channel?.flags?.has?.(ChannelFlags.ChannelObfuscated)) || channel?.name === "___hidden___";
+}
+
+function formatRoleColorInfo(role) {
+  const colors = role?.colors;
+  const toHex = (n) => (Number.isFinite(n) && n > 0 ? `#${n.toString(16).padStart(6, "0")}` : null);
+  const primary = colors?.primaryColor ?? role?.color ?? 0;
+  const secondary = colors?.secondaryColor ?? null;
+  const tertiary = colors?.tertiaryColor ?? null;
+
+  let style = "none";
+  let styleLabel = "Sin color";
+  let display = "Sin color";
+
+  if (tertiary != null) {
+    style = "holographic";
+    styleLabel = "Holográfico";
+    display = `${toHex(primary) ?? "#000000"} → ${toHex(secondary) ?? "#000000"} → ${toHex(tertiary) ?? "#000000"} (Holográfico)`;
+  } else if (secondary != null) {
+    style = "gradient";
+    styleLabel = "Degradado";
+    display = `${toHex(primary) ?? "#000000"} → ${toHex(secondary) ?? "#000000"}`;
+  } else if (primary) {
+    style = "solid";
+    styleLabel = "Sólido";
+    display = toHex(primary);
+  }
+
+  return {
+    style,
+    styleLabel,
+    primary,
+    secondary,
+    tertiary,
+    primaryHex: toHex(primary),
+    secondaryHex: toHex(secondary),
+    tertiaryHex: toHex(tertiary),
+    display,
+    hasColor: style !== "none",
+  };
+}
+
+async function fetchComputedChannelPermissions({ client, channel, targetType = "member", targetId, fallbackPerms = null }) {
+  const rest = client?.rest;
+  if (rest?.get && channel?.id && targetId) {
+    const route = targetType === "role"
+      ? Routes.channelPermissionsRole(channel.id, targetId)
+      : Routes.channelPermissionsMember(channel.id, targetId);
+
+    const [effRes, rawRes] = await Promise.all([
+      rest.get(route, { query: new URLSearchParams({ implicit: "true" }) }).catch(() => null),
+      rest.get(route, { query: new URLSearchParams({ implicit: "false" }) }).catch(() => null),
+    ]);
+
+    if (effRes?.permissions !== undefined && rawRes?.permissions !== undefined) {
+      const effectiveBits = new PermissionsBitField(BigInt(effRes.permissions));
+      const rawBits = new PermissionsBitField(BigInt(rawRes.permissions));
+      const effectiveList = effectiveBits.toArray().sort();
+      const rawList = rawBits.toArray().sort();
+      const effSet = new Set(effectiveList);
+      const maskedList = rawList.filter((p) => !effSet.has(p));
+      return { effectiveList, rawList, maskedList, source: "api" };
+    }
+  }
+
+  const list = fallbackPerms?.toArray?.()?.sort?.() ?? [];
+  return { effectiveList: list, rawList: list, maskedList: [], source: "cache" };
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 10_000) {
   const signal = options.signal ?? AbortSignal.timeout(timeoutMs);
   return fetch(url, { ...options, signal });
@@ -495,6 +565,9 @@ module.exports = {
   registerProcessErrorHandlers,
   registerShutdownHandlers,
   formatPermissionName,
+  isObfuscatedChannel,
+  formatRoleColorInfo,
+  fetchComputedChannelPermissions,
   fetchWithTimeout,
   noGuildReply,
   handleCommandError,

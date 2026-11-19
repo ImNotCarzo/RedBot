@@ -14,6 +14,7 @@ const guildSchema = new Schema({
   voiceHubId:     { type: String, default: null },
   voiceHubCategoryId: { type: String, default: null },
   voiceHubTemplate: { type: String, default: "Sala de {user}", maxlength: 80 },
+  voiceAutoStatus: { type: Boolean, default: false },
   welcomeConfig: {
     enabled:      { type: Boolean, default: false },
     channelId:    { type: String, default: null },

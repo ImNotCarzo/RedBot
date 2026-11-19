@@ -1,4 +1,6 @@
 const {
+  CheckboxGroupBuilder,
+  CheckboxGroupOptionBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
   ModalBuilder,
@@ -25,6 +27,7 @@ const {
   createListPaginator,
   formatSortedRoles,
   failWith,
+  isObfuscatedChannel,
 } = require("../../src/runtime");
 const { RED, GREEN } = require("../../src/config");
 const { logAction } = require("../../src/guild");
@@ -299,47 +302,64 @@ async function applyCustomBotChanges({ guild, moderator, avatarAttachment, banne
   return { embed };
 }
 
-async function applyCustomBotReset({ guild, moderator, rawScope = null }) {
-  const normalized = rawScope ? RESET_SCOPE_ALIASES[String(rawScope).trim().toLowerCase()] : "todo";
-  if (!normalized) {
-    return { error: "Campo inválido. Usa: `todo`, `avatar`, `banner`, `biografia` o `apodo`" };
+function buildCustomBotResetModal(modalId) {
+  return new ModalBuilder()
+    .setCustomId(modalId)
+    .setTitle("Restablecer perfil del bot")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("¿Qué campos deseas restablecer?")
+        .setCheckboxGroupComponent(
+          new CheckboxGroupBuilder()
+            .setCustomId("scopes")
+            .setRequired(true)
+            .setMinValues(1)
+            .setMaxValues(4)
+            .addOptions(
+              new CheckboxGroupOptionBuilder().setLabel("Avatar del servidor").setValue("avatar").setDefault(true),
+              new CheckboxGroupOptionBuilder().setLabel("Banner del servidor").setValue("banner").setDefault(true),
+              new CheckboxGroupOptionBuilder().setLabel("Biografía del servidor").setValue("biografia").setDefault(true),
+              new CheckboxGroupOptionBuilder().setLabel("Apodo del servidor").setValue("apodo").setDefault(true)
+            )
+        )
+    );
+}
+
+async function applyCustomBotResetScopes({ guild, moderator, scopes = ["avatar", "banner", "biografia", "apodo"] }) {
+  const uniqueScopes = [...new Set((scopes ?? []).filter((s) => ["avatar", "banner", "biografia", "apodo"].includes(s)))];
+  if (!uniqueScopes.length) {
+    return { error: "Debes seleccionar al menos un campo para restablecer" };
   }
 
   const me = await fetchMeSafely(guild);
   const hasChangeNick = Boolean(me?.permissions?.has(PermissionFlagsBits.ChangeNickname));
+  const isAll = uniqueScopes.length === 4;
 
-  if (normalized === "apodo" && !hasChangeNick) {
+  if (!isAll && uniqueScopes.includes("apodo") && !hasChangeNick) {
     return { error: "Necesito el permiso **Cambiar apodo** (`ChangeNickname`) para restablecer mi apodo en este servidor" };
   }
-  if (normalized === "todo" && me?.nickname && !hasChangeNick) {
+  if (isAll && me?.nickname && !hasChangeNick) {
     return { error: "Necesito el permiso **Cambiar apodo** (`ChangeNickname`) para restablecer mi apodo en este servidor" };
   }
 
   const payload = {};
-  if (normalized === "todo") {
-    payload.avatar = null;
-    payload.banner = null;
-    payload.bio = null;
-    if (hasChangeNick) payload.nick = null;
-  } else if (normalized === "avatar") {
-    payload.avatar = null;
-  } else if (normalized === "banner") {
-    payload.banner = null;
-  } else if (normalized === "biografia") {
-    payload.bio = null;
-  } else if (normalized === "apodo") {
-    payload.nick = null;
-  }
+  if (uniqueScopes.includes("avatar")) payload.avatar = null;
+  if (uniqueScopes.includes("banner")) payload.banner = null;
+  if (uniqueScopes.includes("biografia")) payload.bio = null;
+  if (uniqueScopes.includes("apodo") && hasChangeNick) payload.nick = null;
+
+  const scopeLabel = isAll
+    ? RESET_SCOPE_LABELS.todo
+    : uniqueScopes.map((s) => RESET_SCOPE_LABELS[s] ?? s).join(", ");
 
   const { updatedMe, bio } = await patchGuildBotProfile(
     guild,
     payload,
-    `Perfil restablecido (${normalized}) por ${moderator.tag}`
+    `Perfil restablecido (${isAll ? "todo" : uniqueScopes.join(",")}) por ${moderator.tag}`
   );
-  const label = RESET_SCOPE_LABELS[normalized];
   const embed = buildCustomBotEmbed({
     updatedMe,
-    bioValue: normalized === "todo" || normalized === "biografia" ? null : bio,
+    bioValue: uniqueScopes.includes("biografia") ? null : bio,
     moderator,
   });
 
@@ -348,11 +368,20 @@ async function applyCustomBotReset({ guild, moderator, rawScope = null }) {
     color: GREEN,
     fields: [
       { name: "Moderador", value: moderator.tag, inline: true },
-      { name: "Campo", value: label, inline: true },
+      { name: "Campo", value: scopeLabel, inline: true },
     ],
   });
 
   return { embed };
+}
+
+async function applyCustomBotReset({ guild, moderator, rawScope = null }) {
+  const normalized = rawScope ? RESET_SCOPE_ALIASES[String(rawScope).trim().toLowerCase()] : "todo";
+  if (!normalized) {
+    return { error: "Campo inválido. Usa: `todo`, `avatar`, `banner`, `biografia` o `apodo`" };
+  }
+  const scopes = normalized === "todo" ? ["avatar", "banner", "biografia", "apodo"] : [normalized];
+  return applyCustomBotResetScopes({ guild, moderator, scopes });
 }
 
 async function sendCustomBotPanel(ctx) {
@@ -372,7 +401,7 @@ async function sendCustomBotPanel(ctx) {
         ? null
         : [
             { customId: activeView.id("editar"), label: "Editar perfil", style: "danger" },
-            { customId: activeView.id("reset"), label: "Restablecer todo", style: "secondary" },
+            { customId: activeView.id("reset"), label: "Restablecer...", style: "secondary" },
           ];
       return buildCustomBotStatusCard(state.me, guild, { isEnded, controls });
     },
@@ -446,27 +475,51 @@ async function sendCustomBotPanel(ctx) {
         return false;
       },
       reset: async ({ interaction, view: activeView }) => {
-        await interaction.deferUpdate();
+        const modalId = activeView.id("resetmodal", Date.now().toString(36));
+        await interaction.showModal(buildCustomBotResetModal(modalId));
+
+        const submitted = await interaction
+          .awaitModalSubmit({
+            time: 3 * 60_000,
+            filter: (i) => i.customId === modalId && i.user.id === author.id,
+          })
+          .catch(() => null);
+        if (!submitted) return false;
+
+        const scopes = submitted.fields.getCheckboxGroup("scopes") ?? [];
+        const isPrefix = Boolean(ctx.message);
+        await submitted.deferReply(isPrefix ? { flags: MessageFlags.Ephemeral } : undefined);
+
         try {
-          const res = await applyCustomBotReset({ guild, moderator: author, rawScope: "todo" });
+          const res = await applyCustomBotResetScopes({ guild, moderator: author, scopes });
           if (res.error) {
-            await interaction.followUp({ content: res.error, flags: MessageFlags.Ephemeral }).catch(() => {});
+            if (isPrefix) {
+              await submitted.editReply({ content: res.error }).catch(() => {});
+            } else {
+              await submitted.deleteReply().catch(() => {});
+              await submitted.followUp({ content: res.error, flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
             return false;
           }
           await activeView.message?.delete?.().catch(() => {});
           activeView.stop("deleted");
-          const ch = interaction.channel ?? ctx.channel;
-          if (ctx.message) {
+          if (isPrefix) {
+            await submitted.deleteReply().catch(() => {});
             await ctx.message
               .reply({ embeds: [res.embed], allowedMentions: { repliedUser: false } })
-              .catch(() => ch?.send?.({ embeds: [res.embed] }));
-          } else if (ch?.send) {
-            await ch.send({ embeds: [res.embed] }).catch(() => {});
+              .catch(() => (interaction.channel ?? ctx.channel)?.send?.({ embeds: [res.embed] }));
+          } else {
+            await submitted.editReply({ embeds: [res.embed] }).catch(() => {});
           }
         } catch (err) {
           log.error("Error en boton customreset", { err: err?.message ?? String(err) });
           const friendly = mapCustomBotApiError(err) ?? "No se pudo restablecer el perfil del bot";
-          await interaction.followUp({ content: friendly, flags: MessageFlags.Ephemeral }).catch(() => {});
+          if (isPrefix) {
+            await submitted.editReply({ content: friendly }).catch(() => {});
+          } else {
+            await submitted.deleteReply().catch(() => {});
+            await submitted.followUp({ content: friendly, flags: MessageFlags.Ephemeral }).catch(() => {});
+          }
         }
         return false;
       },
@@ -526,7 +579,18 @@ function getServerViewBuilder(guild, selected, { historyButtonId = null } = {}) 
   return null;
 }
 
-function getSortedServerRoles(guild) {
+function getSortedServerRoles(guild, memberCounts = null) {
+  if (memberCounts && typeof memberCounts.get === "function") {
+    return Array.from(
+      guild.roles.cache
+        .filter((r) => r.id !== guild.id)
+        .sort((a, b) => b.position - a.position)
+        .values()
+    ).map((r) => {
+      const cnt = memberCounts.get(r.id);
+      return cnt !== undefined ? `<@&${r.id}> · \`${cnt}\`` : `<@&${r.id}>`;
+    });
+  }
   return formatSortedRoles(guild.roles.cache, guild.id);
 }
 
@@ -548,6 +612,8 @@ function buildServerRolesCard(guild, totalRoles, pageItems, pageIndex, totalPage
 function buildServerInfoCard(guild, owner) {
   const createdTs = Math.floor(guild.createdTimestamp / 1000);
   const roleCount = guild.roles.cache.filter((r) => r.id !== guild.id).size;
+  const visibleChannelCount = guild.channels.cache.filter((c) => !isObfuscatedChannel(c)).size;
+  const soundCount = guild.soundboardSounds?.cache?.size ?? 0;
 
   const generalRows = [
     ["ID", V2Text.code(guild.id)],
@@ -557,14 +623,28 @@ function buildServerInfoCard(guild, owner) {
   ];
   const statsRows = [
     ["Miembros", V2Text.code(guild.memberCount)],
-    ["Canales", V2Text.code(guild.channels.cache.size)],
+    ["Canales", V2Text.code(visibleChannelCount)],
     ["Roles", V2Text.code(roleCount)],
     ["Emojis", V2Text.code(guild.emojis.cache.size)],
+    soundCount > 0 ? ["Soundboard", V2Text.code(soundCount)] : null,
     ["Boost", V2Text.code(`${guild.premiumSubscriptionCount} (Nivel ${guild.premiumTier})`)],
-  ];
+  ].filter(Boolean);
+
+  const now = Date.now();
+  const invUntil = guild.incidentsData?.invitesDisabledUntil;
+  const dmsUntil = guild.incidentsData?.dmsDisabledUntil;
+  const activeIncidents = [];
+  if (invUntil && new Date(invUntil).getTime() > now) {
+    activeIncidents.push(`Invitaciones <t:${Math.floor(new Date(invUntil).getTime() / 1000)}:R>`);
+  }
+  if (dmsUntil && new Date(dmsUntil).getTime() > now) {
+    activeIncidents.push(`DMs <t:${Math.floor(new Date(dmsUntil).getTime() / 1000)}:R>`);
+  }
+
   const securityRows = [
     ["Verificación", V2Text.code(VERIFICATION_LEVELS[guild.verificationLevel] ?? guild.verificationLevel)],
-  ];
+    activeIncidents.length ? ["Pausas activas", activeIncidents.join(" · ")] : null,
+  ].filter(Boolean);
 
   return new ComponentsV2Builder({ color: RED })
     .addSection(
@@ -649,7 +729,10 @@ const data = {
           const guild = ctx.guild;
           if (!guild) return noGuildReply(ctx);
 
-          const owner = await guild.fetchOwner().catch(() => null);
+          const [owner, memberCounts] = await Promise.all([
+            guild.fetchOwner().catch(() => null),
+            guild.roles.fetchMemberCounts().catch(() => null),
+          ]);
           const authorId = ctx.user?.id;
 
           const baseOptions = [
@@ -660,7 +743,7 @@ const data = {
           ];
           const allOptions = [{ label: "Info", value: "info", description: "Información del servidor" }, ...baseOptions];
 
-          const roles = getSortedServerRoles(guild);
+          const roles = getSortedServerRoles(guild, memberCounts);
           const totalRolePages = Math.max(1, Math.ceil(roles.length / PAGE_SIZE));
 
           const renderView = ({ state, view, isEnded }) => {
@@ -770,7 +853,8 @@ const data = {
           const guild = ctx.guild;
           if (!guild) return noGuildReply(ctx);
 
-          const roles = getSortedServerRoles(guild);
+          const memberCounts = await guild.roles.fetchMemberCounts().catch(() => null);
+          const roles = getSortedServerRoles(guild, memberCounts);
           if (!roles.length) return ctx.send("No hay roles");
 
           const authorId = ctx.user?.id;
