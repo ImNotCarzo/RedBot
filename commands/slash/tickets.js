@@ -15,7 +15,7 @@ const {
   updateTicketConfig,
 } = require("../../src/tickets");
 
-const log = new Logger("CMD_TICKETS", process.env.LOG_LEVEL);
+const log = new Logger("CMD_TICKETS");
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
 
 function isTicketStaff(ctx, cfg) {
@@ -64,7 +64,7 @@ const data = {
         if (msg) patch.welcomeMessage = msg.slice(0, 1500);
 
         let cfg = null;
-        if (Object.keys(patch).length > 1 || cat || logs || role || msg) {
+        if (cat || logs || role || msg) {
           cfg = await updateTicketConfig(ctx.guild.id, patch);
         } else {
           cfg = await getTicketConfig(ctx.guild.id);

@@ -16,7 +16,7 @@ const { resolveContextLang, getAiContext } = require("../../src/guild");
 const { getCurrentLang } = require("../../src/i18n");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, isObfuscatedChannel, wait } = require("../../src/runtime");
 
-const log = new Logger("CMD_AI", process.env.LOG_LEVEL);
+const log = new Logger("CMD_AI");
 
 const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
@@ -95,11 +95,11 @@ function msATexto(ms, lang = "es") {
   return `${min} minuto${min > 1 ? "s" : ""}`;
 }
 
-async function runTextAiCommand(ctx, { logTag, buildPrompt, prompt, fallbackText, title, footerText }) {
+async function runTextAiCommand(ctx, { logTag, buildPrompt, fallbackText, title, footerText }) {
   await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
   try {
     const lang = await resolveCtxLang(ctx);
-    const resolvedPrompt = typeof buildPrompt === "function" ? buildPrompt(lang, getPersona(lang)) : prompt;
+    const resolvedPrompt = buildPrompt(lang, getPersona(lang));
     const raw = await generateText(resolvedPrompt);
     const resolvedTitle = typeof title === "function" ? title(lang) : title;
     const resolvedFallback = typeof fallbackText === "function" ? fallbackText(lang) : fallbackText;
@@ -154,30 +154,11 @@ const data = {
           if (invalid) return invalid;
         }
 
-        const rawPregunta = ctx.interaction
-          ? ctx.get("pregunta")?.trim()
-          : (ctx.get("pregunta") ?? ctx.args?.join(" "))?.trim();
+        const rawPregunta = ctx.get("pregunta")?.trim();
         const pregunta = rawPregunta || (imagen ? (isEn ? "Analyze this image." : "Analiza esta imagen.") : "");
 
         if (!pregunta) {
-          if (ctx.interaction) {
-            return ctx.ephemeral(isEn ? "Write something to talk with me." : "Escribe algo para conversar conmigo.");
-          }
-          const bot = ctx.bot.user;
-          const paramerror = new EmbedBuilder()
-            .setAuthor({ name: isEn ? "Ask Command" : "Comando Ask", iconURL: bot.displayAvatarURL() })
-            .setDescription(
-              isEn
-                ? `**Usage:**\nAsk the AI a question (optionally attach an image)` +
-                  `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-                  `\n\n\`\`\`js\n.ask <question>\nExample: .ask why is the sky blue\`\`\``
-                : `**Usos:**\nHazle una pregunta a la IA (puedes adjuntar una imagen opcional)` +
-                  `\n\n**Aliases:**\n\`ia\`, \`ai\`` +
-                  `\n\n\`\`\`js\n.ask <pregunta>\nEjemplo: .ask cuando te apagan\`\`\``
-            )
-            .setColor(RED);
-
-          return ctx.send({ embeds: [paramerror] });
+          return ctx.ephemeral(isEn ? "Write something to talk with me." : "Escribe algo para conversar conmigo.");
         }
 
         try {
@@ -942,7 +923,6 @@ ${datosUsuario}`;
             thirdPartyMode: "reject",
             thirdPartyMessage: "No puedes controlar esta búsqueda",
             onEnd: "static",
-            state: { forwarded: false },
             render: renderCard,
             renderStatic: (args) => renderCard({ ...args, isEnded: true }),
             actions: {

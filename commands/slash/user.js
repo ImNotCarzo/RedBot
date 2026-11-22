@@ -25,7 +25,7 @@ const { recordImageIfNew, replyWithImageHistory } = require("../../src/history")
 
 const PAGE_SIZE = 15;
 
-const log = new Logger("CMD_USER", process.env.LOG_LEVEL);
+const log = new Logger("CMD_USER");
 
 function formatUserBadges(user) {
   const flags = user?.flags?.toArray() ?? [];

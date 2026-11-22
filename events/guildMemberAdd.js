@@ -2,7 +2,7 @@ const { dispatchAutoRules } = require("../src/automation");
 const { sendWelcomeOrGoodbye, trackMemberJoinInvite } = require("../src/community");
 const { JoinRole } = require("../src/database");
 const { Logger } = require("../src/runtime");
-const log = new Logger("EVENT_GUILD_MEMBER_ADD", process.env.LOG_LEVEL);
+const log = new Logger("EVENT_GUILD_MEMBER_ADD");
 
 const event = {
   name: "guildMemberAdd",

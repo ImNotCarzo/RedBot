@@ -5,7 +5,7 @@ const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { resolveEmbedTemplate, runTagScript, substituteVars, buildTagVariables } = require("./tagscript");
 
-const log = new Logger("AUTOMATION", process.env.LOG_LEVEL);
+const log = new Logger("AUTOMATION");
 const MAX_CUSTOM_COMMANDS = 500;
 const MAX_EMBED_TEMPLATES = 500;
 const MAX_TIMERS = 100;

@@ -580,8 +580,6 @@ async function applyIncidentActionsFromModal({ submitted, guild, moderator }) {
 module.exports = {
   TRIGGER_QUOTAS,
   TRIGGER_LABELS,
-  isDiscordSafeRegex,
-  validateAndNormalizeRuleSpec,
   buildNativeRulePayload,
   buildNativeRuleEditPayload,
   compileNaturalLanguageRule,

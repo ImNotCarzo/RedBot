@@ -5,7 +5,7 @@ const { ReactionRolePanel, TempRole } = require("./database");
 const { logAction } = require("./guild");
 const { Logger } = require("./runtime");
 
-const log = new Logger("REACTION_ROLES", process.env.LOG_LEVEL);
+const log = new Logger("REACTION_ROLES");
 const MAX_PANELS_PER_GUILD = 40;
 const MAX_ROLES_PER_GUILD = 1000;
 const tempRoleTimers = new Map();

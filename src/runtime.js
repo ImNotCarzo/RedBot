@@ -41,7 +41,7 @@ class Logger {
 }
 
 const INVITE_URL = `https://redbot.me/invite`;
-const SUPPORT_URL = "https://discord.gg/b8AKKaNWU6";
+const SUPPORT_URL = "https://discord.gg/sYdyS8Ez3s";
 const THINKING_TEXT = "<a:typing:1484407380291616778>  RedBot está pensando...";
 
 const PROCESS_ERROR_GUARD = Symbol.for("redbot.processErrorHandlersRegistered");

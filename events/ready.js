@@ -10,7 +10,7 @@ const { restoreReminders } = require("../src/reminders");
 const { Logger, sanitizeError, parsePositiveInt, withTimeout, runWithRetry } = require("../src/runtime");
 const { setId } = require("../src/config");
 
-const log = new Logger("EVENT_READY", process.env.LOG_LEVEL);
+const log = new Logger("EVENT_READY");
 
 const READY_RETRY_ATTEMPTS = parsePositiveInt(process.env.READY_RETRY_ATTEMPTS, 5);
 const READY_RETRY_BASE_DELAY_MS = parsePositiveInt(process.env.READY_RETRY_BASE_DELAY_MS, 1500);

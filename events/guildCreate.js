@@ -13,7 +13,7 @@ const {
 const { normalizeLang, t } = require("../src/i18n");
 const { Logger, sanitizeError } = require("../src/runtime");
 
-const log = new Logger("EVENT_GUILD_CREATE", process.env.LOG_LEVEL);
+const log = new Logger("EVENT_GUILD_CREATE");
 
 function buildWelcomeCard(lang, guild) {
   const active = normalizeLang(lang);
@@ -155,4 +155,4 @@ const event = {
   },
 };
 
-module.exports = { data: event, buildWelcomeCard, findWelcomeChannel };
+module.exports = { data: event };

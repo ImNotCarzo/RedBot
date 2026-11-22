@@ -5,7 +5,7 @@ const { grantTempRole } = require("./reactionRoles");
 const { Logger } = require("./runtime");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
-const log = new Logger("COMMUNITY", process.env.LOG_LEVEL);
+const log = new Logger("COMMUNITY");
 const inviteCache = new Map(); // guildId -> Map<code, { uses, inviterId }>
 let birthdayInterval = null;
 let isCheckingBirthdays = false;

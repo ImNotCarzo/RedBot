@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { ChannelType } = require("discord.js");
 const { applyOauthGuildLang } = require("./guild");
-const { INVITE_URL, Logger, isObfuscatedChannel } = require("./runtime");
+const { INVITE_URL, SUPPORT_URL, Logger, isObfuscatedChannel } = require("./runtime");
 const { escapeHtml } = require("./security");
 const { version: PACKAGE_VERSION } = require("../package.json");
 
@@ -327,7 +327,7 @@ function handleBot() {
     bot: true,
     verified: user?.flags?.has?.("VerifiedBot") ?? false,
     invite: INVITE_URL,
-    support: "https://discord.gg/b8AKKaNWU6",
+    support: SUPPORT_URL,
     website: "https://redbot.me",
     defaultPrefix: ".",
     version: PACKAGE_VERSION,

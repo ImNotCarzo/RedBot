@@ -3,73 +3,7 @@ const fs = require("fs");
 const { isPromise } = require("util/types");
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
-const RELEASE_NOTICE_VERSION = "0.4.0";
-const MAX_SEEN_RELEASE_USERS = 10_000;
-const seenReleaseUsers = new Set();
-const handledReleaseCtx = new WeakSet();
 const WRAPPED_CMD = Symbol.for("redbot.commandWrapped");
-
-function rememberReleaseUser(userId) {
-  if (seenReleaseUsers.has(userId)) return;
-  if (seenReleaseUsers.size >= MAX_SEEN_RELEASE_USERS) {
-    const oldest = seenReleaseUsers.values().next().value;
-    if (oldest !== undefined) seenReleaseUsers.delete(oldest);
-  }
-  seenReleaseUsers.add(userId);
-}
-
-function buildReleaseNoticeEmbed(lang = null) {
-  const { EmbedBuilder } = require("discord.js");
-  const { RED } = require("./config");
-  const resolvedLang = lang ?? require("./i18n").getCurrentLang();
-  const isEn = resolvedLang === "en";
-  return new EmbedBuilder()
-    .setColor(RED)
-    .setTitle(isEn ? `New commands added (${RELEASE_NOTICE_VERSION})` : `Nuevos comandos añadidos (${RELEASE_NOTICE_VERSION})`)
-    .setDescription([
-      isEn
-        ? "/server custombot ``.custombot`` -> customize redbot's avatar, banner, nickname, and bio in your server"
-        : "/server custombot ``.custombot`` -> personaliza el avatar, banner, apodo y biografia de redbot en tu servidor",
-      "",
-      "/server customreset ``.customreset``",
-      "/util poll ``.poll``",
-      "/util remind ``.remind``",
-      "/ai ocr ``.ocr``",
-      "/channel recap ``.recap``",
-    ].join("\n"));
-}
-
-async function maybeSendReleaseNotice(ctx) {
-  if (!ctx || handledReleaseCtx.has(ctx)) return;
-  handledReleaseCtx.add(ctx);
-
-  const userId = ctx.user?.id ?? ctx.author?.id ?? ctx.message?.author?.id ?? ctx.interaction?.user?.id;
-  if (!userId || ctx.user?.bot || ctx.author?.bot || ctx.message?.author?.bot) return;
-  if (seenReleaseUsers.has(userId)) return;
-
-  try {
-    const mongoose = require("mongoose");
-    if (mongoose.connection.readyState !== 1) return;
-
-    const { ReleaseNotice } = require("./database");
-    const res = await ReleaseNotice.updateOne(
-      { userId, version: RELEASE_NOTICE_VERSION },
-      { $setOnInsert: { userId, version: RELEASE_NOTICE_VERSION } },
-      { upsert: true }
-    );
-    rememberReleaseUser(userId);
-    if (!res?.upsertedCount) return;
-
-    const payload = { embeds: [buildReleaseNoticeEmbed()] };
-    if (ctx.interaction && (ctx.interaction.replied || ctx.interaction.deferred)) {
-      await ctx.interaction.followUp(payload).catch(() => {});
-    } else {
-      await ctx.channel?.send?.(payload).catch(() => {});
-    }
-  } catch {
-    // Nunca interrumpir la ejecución del comando por el aviso de novedades
-  }
-}
 
 const PREFIXED_TO_SLASH_MAP = {
   afk: "util/afk",
@@ -869,9 +803,7 @@ function wrapSlashCommand(cmd) {
     const lang = await resolveContextLang({ guildId, userId, locale });
     return runWithLang(lang, async () => {
       const langCtx = wrapCtxForLang(ctx, lang);
-      const result = await originalCode.call(this, langCtx, ...args);
-      await maybeSendReleaseNotice(langCtx);
-      return result;
+      return await originalCode.call(this, langCtx, ...args);
     });
   };
   wrapped[WRAPPED_CMD] = true;
@@ -1058,9 +990,7 @@ function wrapSingleCommand(command, file, log) {
       });
       wrapCtxForLang(ctx, lang);
       return await runWithLang(lang, async () => {
-        const result = await originalCode.call(this, ctx, ...args);
-        await maybeSendReleaseNotice(ctx);
-        return result;
+        return await originalCode.call(this, ctx, ...args);
       });
     } catch (err) {
       const { sanitizeError } = require("./runtime");

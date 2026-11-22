@@ -5,7 +5,7 @@ const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
-const log = new Logger("CHANNELS_EXTRA", process.env.LOG_LEVEL);
+const log = new Logger("CHANNELS_EXTRA");
 const MAX_TEMP_CHANNELS_PER_GUILD = 100;
 const MAX_MANAGED_VOICE_STATUS = 2000;
 const stickyDebounceTimers = new Map();
@@ -468,7 +468,6 @@ module.exports = {
   getManagedVoiceStatus,
   clearManagedVoiceStatus,
   setVoiceChannelStatus,
-  computeAutoVoiceStatus,
   scheduleVoiceAutoStatusSync,
   startChannelsWorkers,
   stopChannelsWorkers,

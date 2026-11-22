@@ -8,7 +8,7 @@ const { addModCase, addWarn } = require("./moderation");
 const { Logger } = require("./runtime");
 const { substituteVars, buildTagVariables } = require("./tagscript");
 
-const log = new Logger("MOD_EXTRA", process.env.LOG_LEVEL);
+const log = new Logger("MOD_EXTRA");
 const spamTracker = new Map();
 const dramaInFlight = new Set();
 const automodConfigCache = new TtlCache(2 * 60_000, 2000);

@@ -30,7 +30,7 @@ const {
 const { createReminder } = require("./reminders");
 const { Logger } = require("./runtime");
 
-const log = new Logger("CONTEXT_MENU", process.env.LOG_LEVEL);
+const log = new Logger("CONTEXT_MENU");
 
 const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 const LANG_NAMES = {
@@ -141,7 +141,6 @@ async function handleTranslateContext(interaction) {
       return replyEphemeral(interaction, "Este mensaje no tiene texto para traducir");
     }
 
-    const { getCurrentLang } = require("./i18n");
     const defaultTarget = getCurrentLang();
     const { translate } = require("@vitalets/google-translate-api");
     let res = await translate(text.slice(0, 3000), { to: defaultTarget });
@@ -212,7 +211,7 @@ async function handleResumeContext(interaction) {
       return replyEphemeral(interaction, "El mensaje es demasiado corto para resumir");
     }
 
-    const isEn = require("./i18n").getCurrentLang() === "en";
+    const isEn = getCurrentLang() === "en";
     const resumen = await generateText(
       isEn
         ? `Summarize the following text. Only provide the summary, with no introductory phrases or extra commentary. Stay objective and faithful to the original content, without opinions or interpretations. Respond in English.\n\n${text.slice(0, 8000)}`
@@ -246,7 +245,6 @@ async function handleTranscribeContext(interaction) {
       return replyEphemeral(interaction, "No se detectó voz inteligible en el archivo");
     }
 
-    const { getCurrentLang } = require("./i18n");
     const card = new ComponentsV2Builder({ color: RED })
       .addText(`${V2Text.heading("Transcripción", 3)}\n${V2Text.subtext(V2Text.clip(media.name, 80))}`)
       .addSeparator("small")
@@ -330,7 +328,7 @@ async function handleRemindContext(client, interaction) {
     return replyEphemeral(submitted, "Tiempo inválido. Usa `30s`, `10m`, `2h`, `1d` o `1w` (entre 10s y 365d)");
   }
 
-  const isEn = require("./i18n").getCurrentLang() === "en";
+  const isEn = getCurrentLang() === "en";
   const remindAt = new Date(Date.now() + duration);
   const msgLink = targetMsg.url ? `[${isEn ? "Jump to message" : "Ir al mensaje"}](${targetMsg.url})` : "";
   const bodyParts = [

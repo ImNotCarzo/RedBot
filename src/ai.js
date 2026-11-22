@@ -684,7 +684,6 @@ module.exports = {
   generateChatReply,
   generateText,
   generateJson,
-  parseJsonResponseText,
   generateVision,
   fetchImageAsInlineData,
   transcribeMedia,

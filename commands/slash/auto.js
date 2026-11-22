@@ -182,7 +182,7 @@ const data = {
           }
         }
 
-        const rawColor = String(ctx.get("color") ?? "#ff383d").trim();
+        const rawColor = String(ctx.get("color") ?? RED).trim();
         if (!/^#?[0-9a-f]{6}$/i.test(rawColor)) {
           return ctx.ephemeral("Color hex inválido (usa el formato `#ff383d`)");
         }

@@ -35,7 +35,7 @@ try {
   graloniumVersion = require(path.resolve(path.dirname(require.resolve("gralonium")), "..", "package.json")).version;
 } catch {}
 
-const log = new Logger("CMD_UTIL", process.env.LOG_LEVEL);
+const log = new Logger("CMD_UTIL");
 
 const TRANSLATE_LANG_NAMES = {
   auto: "Automático",
@@ -82,7 +82,7 @@ const formatLanguage = (langCode) => {
   return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
 };
 
-function buildCompactCard({ title, subtitle = null, body = null, footer = null, color = RED, thumbnailUrl = null, divider = false, links = [] }) {
+function buildCompactCard({ title, subtitle = null, body = null, footer = null, color = RED, thumbnailUrl = null, links = [] }) {
   const builder = new ComponentsV2Builder({ color });
   const header = subtitle
     ? `${V2Text.heading(title, 3, 180)}\n${V2Text.subtext(subtitle, 180)}`
@@ -97,7 +97,7 @@ function buildCompactCard({ title, subtitle = null, body = null, footer = null, 
   } else {
     builder.addSection([header], { thumbnail: thumbnailUrl, fallbackToText: true });
     if (body) {
-      builder[divider ? "addSeparator" : "addSpacer"]("small");
+      builder.addSpacer("small");
       builder.addText(body);
     }
     if (footerLine) {
@@ -620,15 +620,9 @@ const data = {
 
       await ctx.defer({ ephemeral: true });
 
-      let statusMsg = null;
       const sendStatus = async (builder) => {
-        if (!ctx.interaction && statusMsg && typeof statusMsg.edit === "function") {
-          return statusMsg.edit(builder.toPayload());
-        }
         try {
-          const sent = await ctx.send(builder);
-          if (!statusMsg) statusMsg = sent;
-          return sent;
+          return await ctx.send(builder);
         } catch {
           if (ctx.channel?.send) {
             return ctx.channel.send(builder.toPayload());
@@ -776,7 +770,7 @@ const pollCommand = {
         return ctx.ephemeral("Debes dar entre 2 y 10 opciones separadas por `/`");
       }
       const parsedOptions = opciones.map(parsePollOption);
-      if (parsedOptions.some((o) => !o.text || o.text.length > 55)) {
+      if (parsedOptions.some((o) => !o.text)) {
         return ctx.ephemeral("Cada opción puede tener como máximo 55 caracteres");
       }
 
@@ -1126,7 +1120,7 @@ const setlangCommand = {
         locale: ctx.interaction?.locale ?? ctx.interaction?.guildLocale ?? null,
       });
 
-      const rawArg = (ctx.get("idioma") ?? ctx.args?.[0] ?? "").trim().toLowerCase();
+      const rawArg = (ctx.get("idioma") ?? "").trim().toLowerCase();
       const subtitle = isGuild ? ctx.guild.name : (ctx.user?.username ?? "DM");
       const thumb = isGuild
         ? ctx.guild.iconURL({ size: 256 })
@@ -1210,14 +1204,6 @@ const setlangCommand = {
         return await view.send(ctx);
       }
 
-      if (rawArg !== "es" && rawArg !== "en") {
-        return ctx.ephemeral(
-          currentLang === "en"
-            ? "Supported languages: `es`, `en`."
-            : "Idiomas disponibles: `es`, `en`."
-        );
-      }
-
       const normalized = normalizeLang(rawArg);
       const nextLang = isGuild
         ? await setLang(ctx.guild.id, normalized, { source: "manual" })
@@ -1255,4 +1241,4 @@ data.data
   .addCommand(lolCommand)
   .addCommand(setlangCommand);
 
-module.exports = { data, parsePollOption };
+module.exports = { data };

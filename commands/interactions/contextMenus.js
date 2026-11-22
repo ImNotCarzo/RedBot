@@ -75,7 +75,6 @@ const contextMenuModules = CONTEXT_MENU_SPECS.map((spec) => ({
   data: new InteractionBuilder({
     name: spec.name,
     type: spec.interactionType,
-    description: `Menú contextual: ${spec.name}`,
     integrationTypes: spec.integrationTypes,
     contexts: spec.contexts,
     ...(spec.defaultMemberPermissions !== undefined

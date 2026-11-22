@@ -15,7 +15,7 @@ const {
   RoleSelectMenuBuilder,
 } = require("discord.js");
 const { Logger, buildActionCard, createListPaginator, avatarUrl, failWith, noGuildReply, THINKING_TEXT } = require("../../src/runtime");
-const log = new Logger("CMD_MOD", process.env.LOG_LEVEL);
+const log = new Logger("CMD_MOD");
 const {
   TRIGGER_QUOTAS,
   TRIGGER_LABELS,
@@ -55,9 +55,9 @@ const CASE_TYPE_LABELS = {
 const { GuildConfig } = require("../../src/database");
 const { getAutomodConfig, getDramaChannelId, invalidateDramaChannelCache, updateAutomodConfig } = require("../../src/moderationExtra");
 const { getLogChannelId, logAction, setLogChannel, clearLogChannel } = require("../../src/guild");
+const { getCurrentLang, translateEmbed } = require("../../src/i18n");
 
 function notifyUser(user, { description, color = RED, fields = null }) {
-  const { getCurrentLang, translateEmbed } = require("../../src/i18n");
   const embed = new EmbedBuilder().setColor(color).setDescription(description);
   if (fields?.length) embed.addFields(fields);
   const finalEmbed = getCurrentLang() === "en" ? translateEmbed(embed, "en") : embed;

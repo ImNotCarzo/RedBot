@@ -30,6 +30,7 @@ const {
   isObfuscatedChannel,
 } = require("../../src/runtime");
 const { RED, GREEN } = require("../../src/config");
+const { getCurrentLang, translateEmbed } = require("../../src/i18n");
 const { logAction } = require("../../src/guild");
 const { fetchPublic, readBodyLimited } = require("../../src/security");
 const { recordImageIfNew, replyWithImageHistory } = require("../../src/history");
@@ -57,7 +58,7 @@ const RESET_SCOPE_LABELS = {
   apodo: "Apodo",
 };
 const VERIFICATION_LEVELS = { 0: "Ninguno", 1: "Bajo", 2: "Medio", 3: "Alto", 4: "Muy alto" };
-const log = new Logger("CMD_SERVER", process.env.LOG_LEVEL);
+const log = new Logger("CMD_SERVER");
 
 async function fetchBotImageBuffer(attachment, label) {
   if (!attachment) return { buffer: undefined };
@@ -163,7 +164,6 @@ function buildCustomBotEmbed({ updatedMe, bioValue = null, moderator }) {
     });
   }
 
-  const { getCurrentLang, translateEmbed } = require("../../src/i18n");
   return getCurrentLang() === "en" ? translateEmbed(embed, "en") : embed;
 }
 
@@ -679,7 +679,6 @@ function createServerViewCommand(name, description) {
           timeout: 60_000,
           thirdPartyMode: "ephemeral-view",
           onEnd: "static",
-          state: { tab: name },
           render: ({ view, isEnded }) => {
             const viewData = getServerViewBuilder(guild, name, { historyButtonId: isEnded ? null : view.id("history") });
             return viewData?.builder ?? ComponentsV2Builder.card({ description: viewData?.error ?? "No disponible", color: RED });

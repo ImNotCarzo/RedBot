@@ -3,7 +3,7 @@ const { resolveContextLang } = require("../src/guild");
 const { t } = require("../src/i18n");
 const { Logger, sanitizeError } = require("../src/runtime");
 
-const log = new Logger("EVENT_FRAMEWORK_ERROR", process.env.LOG_LEVEL);
+const log = new Logger("EVENT_FRAMEWORK_ERROR");
 
 function is(err, Type) {
   try {
@@ -67,28 +67,21 @@ const event = {
       locale: ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale,
     }).catch(() => "es");
 
-    const safeSend = async (payload) => {
-      const normalized =
-        payload && typeof payload === "object" && typeof payload.toPayload === "function"
-          ? payload.toPayload()
-          : payload;
+    const safeSend = async (text) => {
       try {
         if (typeof ctx?.send === "function") {
-          return await ctx.send(normalized);
+          return await ctx.send(text);
         }
-
-        const data = typeof normalized === "string" ? { content: normalized } : normalized;
         if (ctx?.channel?.send) {
-          return await ctx.channel.send(data);
+          return await ctx.channel.send({ content: text });
         }
       } catch {
         try {
           if (ctx?.interaction?.replied && typeof ctx?.ephemeral === "function") {
-            return await ctx.ephemeral(normalized, { followUp: true });
+            return await ctx.ephemeral(text, { followUp: true });
           }
-          if (ctx?.channel?.send) {
-            const text = typeof normalized === "string" ? normalized : normalized?.content || "";
-            if (text) return await ctx.channel.send(text);
+          if (ctx?.channel?.send && text) {
+            return await ctx.channel.send(text);
           }
         } catch {}
       }

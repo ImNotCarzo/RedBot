@@ -17,7 +17,7 @@ const { getCurrentLang } = require("./i18n");
 const { Logger } = require("./runtime");
 const { escapeHtml } = require("./security");
 
-const log = new Logger("TICKETS", process.env.LOG_LEVEL);
+const log = new Logger("TICKETS");
 const openingTickets = new Set();
 const closingTickets = new Set();
 
@@ -919,7 +919,6 @@ module.exports = {
   updateTicketConfig,
   parseTicketMenuOptions,
   buildTicketPanelPayload,
-  buildTicketPanelModal,
   buildTicketControlCard,
   sendTicketSetupPanel,
   openTicket,

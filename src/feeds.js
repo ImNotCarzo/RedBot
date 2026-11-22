@@ -6,7 +6,7 @@ const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { fetchPublic, readTextLimited } = require("./security");
 
-const log = new Logger("SOCIAL_FEEDS", process.env.LOG_LEVEL);
+const log = new Logger("SOCIAL_FEEDS");
 const PLATFORM_LIMITS = {
   youtube: 20,
   twitch: 5,

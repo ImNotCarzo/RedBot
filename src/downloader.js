@@ -449,7 +449,7 @@ async function extractInstagram(url) {
   let targetUrl = url;
   if (/instagram\.com\/share\//i.test(url)) {
     try {
-      const redir = await fetchWithTimeout(url, { redirect: "follow", headers: { "User-Agent": DISCORD_BOT_UA } }, 6000);
+      const redir = await fetchWithTimeout(url, { headers: { "User-Agent": DISCORD_BOT_UA } }, 6000);
       await redir?.body?.cancel?.().catch(() => {});
       if (redir?.url) targetUrl = redir.url;
     } catch {}
@@ -499,7 +499,7 @@ async function extractReddit(url) {
   let targetUrl = url;
   if (/redd\.it\//i.test(url) || /\/s\/[A-Za-z0-9]+/i.test(url)) {
     try {
-      const redir = await fetchWithTimeout(url, { redirect: "follow", headers: { "User-Agent": DISCORD_BOT_UA } }, 6000);
+      const redir = await fetchWithTimeout(url, { headers: { "User-Agent": DISCORD_BOT_UA } }, 6000);
       await redir?.body?.cancel?.().catch(() => {});
       if (redir?.url) targetUrl = redir.url;
     } catch {}
@@ -519,7 +519,7 @@ async function extractOpenGraphVideo(fetchUrl, platformLabel = "Web", originalUr
   try {
     const res = await fetchWithTimeout(
       fetchUrl,
-      { headers: { "User-Agent": DISCORD_BOT_UA, Accept: "text/html,application/xhtml+xml" }, redirect: "follow" },
+      { headers: { "User-Agent": DISCORD_BOT_UA, Accept: "text/html,application/xhtml+xml" } },
       8000
     );
     if (!res.ok) {
@@ -630,7 +630,6 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
       videoUrl,
       {
         headers: { "User-Agent": ua, Range: "bytes=0-0", ...extraHeaders },
-        redirect: "follow",
       },
       10_000
     );
@@ -668,7 +667,6 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
               videoUrl,
               {
                 headers: { "User-Agent": ua, Range: `bytes=${start}-${end}`, ...extraHeaders },
-                redirect: "follow",
               },
               45_000
             );
@@ -704,7 +702,6 @@ async function downloadVideoBuffer(videoUrl, maxBytes, userAgent = BROWSER_UA, e
         Accept: "*/*",
         ...extraHeaders,
       },
-      redirect: "follow",
     },
     35_000
   );

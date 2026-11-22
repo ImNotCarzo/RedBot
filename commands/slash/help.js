@@ -8,7 +8,7 @@ const {
 const { getId, RED, USER_APP_CONFIG } = require("../../src/config");
 const { getPrefix } = require("../../src/guild");
 const { Logger, handleCommandError, INVITE_URL, SUPPORT_URL } = require("../../src/runtime");
-const log = new Logger("CMD_HELP", process.env.LOG_LEVEL);
+const log = new Logger("CMD_HELP");
 
 const IDS = {
   ai:        () => getId("ai"),

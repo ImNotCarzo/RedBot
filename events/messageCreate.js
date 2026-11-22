@@ -29,7 +29,7 @@ function extractReplyImageUrl(message) {
   return att.url ?? null;
 }
 
-const log = new Logger("EVENT_MESSAGE", process.env.LOG_LEVEL);
+const log = new Logger("EVENT_MESSAGE");
 const TRUNCATION_SUFFIX = "\n*(respuesta recortada)*";
 const SAFE_MENTIONS = { parse: [], repliedUser: false };
 

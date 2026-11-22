@@ -38,7 +38,7 @@ const { RED, GREEN, DARK } = require("../../src/config");
 
 const PAGE_SIZE = 15;
 
-const log = new Logger("CMD_ROLE", process.env.LOG_LEVEL);
+const log = new Logger("CMD_ROLE");
 
 const MANAGE_ROLES_PLUGINS = [Plugins.hasPerms("ManageRoles"), Plugins.hasBotPerms("ManageRoles")];
 const ADMIN_ROLE_PLUGINS = [Plugins.hasPerms("Administrator"), Plugins.hasBotPerms("ManageRoles")];

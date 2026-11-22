@@ -21,7 +21,7 @@ const { formatDuration, parseDuration } = require("../../src/moderation");
 const { listSnipedMessages } = require("../../src/snipe");
 const { renderEmbedTemplate } = require("../../src/tagscript");
 
-const log = new Logger("CMD_CHANNEL", process.env.LOG_LEVEL);
+const log = new Logger("CMD_CHANNEL");
 
 const MANAGE_CHANNELS_PLUGINS = [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")];
 
