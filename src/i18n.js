@@ -714,6 +714,9 @@ const EXACT_ES_TO_EN = {
     "The attached image must be jpg, png, gif, or webp up to 8MB",
   "Ese canal no pertenece a este servidor": "That channel does not belong to this server",
   "No tienes permisos suficientes en ese canal": "You don't have sufficient permissions in that channel",
+  "No puedes seleccionar `@everyone` como rol de soporte": "You cannot select `@everyone` as support role",
+  "Los tickets están desactivados en este servidor. Actívalos con `/tickets setup`.":
+    "Tickets are disabled in this server. Enable them with `/tickets setup`.",
   "Tickets": "Tickets",
   "Auto": "Auto",
   "Comunidad": "Community",

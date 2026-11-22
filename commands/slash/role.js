@@ -973,6 +973,12 @@ const data = {
           if (canal && (canal.guildId !== ctx.guild.id || isObfuscatedChannel(canal))) {
             return ctx.ephemeral("No tengo acceso a ese canal");
           }
+          if (canal && ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof canal.permissionsFor === "function") {
+            const callerPerms = canal.permissionsFor(ctx.member);
+            if (callerPerms && !callerPerms.has(PermissionFlagsBits.ViewChannel)) {
+              return ctx.ephemeral("No tienes permisos para ver ese canal");
+            }
+          }
 
           const invoker = ctx.user ?? ctx.member?.user;
           let perms = [];

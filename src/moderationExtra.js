@@ -133,6 +133,15 @@ async function executeDramaAction({ guild, modMember, modUser, targetId, action,
   if (lockKey) dramaInFlight.add(lockKey);
 
   try {
+    const requiredPerm =
+      action === "ban" ? PermissionFlagsBits.BanMembers :
+      action === "kick" ? PermissionFlagsBits.KickMembers :
+      PermissionFlagsBits.ModerateMembers;
+
+    if (modMember.id !== guild.ownerId && !modMember.permissions?.has?.(requiredPerm)) {
+      return { error: "no_perm" };
+    }
+
     if (action === "ignore") {
       if (message?.edit) {
         const doneCard = ComponentsV2Builder.card({
@@ -143,15 +152,6 @@ async function executeDramaAction({ guild, modMember, modUser, targetId, action,
         await message.edit(doneCard.toPayload()).catch(() => {});
       }
       return { ok: true, action: "ignore" };
-    }
-
-    const requiredPerm =
-      action === "ban" ? PermissionFlagsBits.BanMembers :
-      action === "kick" ? PermissionFlagsBits.KickMembers :
-      PermissionFlagsBits.ModerateMembers;
-
-    if (modMember.id !== guild.ownerId && !modMember.permissions?.has?.(requiredPerm)) {
-      return { error: "no_perm" };
     }
 
     const target = await guild.members.fetch(targetId).catch(() => null);

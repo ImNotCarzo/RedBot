@@ -57,7 +57,10 @@ const data = {
           if (!logs.isTextBased?.()) return ctx.ephemeral("El canal de logs debe ser un canal de texto");
           patch.logChannelId = logs.id;
         }
-        if (role) patch.supportRoleId = role.id;
+        if (role) {
+          if (role.id === ctx.guild.id) return ctx.ephemeral("No puedes seleccionar `@everyone` como rol de soporte");
+          patch.supportRoleId = role.id;
+        }
         if (msg) patch.welcomeMessage = msg.slice(0, 1500);
 
         let cfg = null;
@@ -97,13 +100,11 @@ const data = {
           lang: getCurrentLang(),
         });
         await ch.send(payload);
-        if (parsedOptions.length) {
-          await updateTicketConfig(ctx.guild.id, {
-            enabled: true,
-            categories: parsedOptions,
-            ...(buttonOrPlaceholder ? { panelPlaceholder: String(buttonOrPlaceholder).slice(0, 100) } : {}),
-          });
-        }
+        await updateTicketConfig(ctx.guild.id, {
+          enabled: true,
+          ...(parsedOptions.length ? { categories: parsedOptions } : {}),
+          ...(parsedOptions.length && buttonOrPlaceholder ? { panelPlaceholder: String(buttonOrPlaceholder).slice(0, 100) } : {}),
+        });
         await ctx.ephemeral(`Panel de tickets enviado en ${ch}`);
       },
     })
@@ -115,6 +116,7 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         await ctx.defer({ ephemeral: true });
         const res = await openTicket({ guild: ctx.guild, user: ctx.user, category: ctx.get("motivo") || "General" });
+        if (res.error === "disabled") return ctx.ephemeral("Los tickets están desactivados en este servidor. Actívalos con `/tickets setup`.");
         if (res.error === "already_open") return ctx.ephemeral(`Ya tienes un ticket abierto en <#${res.channelId}>`);
         if (!res.ok) return ctx.ephemeral("No se pudo abrir el ticket");
         await ctx.ephemeral(`Ticket creado en <#${res.channel.id}>`);

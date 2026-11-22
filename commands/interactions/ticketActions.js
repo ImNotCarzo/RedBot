@@ -21,6 +21,13 @@ async function handleOpenTicketInteraction(interaction, categoryKey, lang) {
     category: categoryKey || "General",
   }).catch(() => ({ error: "perm" }));
 
+  if (res.error === "disabled") {
+    return interaction.editReply({
+      content: isEn
+        ? "Tickets are disabled in this server. Enable them with `/tickets setup`."
+        : "Los tickets están desactivados en este servidor. Actívalos con `/tickets setup`.",
+    }).catch(() => {});
+  }
   if (res.error === "already_open") {
     return interaction.editReply({
       content: isEn

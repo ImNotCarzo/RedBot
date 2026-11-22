@@ -1125,7 +1125,7 @@ async function handleTicketsRoute(req, res, pathname, preloadedSession = undefin
       patch.panelPlaceholder = body.panelPlaceholder.trim().slice(0, 100);
     }
     if (body.categories !== undefined) {
-      patch.categories = parseTicketMenuOptions(body.categories);
+      patch.categories = parseTicketMenuOptions(body.categories, guild);
     }
 
     const updated = Object.keys(patch).length
@@ -1174,8 +1174,8 @@ async function handleTicketsRoute(req, res, pathname, preloadedSession = undefin
       : await getLang(guildId).catch(() => "es");
 
     const parsedOptions = body.options !== undefined
-      ? parseTicketMenuOptions(body.options)
-      : (body.categories !== undefined ? parseTicketMenuOptions(body.categories) : null);
+      ? parseTicketMenuOptions(body.options, guild)
+      : (body.categories !== undefined ? parseTicketMenuOptions(body.categories, guild) : null);
 
     let effectiveOptions = parsedOptions;
     if (effectiveOptions === null && body.useStoredCategories !== false) {

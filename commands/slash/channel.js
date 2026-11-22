@@ -1056,6 +1056,18 @@ const voiceStatusCommand = {
         ctx.member?.voice?.channel ??
         (ctx.channel?.type === ChannelType.GuildVoice ? ctx.channel : null);
 
+      if (targetCh) {
+        if (isObfuscatedChannel(targetCh) || targetCh.guildId !== ctx.guild.id) {
+          return ctx.ephemeral("No tengo acceso a ese canal");
+        }
+        if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof targetCh.permissionsFor === "function") {
+          const callerPerms = targetCh.permissionsFor(ctx.member);
+          if (callerPerms && !callerPerms.has(PermissionFlagsBits.ViewChannel)) {
+            return ctx.ephemeral("No tienes permisos para ver ese canal");
+          }
+        }
+      }
+
       if (!rawEstado && !clearFlag) {
         const autoEnabled = await isVoiceAutoStatusEnabled(ctx.guild.id);
         const managed = targetCh ? getManagedVoiceStatus(targetCh.id) : null;
@@ -1075,9 +1087,6 @@ const voiceStatusCommand = {
 
       if (!targetCh || targetCh.type !== ChannelType.GuildVoice) {
         return ctx.ephemeral("Debes indicar un canal de voz o estar conectado a uno");
-      }
-      if (isObfuscatedChannel(targetCh) || targetCh.guildId !== ctx.guild.id) {
-        return ctx.ephemeral("No tengo acceso a ese canal");
       }
 
       if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof targetCh.permissionsFor === "function") {

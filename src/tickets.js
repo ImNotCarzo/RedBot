@@ -79,7 +79,7 @@ function makeUniqueCategoryId(label, idx, usedIds) {
   return candidate;
 }
 
-function parseTicketMenuOptions(rawInput) {
+function parseTicketMenuOptions(rawInput, guild = null) {
   if (!rawInput) return [];
   const entries = Array.isArray(rawInput)
     ? rawInput
@@ -151,6 +151,15 @@ function parseTicketMenuOptions(rawInput) {
     }
 
     if (!label) continue;
+    if (supportRoleId && guild) {
+      const validRole = supportRoleId !== guild.id && guild.roles?.cache?.has(supportRoleId);
+      if (!validRole) supportRoleId = null;
+    }
+    if (categoryId && guild) {
+      const ch = guild.channels?.cache?.get(categoryId);
+      if (!ch || ch.type !== ChannelType.GuildCategory) categoryId = null;
+    }
+
     const id = customId && !usedIds.has(customId)
       ? (usedIds.add(customId), customId)
       : makeUniqueCategoryId(label, parsed.length, usedIds);
@@ -682,9 +691,12 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
       throw new Error("Missing ManageChannels permission");
     }
 
+    const currentCfg = await getTicketConfig(guild.id);
+    if (!currentCfg.enabled) return { error: "disabled" };
+
     const updatedGuild = await GuildConfig.findOneAndUpdate(
       { guildId: guild.id },
-      { $inc: { "ticketConfig.counter": 1 }, $set: { "ticketConfig.enabled": true } },
+      { $inc: { "ticketConfig.counter": 1 } },
       { upsert: true, returnDocument: "after" }
     ).lean();
 
@@ -729,9 +741,12 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
         ],
       });
     }
-    if (resolvedSupportRoleId && guild.roles.cache.has(resolvedSupportRoleId)) {
+    const supportRole = resolvedSupportRoleId && resolvedSupportRoleId !== guild.id
+      ? guild.roles.cache.get(resolvedSupportRoleId)
+      : null;
+    if (supportRole) {
       overwrites.push({
-        id: resolvedSupportRoleId,
+        id: supportRole.id,
         allow: [
           PermissionFlagsBits.ViewChannel,
           PermissionFlagsBits.SendMessages,
@@ -741,7 +756,8 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
       });
     }
 
-    const parent = resolvedParentId && guild.channels.cache.has(resolvedParentId) ? resolvedParentId : undefined;
+    const parentCh = resolvedParentId ? guild.channels.cache.get(resolvedParentId) : null;
+    const parent = parentCh?.type === ChannelType.GuildCategory ? parentCh.id : undefined;
     const channel = await guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
@@ -774,9 +790,9 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
       lang,
     });
 
-    const mentionPing = resolvedSupportRoleId ? `<@${user.id}> <@&${resolvedSupportRoleId}>` : `<@${user.id}>`;
+    const mentionPing = supportRole ? `<@${user.id}> <@&${supportRole.id}>` : `<@${user.id}>`;
     await channel.send(controlCard.toPayload()).catch(() => {});
-    await channel.send({ content: mentionPing, allowedMentions: { users: [user.id], roles: resolvedSupportRoleId ? [resolvedSupportRoleId] : [] } }).catch(() => {});
+    await channel.send({ content: mentionPing, allowedMentions: { users: [user.id], roles: supportRole ? [supportRole.id] : [] } }).catch(() => {});
 
     return { ok: true, channel, ticket };
   } finally {
