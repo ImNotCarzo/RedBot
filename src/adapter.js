@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs");
 const { isPromise } = require("util/types");
+const { TRANSLATE_REPLY_LANGS } = require("./shared/utils");
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const WRAPPED_CMD = Symbol.for("redbot.commandWrapped");
@@ -229,10 +230,6 @@ const USER_LOOKUP_COMMANDS = new Set([
   "user/roles",
   "user/permissions",
   "ai/roast",
-]);
-
-const TRANSLATE_REPLY_LANGS = new Set([
-  "es", "en", "pt", "fr", "de", "it", "ja", "ko", "zh", "zh-cn", "zh-tw", "ru", "ar", "nl",
 ]);
 
 function getMessageText(message) {

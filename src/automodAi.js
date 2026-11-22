@@ -20,6 +20,7 @@ const { generateJson } = require("./ai");
 const { GREEN, RED, YELLOW } = require("./config");
 const { logAction } = require("./guild");
 const { isObfuscatedChannel } = require("./runtime");
+const { isSafeRegexPattern } = require("./shared/utils");
 
 const TRIGGER_QUOTAS = {
   [AutoModerationRuleTriggerType.Keyword]: 6,
@@ -60,22 +61,6 @@ const INCIDENT_DURATIONS_MS = {
   "6h": 6 * 60 * 60_000,
   "24h": 24 * 60 * 60_000,
 };
-
-function isDiscordSafeRegex(pattern) {
-  if (typeof pattern !== "string" || !pattern.length || pattern.length > 260) return false;
-  // Discord utiliza motor regex basado en Rust (sin lookarounds ni backreferences)
-  if (/\(\?[=!<]/.test(pattern)) return false;
-  if (/\\[1-9]/.test(pattern)) return false;
-  if (/\([^)]*[+*?]\)[+*?{]/.test(pattern)) return false;
-  if (/\([^)]*\|[^)]*\)[+*?{]/.test(pattern)) return false;
-  if (/(\.\*){2,}|(\.\+){2,}/.test(pattern)) return false;
-  try {
-    new RegExp(pattern, "i");
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function normalizeTriggerType(raw) {
   if (typeof raw === "number" && TRIGGER_QUOTAS[raw]) return raw;
@@ -124,7 +109,7 @@ function validateAndNormalizeRuleSpec(
     for (const p of rawRegex) {
       const s = String(p ?? "").trim();
       if (!s) continue;
-      if (isDiscordSafeRegex(s)) {
+      if (isSafeRegexPattern(s, { maxLen: 260, allowLookaround: false })) {
         if (!regexPatterns.includes(s)) regexPatterns.push(s);
         if (regexPatterns.length >= 10) break;
       } else {

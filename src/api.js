@@ -5,6 +5,7 @@ const { ChannelType } = require("discord.js");
 const { applyOauthGuildLang } = require("./guild");
 const { INVITE_URL, SUPPORT_URL, Logger, isObfuscatedChannel } = require("./runtime");
 const { escapeHtml } = require("./security");
+const { formatUptime } = require("./shared/utils");
 const { version: PACKAGE_VERSION } = require("../package.json");
 
 let server = null;
@@ -84,20 +85,6 @@ function isAuthorized(req) {
   const provided = Buffer.from(token);
   const expected = Buffer.from(key);
   return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-}
-
-function formatUptime(ms) {
-  const totalSeconds = Math.floor(ms / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const parts = [];
-  if (days) parts.push(`${days}d`);
-  if (hours) parts.push(`${hours}h`);
-  if (minutes) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
-  return parts.join(" ");
 }
 
 function sendHtml(res, status, title, heading, message, extraHeaders = {}) {
@@ -268,7 +255,7 @@ function handleStats() {
     stickers: totalStickers,
     commands: commandInfo,
     uptime: client.uptime ?? 0,
-    uptimeFormatted: formatUptime(client.uptime ?? 0),
+    uptimeFormatted: formatUptime(client.uptime ?? 0, { alwaysSeconds: true }),
     readyAt: client.readyAt?.toISOString() ?? null,
     ping: client.ws?.ping ?? -1,
     version: PACKAGE_VERSION,
@@ -343,9 +330,9 @@ function handleHealth() {
   return {
     status: isReady ? "operational" : "degraded",
     uptime: client?.uptime ?? 0,
-    uptimeFormatted: formatUptime(client?.uptime ?? 0),
+    uptimeFormatted: formatUptime(client?.uptime ?? 0, { alwaysSeconds: true }),
     processUptime: Math.floor(process.uptime()),
-    processUptimeFormatted: formatUptime(process.uptime() * 1000),
+    processUptimeFormatted: formatUptime(process.uptime() * 1000, { alwaysSeconds: true }),
     memory: {
       rss: mem.rss,
       heapUsed: mem.heapUsed,

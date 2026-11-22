@@ -3,6 +3,7 @@ const { Logger } = require("./runtime");
 // Todas las peticiones del downloader pasan por validacion de host publico (anti-SSRF) y redirecciones controladas
 const { assertPublicUrl, fetchPublic: fetchWithTimeout, readBodyLimited, readTextLimited } = require("./security");
 const { RED } = require("./config");
+const { decodeHtmlEntities } = require("./shared/utils");
 
 const log = new Logger("DOWNLOAD");
 const MAX_HTML_BYTES = 1024 * 1024;
@@ -16,18 +17,6 @@ function extractFirstUrl(text) {
   if (!text || typeof text !== "string") return null;
   const match = text.match(/https?:\/\/[^\s<>"]+/i);
   return match ? match[0] : null;
-}
-
-function decodeHtmlEntities(str) {
-  if (!str) return "";
-  return String(str)
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, "/");
 }
 
 function isHost(host, domain) {

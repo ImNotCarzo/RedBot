@@ -5,6 +5,7 @@ const { SocialFeed } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { fetchPublic, readTextLimited } = require("./security");
+const { decodeHtmlEntities } = require("./shared/utils");
 
 const log = new Logger("SOCIAL_FEEDS");
 const PLATFORM_LIMITS = {
@@ -17,15 +18,6 @@ const PLATFORM_LIMITS = {
 const ytHandleCache = new TtlCache(6 * 60 * 60_000, 500);
 let feedsInterval = null;
 let isPollingFeeds = false;
-
-function decodeXmlEntities(str) {
-  return String(str ?? "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;|&apos;/g, "'");
-}
 
 function neutralizeMentions(str) {
   return String(str ?? "")
@@ -69,8 +61,8 @@ async function fetchYouTubeLatest(account) {
   const videoId = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1]?.trim();
   const rawTitle = entry.match(/<title>([\s\S]*?)<\/title>/)?.[1]?.trim();
   const rawAuthor = entry.match(/<name>([\s\S]*?)<\/name>/)?.[1]?.trim();
-  const title = rawTitle ? decodeXmlEntities(rawTitle) : "Nuevo video en YouTube";
-  const author = rawAuthor ? decodeXmlEntities(rawAuthor) : account;
+  const title = rawTitle ? decodeHtmlEntities(rawTitle) : "Nuevo video en YouTube";
+  const author = rawAuthor ? decodeHtmlEntities(rawAuthor) : account;
   if (!videoId) return null;
 
   return {

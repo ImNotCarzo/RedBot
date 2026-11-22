@@ -29,6 +29,7 @@ const {
 const { version: botVersion } = require("../../package.json");
 const { createReminder, listUserReminders, cancelReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
+const { formatLanguageLabel, formatUptime, num } = require("../../src/shared/utils");
 
 let graloniumVersion = "0.4.0";
 try {
@@ -37,50 +38,11 @@ try {
 
 const log = new Logger("CMD_UTIL");
 
-const TRANSLATE_LANG_NAMES = {
-  auto: "Automático",
-  es: "Español",
-  en: "Inglés",
-  pt: "Portugués",
-  fr: "Francés",
-  de: "Alemán",
-  it: "Italiano",
-  ja: "Japonés",
-  ko: "Coreano",
-  "zh-cn": "Chino",
-  "zh-tw": "Chino tradicional",
-  ru: "Ruso",
-  ar: "Árabe",
-  nl: "Neerlandés",
-};
-
 // ─────────────────────────────────────────────
 //  HELPERS DE FORMATO Y COMPONENTES V2
 // ─────────────────────────────────────────────
 
-const num = (n) => Number(n).toLocaleString("es-ES");
 const cleanVersion = (v) => `v${String(v ?? "").replace(/^v/i, "")}`;
-
-/** "2d 4h 3m", omitiendo unidades vacías */
-const formatUptime = (ms) => {
-  const s = Math.floor(ms / 1000) % 60;
-  const m = Math.floor(ms / 60000) % 60;
-  const h = Math.floor(ms / 3600000) % 24;
-  const d = Math.floor(ms / 86400000);
-  const parts = [];
-  if (d) parts.push(`${d}d`);
-  if (h) parts.push(`${h}h`);
-  if (m) parts.push(`${m}m`);
-  if (!parts.length || s) parts.push(`${s}s`);
-  return parts.join(" ");
-};
-
-const formatLanguage = (langCode) => {
-  const key = V2Text.clip(langCode, 40, "");
-  const label = TRANSLATE_LANG_NAMES[key.toLowerCase()];
-  if (!label) return key || "desconocido";
-  return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
-};
 
 function buildCompactCard({ title, subtitle = null, body = null, footer = null, color = RED, thumbnailUrl = null, links = [] }) {
   const builder = new ComponentsV2Builder({ color });
@@ -484,7 +446,7 @@ const data = {
         }
 
         const builder = new ComponentsV2Builder({ color: RED })
-          .addText(`${V2Text.heading("Traducción", 3)}\n${V2Text.subtext(`${formatLanguage(origen)} → ${formatLanguage(idioma)}`)}`)
+          .addText(`${V2Text.heading("Traducción", 3)}\n${V2Text.subtext(`${formatLanguageLabel(origen)} → ${formatLanguageLabel(idioma)}`)}`)
           .addSeparator("small")
           .addText(`**Original**\n${V2Text.quote(texto, 1300)}`)
           .addSpacer("small")

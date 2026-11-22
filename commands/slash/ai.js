@@ -15,12 +15,9 @@ const { RED, GREEN, BADGE_NAMES, MAX_HISTORIAL, USER_APP_CONFIG } = require("../
 const { resolveContextLang, getAiContext } = require("../../src/guild");
 const { getCurrentLang } = require("../../src/i18n");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, isObfuscatedChannel, wait } = require("../../src/runtime");
+const { MAX_IMAGE_SIZE_BYTES, VALID_IMAGE_TYPES, num, validateImageAttachment } = require("../../src/shared/utils");
 
 const log = new Logger("CMD_AI");
-
-const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
-const num = (n) => Number(n).toLocaleString("es-ES");
 
 const PERSONA = `Eres RedBot, un bot de Discord con personalidad sarcástica, ingeniosa e irreverente.
 Hablas español neutro e informal, sin voseo, sin "usted", sin formalismos.
@@ -44,20 +41,6 @@ async function resolveCtxLang(ctx) {
     userId: ctx?.user?.id ?? ctx?.author?.id ?? null,
     locale: ctx?.interaction?.locale ?? ctx?.interaction?.guildLocale ?? null,
   });
-}
-
-function validateImageAttachment(ctx, attachment) {
-  if (!attachment) return ctx.ephemeral("Debes adjuntar una imagen");
-  const ct = attachment.contentType ?? "";
-  const name = attachment.name ?? "";
-  const isImage = VALID_IMAGE_TYPES.some((t) => ct.startsWith(t)) || /\.(png|jpe?g|gif|webp)$/i.test(name);
-  if (!isImage) {
-    return ctx.ephemeral("El archivo debe ser una imagen (jpg, png, gif, webp)");
-  }
-  if ((attachment.size ?? 0) > MAX_IMAGE_SIZE_BYTES) {
-    return ctx.ephemeral("La imagen no puede superar los 8MB");
-  }
-  return null;
 }
 
 const formatBytes = (bytes) => {

@@ -1,19 +1,5 @@
 const { InteractionBuilder, Interactions } = require("gralonium");
-
-const TRANSLATE_LANGUAGES = [
-  { name: "Español (es)", value: "es" },
-  { name: "Inglés (en)", value: "en" },
-  { name: "Portugués (pt)", value: "pt" },
-  { name: "Francés (fr)", value: "fr" },
-  { name: "Alemán (de)", value: "de" },
-  { name: "Italiano (it)", value: "it" },
-  { name: "Japonés (ja)", value: "ja" },
-  { name: "Coreano (ko)", value: "ko" },
-  { name: "Chino simplificado (zh-CN)", value: "zh-CN" },
-  { name: "Ruso (ru)", value: "ru" },
-  { name: "Árabe (ar)", value: "ar" },
-  { name: "Neerlandés (nl)", value: "nl" },
-];
+const { TRANSLATE_LANGUAGES } = require("../../src/shared/utils");
 
 const data = {
   data: new InteractionBuilder({

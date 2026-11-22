@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const { AutoRule, AutoTimer, CustomCommand } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
+const { isSafeRegexPattern } = require("./shared/utils");
 const { resolveEmbedTemplate, runTagScript, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("AUTOMATION");
@@ -19,24 +20,6 @@ const SNOWFLAKE_RE = /^\d{17,22}$/;
 
 let timerInterval = null;
 let isRunningTimers = false;
-
-/**
- * Rechaza patrones regex con riesgo de backtracking catastrofico (ReDoS):
- * cuantificadores anidados, alternancias repetidas con cuantificador o backreferences.
- */
-function isSafeRegexPattern(pattern) {
-  if (typeof pattern !== "string" || !pattern.length || pattern.length > 80) return false;
-  if (/\\[1-9]/.test(pattern)) return false;
-  if (/\([^)]*[+*?]\)[+*?{]/.test(pattern)) return false;
-  if (/\([^)]*\|[^)]*\)[+*?{]/.test(pattern)) return false;
-  if (/(\.\*){2,}|(\.\+){2,}/.test(pattern)) return false;
-  try {
-    new RegExp(pattern, "i");
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function getCompiledRegex(pattern) {
   if (compiledRegexCache.has(pattern)) return compiledRegexCache.get(pattern);

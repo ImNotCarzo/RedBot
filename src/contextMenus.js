@@ -17,7 +17,7 @@ const { generateText, generateVision, transcribeMedia } = require("./ai");
 const { getMessageText } = require("./adapter");
 const { GREEN, RED, YELLOW } = require("./config");
 const { getLang, logAction, resolveContextLang } = require("./guild");
-const { getCurrentLang, runWithLang, translatePayload, wrapInteractionForLang } = require("./i18n");
+const { getCurrentLang, runWithLang, wrapInteractionForLang } = require("./i18n");
 const {
   addModCase,
   addWarn,
@@ -29,33 +29,10 @@ const {
 } = require("./moderation");
 const { createReminder } = require("./reminders");
 const { Logger } = require("./runtime");
+const { replyInteractionEphemeral: replyEphemeral } = require("./shared/ui");
+const { VALID_IMAGE_TYPES, formatLanguageLabel: formatLang } = require("./shared/utils");
 
 const log = new Logger("CONTEXT_MENU");
-
-const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const LANG_NAMES = {
-  auto: "Automático",
-  es: "Español",
-  en: "Inglés",
-  pt: "Portugués",
-  fr: "Francés",
-  de: "Alemán",
-  it: "Italiano",
-  ja: "Japonés",
-  ko: "Coreano",
-  "zh-cn": "Chino",
-  "zh-tw": "Chino tradicional",
-  ru: "Ruso",
-  ar: "Árabe",
-  nl: "Neerlandés",
-};
-
-const formatLang = (code) => {
-  const key = V2Text.clip(code, 40, "");
-  const label = LANG_NAMES[key.toLowerCase()];
-  if (!label) return key || "desconocido";
-  return key.toLowerCase() === "auto" ? label : `${label} (${key})`;
-};
 
 function getMessageSources(message) {
   return [
@@ -103,25 +80,6 @@ function extractContextMedia(message) {
     }
   }
   return null;
-}
-
-const INTERACTION_I18N_WRAPPED = Symbol.for("redbot.interactionI18nWrapped");
-
-async function replyEphemeral(interaction, payload) {
-  const isBuilder = typeof payload?.toPayload === "function";
-  const raw = typeof payload === "string"
-    ? { content: payload, flags: MessageFlags.Ephemeral }
-    : isBuilder
-      ? payload.toPayload({ ephemeral: true })
-      : { ...payload, flags: MessageFlags.Ephemeral };
-  const data = isBuilder || interaction?.[INTERACTION_I18N_WRAPPED]
-    ? raw
-    : translatePayload(raw, getCurrentLang());
-
-  if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(data).catch(() => interaction.followUp(data).catch(() => null));
-  }
-  return interaction.reply(data).catch(() => null);
 }
 
 async function runEphemeralTask(interaction, label, fn) {

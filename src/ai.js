@@ -4,6 +4,7 @@ const { AiSession } = require("./database");
 const { normalizeLang } = require("./i18n");
 const { Logger, wait, withTimeout } = require("./runtime");
 const { fetchPublic, readBodyLimited, readTextLimited } = require("./security");
+const { decodeHtmlEntities } = require("./shared/utils");
 
 const log = new Logger("AI_SERVICE");
 const GEMINI_KEYS = [process.env.GEMINI, process.env.GEMINI2, process.env.GEMINI3].filter(Boolean);
@@ -49,17 +50,6 @@ function isRetriableAIError(err) {
     msg.includes("high demand") ||
     msg.includes("overloaded")
   );
-}
-
-function decodeHtmlEntities(str) {
-  return String(str ?? "")
-    .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .trim();
 }
 
 function escapePromptTagContent(str) {
@@ -270,7 +260,7 @@ async function performWebSearch(query) {
           const block = match[1];
           const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/)?.[1];
           const rawDate = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1];
-          const title = rawTitle ? decodeHtmlEntities(rawTitle) : "";
+          const title = rawTitle ? decodeHtmlEntities(rawTitle, { stripCdata: true, trim: true }) : "";
           const pubDate = rawDate ? rawDate.trim() : "";
           if (title) snippets.push(pubDate ? `[Noticia - ${pubDate}]: ${title}` : `[Noticia]: ${title}`);
         }
@@ -285,7 +275,7 @@ async function performWebSearch(query) {
         const data = JSON.parse(wpRaw);
         const searchResults = data?.query?.search ?? [];
         for (const item of searchResults.slice(0, 2)) {
-          const cleanSnippet = decodeHtmlEntities((item.snippet || "").replace(/<[^>]+>/g, ""));
+          const cleanSnippet = decodeHtmlEntities((item.snippet || "").replace(/<[^>]+>/g, ""), { stripCdata: true, trim: true });
           if (cleanSnippet) {
             snippets.push(`[Wikipedia - ${item.title}]: ${cleanSnippet}`);
           }
