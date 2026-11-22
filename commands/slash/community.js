@@ -2,27 +2,63 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builde
 const { RED, GREEN } = require("../../src/config");
 const { getMemberInviteStats, sendWelcomeOrGoodbye } = require("../../src/community");
 const { Birthday, GuildConfig, InviteReward, InviteStat } = require("../../src/database");
-const { avatarUrl, createListPaginator, noGuildReply } = require("../../src/runtime");
+const { avatarUrl, noGuildReply } = require("../../src/runtime");
+const { createStandardListPaginator } = require("../../src/shared/ui");
+const { validateRoleHierarchy } = require("../../src/shared/utils");
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
 const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 function validateAssignableRole(ctx, role) {
-  if (!role || role.id === ctx.guild.id || role.managed) {
-    return "Ese rol no puede asignarse automáticamente";
+  return validateRoleHierarchy(ctx, role, {
+    requireUserManageRoles: true,
+    notFoundMsg: "Ese rol no puede asignarse automáticamente",
+    unmanagedMsg: "Ese rol no puede asignarse automáticamente",
+    userPermMsg: "Necesitas el permiso **Administrar roles** para configurar ese rol",
+  });
+}
+
+async function runGreetingConfig(ctx, { configKey, kind, title, allowDm = false, testMeta = null }) {
+  if (!ctx.guild) return noGuildReply(ctx);
+  const setObj = {};
+  if (ctx.get("estado")) setObj[`${configKey}.enabled`] = ctx.get("estado") === "on";
+  const ch = ctx.get("canal");
+  if (ch) {
+    if (!ch.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
+    setObj[`${configKey}.channelId`] = ch.id;
+    setObj[`${configKey}.enabled`] = true;
   }
-  if (!ctx.member?.permissions?.has?.("ManageRoles")) {
-    return "Necesitas el permiso **Administrar roles** para configurar ese rol";
+  if (ctx.get("mensaje")) setObj[`${configKey}.message`] = ctx.get("mensaje").slice(0, 2000);
+  if (ctx.get("embed")) setObj[`${configKey}.templateName`] = ctx.get("embed").trim().toLowerCase();
+  if (allowDm && ctx.get("dm")) {
+    setObj[`${configKey}.dmEnabled`] = true;
+    setObj[`${configKey}.dmMessage`] = ctx.get("dm").slice(0, 2000);
   }
-  if (ctx.member.id !== ctx.guild.ownerId && role.position >= ctx.member.roles.highest.position) {
-    return "No puedes configurar un rol igual o superior a tu rol más alto";
+
+  const doc = Object.keys(setObj).length
+    ? await GuildConfig.findOneAndUpdate({ guildId: ctx.guild.id }, { $set: setObj }, { upsert: true, returnDocument: "after" }).lean()
+    : await GuildConfig.findOne({ guildId: ctx.guild.id }).select(configKey).lean();
+
+  if (ctx.get("probar") === "true" && ctx.member) {
+    if (testMeta) {
+      await sendWelcomeOrGoodbye(ctx.member, kind, testMeta);
+    } else {
+      await sendWelcomeOrGoodbye(ctx.member, kind);
+    }
   }
-  const me = ctx.guild.members?.me;
-  if (me && role.position >= me.roles.highest.position) {
-    return "Ese rol está igual o por encima de mi rol más alto";
-  }
-  return null;
+
+  const cfg = doc?.[configKey] ?? {};
+  await ctx.send(ComponentsV2Builder.card({
+    title,
+    fields: [
+      ["Estado", V2Text.code(cfg.enabled ? "Activado" : "Desactivado")],
+      ["Canal", cfg.channelId ? `<#${cfg.channelId}>` : V2Text.code("Sin configurar")],
+      cfg.templateName ? ["Embed", V2Text.code(cfg.templateName)] : null,
+      ["Mensaje", V2Text.clip(cfg.message || "-", 300)],
+    ].filter(Boolean),
+    color: cfg.enabled ? GREEN : RED,
+  }));
 }
 
 const data = {
@@ -54,41 +90,13 @@ const data = {
         }),
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
-        if (!ctx.guild) return noGuildReply(ctx);
-        const setObj = {};
-        if (ctx.get("estado")) setObj["welcomeConfig.enabled"] = ctx.get("estado") === "on";
-        const ch = ctx.get("canal");
-        if (ch) {
-          if (!ch.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
-          setObj["welcomeConfig.channelId"] = ch.id;
-          setObj["welcomeConfig.enabled"] = true;
-        }
-        if (ctx.get("mensaje")) setObj["welcomeConfig.message"] = ctx.get("mensaje").slice(0, 2000);
-        if (ctx.get("embed")) setObj["welcomeConfig.templateName"] = ctx.get("embed").trim().toLowerCase();
-        if (ctx.get("dm")) {
-          setObj["welcomeConfig.dmEnabled"] = true;
-          setObj["welcomeConfig.dmMessage"] = ctx.get("dm").slice(0, 2000);
-        }
-
-        const doc = Object.keys(setObj).length
-          ? await GuildConfig.findOneAndUpdate({ guildId: ctx.guild.id }, { $set: setObj }, { upsert: true, returnDocument: "after" }).lean()
-          : await GuildConfig.findOne({ guildId: ctx.guild.id }).select("welcomeConfig").lean();
-
-        if (ctx.get("probar") === "true" && ctx.member) {
-          await sendWelcomeOrGoodbye(ctx.member, "welcome", { inviterId: ctx.user.id, total: 1 });
-        }
-
-        const cfg = doc?.welcomeConfig ?? {};
-        await ctx.send(ComponentsV2Builder.card({
+        return runGreetingConfig(ctx, {
+          configKey: "welcomeConfig",
+          kind: "welcome",
           title: "Configuración de bienvenidas",
-          fields: [
-            ["Estado", V2Text.code(cfg.enabled ? "Activado" : "Desactivado")],
-            ["Canal", cfg.channelId ? `<#${cfg.channelId}>` : V2Text.code("Sin configurar")],
-            cfg.templateName ? ["Embed", V2Text.code(cfg.templateName)] : null,
-            ["Mensaje", V2Text.clip(cfg.message || "-", 300)],
-          ].filter(Boolean),
-          color: cfg.enabled ? GREEN : RED,
-        }));
+          allowDm: true,
+          testMeta: { inviterId: ctx.user.id, total: 1 },
+        });
       },
     })
     .addCommand({
@@ -111,37 +119,11 @@ const data = {
         }),
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
-        if (!ctx.guild) return noGuildReply(ctx);
-        const setObj = {};
-        if (ctx.get("estado")) setObj["goodbyeConfig.enabled"] = ctx.get("estado") === "on";
-        const ch = ctx.get("canal");
-        if (ch) {
-          if (!ch.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
-          setObj["goodbyeConfig.channelId"] = ch.id;
-          setObj["goodbyeConfig.enabled"] = true;
-        }
-        if (ctx.get("mensaje")) setObj["goodbyeConfig.message"] = ctx.get("mensaje").slice(0, 2000);
-        if (ctx.get("embed")) setObj["goodbyeConfig.templateName"] = ctx.get("embed").trim().toLowerCase();
-
-        const doc = Object.keys(setObj).length
-          ? await GuildConfig.findOneAndUpdate({ guildId: ctx.guild.id }, { $set: setObj }, { upsert: true, returnDocument: "after" }).lean()
-          : await GuildConfig.findOne({ guildId: ctx.guild.id }).select("goodbyeConfig").lean();
-
-        if (ctx.get("probar") === "true" && ctx.member) {
-          await sendWelcomeOrGoodbye(ctx.member, "goodbye");
-        }
-
-        const cfg = doc?.goodbyeConfig ?? {};
-        await ctx.send(ComponentsV2Builder.card({
+        return runGreetingConfig(ctx, {
+          configKey: "goodbyeConfig",
+          kind: "goodbye",
           title: "Configuración de despedidas",
-          fields: [
-            ["Estado", V2Text.code(cfg.enabled ? "Activado" : "Desactivado")],
-            ["Canal", cfg.channelId ? `<#${cfg.channelId}>` : V2Text.code("Sin configurar")],
-            cfg.templateName ? ["Embed", V2Text.code(cfg.templateName)] : null,
-            ["Mensaje", V2Text.clip(cfg.message || "-", 300)],
-          ].filter(Boolean),
-          color: cfg.enabled ? GREEN : RED,
-        }));
+        });
       },
     })
     .addCommand({
@@ -189,18 +171,11 @@ const data = {
         const list = await Birthday.find({ guildId: ctx.guild.id }).sort({ month: 1, day: 1 }).lean();
         if (!list.length) return ctx.ephemeral("No hay cumpleaños registrados aún");
         const rows = list.map((b) => `• **${String(b.day).padStart(2, "0")} ${MONTHS[b.month - 1]}** — <@${b.userId}>`);
-        const paginator = createListPaginator({
+        const paginator = createStandardListPaginator({
           items: rows,
           ownerId: ctx.user?.id,
           perPage: 12,
-          render: ({ items, pageIndex, totalPages, controls }) => {
-            const b = new ComponentsV2Builder({ color: RED })
-              .addText(`${V2Text.heading("Cumpleaños del servidor", 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
-              .addSeparator("small")
-              .addText(items.join("\n"));
-            if (controls) b.addSpacer("small").addButtonsRow(controls);
-            return b;
-          },
+          title: "Cumpleaños del servidor",
         });
         await paginator.send(ctx);
       },
@@ -290,18 +265,12 @@ const data = {
         if (!ranked.length) return ctx.ephemeral("Aún no hay invitaciones registradas");
 
         const rows = ranked.map((r, i) => `**#${i + 1}** <@${r.userId}> — **${r.total}** invitaciones (${r.regular} regulares)`);
-        const paginator = createListPaginator({
+        const paginator = createStandardListPaginator({
           items: rows,
           ownerId: ctx.user?.id,
           perPage: 10,
-          render: ({ items, pageIndex, totalPages, controls }) => {
-            const b = new ComponentsV2Builder({ color: RED })
-              .addText(`${V2Text.heading("Ranking de invitaciones", 3)}\n${V2Text.subtext(`${ctx.guild.name} · Página ${pageIndex + 1}/${totalPages}`)}`)
-              .addSeparator("small")
-              .addText(items.join("\n"));
-            if (controls) b.addSpacer("small").addButtonsRow(controls);
-            return b;
-          },
+          title: "Ranking de invitaciones",
+          subtitle: ({ pageIndex, totalPages }) => `${ctx.guild.name} · Página ${pageIndex + 1}/${totalPages}`,
         });
         await paginator.send(ctx);
       },

@@ -24,7 +24,16 @@ async function replyInteractionEphemeral(interaction, payload) {
   return interaction.reply(data).catch(() => null);
 }
 
-function createStandardListPaginator({ items, perPage = 15, ownerId, title, subtitle = null, color = RED, timeout = 2 * 60_000 }) {
+function createStandardListPaginator({
+  items,
+  perPage = 15,
+  ownerId,
+  title,
+  subtitle = null,
+  footer = false,
+  color = RED,
+  timeout = 2 * 60_000,
+}) {
   return createListPaginator({
     items,
     perPage,
@@ -33,15 +42,16 @@ function createStandardListPaginator({ items, perPage = 15, ownerId, title, subt
     render: ({ items: pageItems, pageIndex, totalPages, controls }) => {
       const ctxInfo = { pageIndex, totalPages, total: items.length };
       const titleText = typeof title === "function" ? title(ctxInfo) : title;
-      const subText = typeof subtitle === "function" ? subtitle(ctxInfo) : subtitle;
-      const header = subText
-        ? `${V2Text.heading(titleText, 3, 200)}\n${V2Text.subtext(subText, 200)}`
-        : V2Text.heading(titleText, 3, 200);
+      const subText = typeof subtitle === "function"
+        ? subtitle(ctxInfo)
+        : (subtitle ?? `Página ${pageIndex + 1}/${totalPages}`);
       const b = new ComponentsV2Builder({ color })
-        .addText(header)
+        .addText(`${V2Text.heading(titleText, 3)}\n${V2Text.subtext(subText)}`)
         .addSeparator("small")
-        .addText(pageItems.join("\n"))
-        .addText(V2Text.subtext(`Página ${pageIndex + 1}/${totalPages} · ${items.length} en total`, 200));
+        .addText(pageItems.join("\n"));
+      if (footer) {
+        b.addText(V2Text.subtext(`Página ${pageIndex + 1}/${totalPages} · ${items.length} en total`, 200));
+      }
       if (controls) b.addSpacer("small").addButtonsRow(controls);
       return b;
     },

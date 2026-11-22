@@ -11,25 +11,18 @@ const {
 } = require("../../src/automation");
 const { AutoRule, AutoTimer, CustomCommand, EmbedTemplate } = require("../../src/database");
 const { parseDuration, formatDuration } = require("../../src/moderation");
-const { createListPaginator, noGuildReply } = require("../../src/runtime");
+const { noGuildReply } = require("../../src/runtime");
+const { createStandardListPaginator } = require("../../src/shared/ui");
+const { validateRoleHierarchy } = require("../../src/shared/utils");
 const { renderEmbedTemplate } = require("../../src/tagscript");
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
 
 function validateManageableRole(ctx, role) {
-  if (!role) return "No encontré ese rol en el servidor";
-  if (role.id === ctx.guild.id || role.managed) return "Ese rol no puede gestionarse automáticamente";
-  if (!ctx.member?.permissions?.has?.("ManageRoles")) {
-    return "Necesitas el permiso **Administrar roles** para configurar acciones de rol";
-  }
-  if (ctx.member.id !== ctx.guild.ownerId && role.position >= ctx.member.roles.highest.position) {
-    return "No puedes configurar un rol igual o superior a tu rol más alto";
-  }
-  const me = ctx.guild.members?.me;
-  if (me && role.position >= me.roles.highest.position) {
-    return "Ese rol está igual o por encima de mi rol más alto";
-  }
-  return null;
+  return validateRoleHierarchy(ctx, role, {
+    requireUserManageRoles: true,
+    userPermMsg: "Necesitas el permiso **Administrar roles** para configurar acciones de rol",
+  });
 }
 
 function isValidTemplateUrl(raw) {
@@ -143,18 +136,11 @@ const data = {
         if (!list.length) return ctx.ephemeral("No hay comandos personalizados en este servidor");
 
         const rows = list.map((c) => `• \`${c.trigger}\` (${c.matchType})${c.templateName ? ` · Embed \`${c.templateName}\`` : ""}`);
-        const paginator = createListPaginator({
+        const paginator = createStandardListPaginator({
           items: rows,
           ownerId: ctx.user?.id,
           perPage: 12,
-          render: ({ items, pageIndex, totalPages, controls }) => {
-            const b = new ComponentsV2Builder({ color: RED })
-              .addText(`${V2Text.heading(`Comandos personalizados (${list.length}/${MAX_CUSTOM_COMMANDS})`, 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
-              .addSeparator("small")
-              .addText(items.join("\n"));
-            if (controls) b.addSpacer("small").addButtonsRow(controls);
-            return b;
-          },
+          title: `Comandos personalizados (${list.length}/${MAX_CUSTOM_COMMANDS})`,
         });
         await paginator.send(ctx);
       },
@@ -252,18 +238,11 @@ const data = {
         const list = await EmbedTemplate.find({ guildId: ctx.guild.id }).sort({ name: 1 }).lean();
         if (!list.length) return ctx.ephemeral("No hay plantillas embed guardadas");
         const rows = list.map((e) => `• \`${e.name}\` — ${V2Text.clip(e.title || e.description, 60)}`);
-        const paginator = createListPaginator({
+        const paginator = createStandardListPaginator({
           items: rows,
           ownerId: ctx.user?.id,
           perPage: 12,
-          render: ({ items, pageIndex, totalPages, controls }) => {
-            const b = new ComponentsV2Builder({ color: RED })
-              .addText(`${V2Text.heading(`Plantillas Embed (${list.length}/${MAX_EMBED_TEMPLATES})`, 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
-              .addSeparator("small")
-              .addText(items.join("\n"));
-            if (controls) b.addSpacer("small").addButtonsRow(controls);
-            return b;
-          },
+          title: `Plantillas Embed (${list.length}/${MAX_EMBED_TEMPLATES})`,
         });
         await paginator.send(ctx);
       },
@@ -334,18 +313,11 @@ const data = {
         const list = await AutoTimer.find({ guildId: ctx.guild.id }).lean();
         if (!list.length) return ctx.ephemeral("No hay mensajes recurrentes configurados");
         const rows = list.map((t) => `• \`${t.timerId}\` en <#${t.channelId}> cada \`${formatDuration(t.intervalMs)}\``);
-        const paginator = createListPaginator({
+        const paginator = createStandardListPaginator({
           items: rows,
           ownerId: ctx.user?.id,
           perPage: 12,
-          render: ({ items, pageIndex, totalPages, controls }) => {
-            const b = new ComponentsV2Builder({ color: RED })
-              .addText(`${V2Text.heading(`Temporizadores (${list.length}/${MAX_TIMERS})`, 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
-              .addSeparator("small")
-              .addText(items.join("\n"));
-            if (controls) b.addSpacer("small").addButtonsRow(controls);
-            return b;
-          },
+          title: `Temporizadores (${list.length}/${MAX_TIMERS})`,
         });
         await paginator.send(ctx);
       },
@@ -456,18 +428,11 @@ const data = {
         const list = await AutoRule.find({ guildId: ctx.guild.id }).lean();
         if (!list.length) return ctx.ephemeral("No hay reglas configuradas");
         const rows = list.map((r) => `• \`${r.name}\`: **${r.event}** (${r.conditionType}) → \`${r.actionType}\``);
-        const paginator = createListPaginator({
+        const paginator = createStandardListPaginator({
           items: rows,
           ownerId: ctx.user?.id,
           perPage: 12,
-          render: ({ items, pageIndex, totalPages, controls }) => {
-            const b = new ComponentsV2Builder({ color: RED })
-              .addText(`${V2Text.heading(`Reglas (${list.length}/${MAX_RULES})`, 3)}\n${V2Text.subtext(`Página ${pageIndex + 1}/${totalPages}`)}`)
-              .addSeparator("small")
-              .addText(items.join("\n"));
-            if (controls) b.addSpacer("small").addButtonsRow(controls);
-            return b;
-          },
+          title: `Reglas (${list.length}/${MAX_RULES})`,
         });
         await paginator.send(ctx);
       },

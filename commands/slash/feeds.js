@@ -5,6 +5,13 @@ const { dispatchFeedNotification, fetchLatestForFeed, PLATFORM_LIMITS } = requir
 const { noGuildReply, THINKING_TEXT } = require("../../src/runtime");
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
+const PLATFORM_CHOICES = [
+  { name: "YouTube", value: "youtube" },
+  { name: "Twitch", value: "twitch" },
+  { name: "Kick", value: "kick" },
+  { name: "TikTok", value: "tiktok" },
+  { name: "Reddit", value: "reddit" },
+];
 
 function normalizeFeedAccount(platform, raw) {
   const clean = String(raw ?? "").trim().slice(0, 128);
@@ -12,6 +19,20 @@ function normalizeFeedAccount(platform, raw) {
     return clean;
   }
   return clean.toLowerCase();
+}
+
+function parseFeedTarget(ctx, { maxLen = 0, requireAccount = false } = {}) {
+  const platform = ctx.get("plataforma");
+  if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
+    return { error: "Plataforma inválida" };
+  }
+  let rawAccount = String(ctx.get("cuenta") ?? "").trim();
+  if (maxLen > 0) rawAccount = rawAccount.slice(0, maxLen);
+  const storedAccount = normalizeFeedAccount(platform, rawAccount);
+  if (requireAccount && !storedAccount) {
+    return { error: "Indica una cuenta válida" };
+  }
+  return { platform, rawAccount, storedAccount };
 }
 
 const data = {
@@ -29,13 +50,7 @@ const data = {
           name: "plataforma",
           description: "Red o plataforma social",
           required: true,
-          choices: [
-            { name: "YouTube", value: "youtube" },
-            { name: "Twitch", value: "twitch" },
-            { name: "Kick", value: "kick" },
-            { name: "TikTok", value: "tiktok" },
-            { name: "Reddit", value: "reddit" },
-          ],
+          choices: PLATFORM_CHOICES,
         })
         .addString({ name: "cuenta", description: "Usuario, @handle, channel_id o subreddit (ej: r/memes)", required: true })
         .addChannel({ name: "canal", description: "Canal de Discord donde publicar alertas", required: true })
@@ -43,14 +58,10 @@ const data = {
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        const platform = ctx.get("plataforma");
-        if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
-          return ctx.ephemeral("Plataforma inválida");
-        }
-        const rawAccount = String(ctx.get("cuenta") ?? "").trim().slice(0, 128);
-        const storedAccount = normalizeFeedAccount(platform, rawAccount);
+        const target = parseFeedTarget(ctx, { maxLen: 128, requireAccount: true });
+        if (target.error) return ctx.ephemeral(target.error);
+        const { platform, rawAccount, storedAccount } = target;
         const channel = ctx.get("canal");
-        if (!storedAccount) return ctx.ephemeral("Indica una cuenta válida");
         if (!channel?.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
 
         const existing = await SocialFeed.findOne({ guildId: ctx.guild.id, platform, account: storedAccount }).lean();
@@ -97,24 +108,15 @@ const data = {
           name: "plataforma",
           description: "Plataforma",
           required: true,
-          choices: [
-            { name: "YouTube", value: "youtube" },
-            { name: "Twitch", value: "twitch" },
-            { name: "Kick", value: "kick" },
-            { name: "TikTok", value: "tiktok" },
-            { name: "Reddit", value: "reddit" },
-          ],
+          choices: PLATFORM_CHOICES,
         })
         .addString({ name: "cuenta", description: "Cuenta o subreddit a quitar", required: true }),
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        const platform = ctx.get("plataforma");
-        if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
-          return ctx.ephemeral("Plataforma inválida");
-        }
-        const rawAccount = String(ctx.get("cuenta") ?? "").trim();
-        const account = normalizeFeedAccount(platform, rawAccount);
+        const target = parseFeedTarget(ctx);
+        if (target.error) return ctx.ephemeral(target.error);
+        const { platform, rawAccount, storedAccount: account } = target;
         let res = await SocialFeed.deleteOne({ guildId: ctx.guild.id, platform, account });
         if (!res.deletedCount && account !== rawAccount.toLowerCase()) {
           res = await SocialFeed.deleteOne({ guildId: ctx.guild.id, platform, account: rawAccount.toLowerCase() });
@@ -144,24 +146,16 @@ const data = {
           name: "plataforma",
           description: "Plataforma",
           required: true,
-          choices: [
-            { name: "YouTube", value: "youtube" },
-            { name: "Twitch", value: "twitch" },
-            { name: "Kick", value: "kick" },
-            { name: "TikTok", value: "tiktok" },
-            { name: "Reddit", value: "reddit" },
-          ],
+          choices: PLATFORM_CHOICES,
         })
         .addString({ name: "cuenta", description: "Cuenta o subreddit", required: true }),
       plugins: ADMIN_PLUGINS,
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        const platform = ctx.get("plataforma");
-        if (!Object.prototype.hasOwnProperty.call(PLATFORM_LIMITS, platform)) {
-          return ctx.ephemeral("Plataforma inválida");
-        }
+        const target = parseFeedTarget(ctx);
+        if (target.error) return ctx.ephemeral(target.error);
+        const { platform, rawAccount: account } = target;
         await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
-        const account = String(ctx.get("cuenta") ?? "").trim();
         const latest = await fetchLatestForFeed(platform, account).catch(() => null);
         if (!latest || latest.offline) {
           return ctx.ephemeral(latest?.offline ? "El canal está desconectado (offline) ahora mismo." : "No pude obtener publicaciones recientes de esa cuenta.");

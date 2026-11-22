@@ -25,6 +25,27 @@ function isTicketStaff(ctx, cfg) {
   );
 }
 
+async function requireTicketContext(ctx, {
+  onlyOpen = true,
+  allowOpener = false,
+  notTicketMsg = "Este canal no es un ticket activo",
+  noPermMsg = "No tienes permisos para gestionar este ticket",
+} = {}) {
+  const query = onlyOpen ? { channelId: ctx.channel.id, status: "open" } : { channelId: ctx.channel.id };
+  const ticket = await Ticket.findOne(query).lean();
+  if (!ticket) {
+    await ctx.ephemeral(notTicketMsg);
+    return null;
+  }
+  const cfg = await getTicketConfig(ctx.guild.id);
+  const allowed = isTicketStaff(ctx, cfg) || (allowOpener && ctx.user.id === ticket.openerId);
+  if (!allowed) {
+    await ctx.ephemeral(noPermMsg);
+    return null;
+  }
+  return { ticket, cfg };
+}
+
 const data = {
   data: new GroupBuilder({
     name: "tickets",
@@ -128,13 +149,12 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         await ctx.defer({ ephemeral: true });
-        const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
-        if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
-        const cfg = await getTicketConfig(ctx.guild.id);
-        const isStaff = isTicketStaff(ctx, cfg);
-        if (!isStaff && ctx.user.id !== ticket.openerId) {
-          return ctx.ephemeral("No tienes permisos para cerrar este ticket");
-        }
+        const found = await requireTicketContext(ctx, {
+          allowOpener: true,
+          notTicketMsg: "Este canal no es un ticket activo",
+          noPermMsg: "No tienes permisos para cerrar este ticket",
+        });
+        if (!found) return;
         await ctx.ephemeral("Guardando transcripción y cerrando ticket...");
         await closeTicketChannel({ channel: ctx.channel, closedByUser: ctx.user, reason: ctx.get("motivo") });
       },
@@ -145,12 +165,11 @@ const data = {
       plugins: [Plugins.hasBotPerms("ManageChannels")],
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
-        if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
-        const cfg = await getTicketConfig(ctx.guild.id);
-        if (!isTicketStaff(ctx, cfg)) {
-          return ctx.ephemeral("Solo el equipo de soporte puede añadir usuarios al ticket");
-        }
+        const found = await requireTicketContext(ctx, {
+          notTicketMsg: "Este canal no es un ticket activo",
+          noPermMsg: "Solo el equipo de soporte puede añadir usuarios al ticket",
+        });
+        if (!found) return;
         const member = ctx.get("usuario");
         await ctx.channel.permissionOverwrites.edit(member.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true });
         await ctx.send(ComponentsV2Builder.card({ title: "Usuario añadido", description: `${member} fue añadido al ticket.`, color: GREEN }));
@@ -162,14 +181,13 @@ const data = {
       plugins: [Plugins.hasBotPerms("ManageChannels")],
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
-        if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
-        const cfg = await getTicketConfig(ctx.guild.id);
-        if (!isTicketStaff(ctx, cfg)) {
-          return ctx.ephemeral("Solo el equipo de soporte puede retirar usuarios del ticket");
-        }
+        const found = await requireTicketContext(ctx, {
+          notTicketMsg: "Este canal no es un ticket activo",
+          noPermMsg: "Solo el equipo de soporte puede retirar usuarios del ticket",
+        });
+        if (!found) return;
         const member = ctx.get("usuario");
-        if (member.id === ticket.openerId || member.id === ctx.guild.members.me?.id) {
+        if (member.id === found.ticket.openerId || member.id === ctx.guild.members.me?.id) {
           return ctx.ephemeral("No puedes retirar al creador del ticket ni al bot");
         }
         await ctx.channel.permissionOverwrites.delete(member.id);
@@ -181,12 +199,11 @@ const data = {
       params: new ParamsBuilder(),
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
-        const ticket = await Ticket.findOne({ channelId: ctx.channel.id, status: "open" }).lean();
-        if (!ticket) return ctx.ephemeral("Este canal no es un ticket activo");
-        const cfg = await getTicketConfig(ctx.guild.id);
-        if (!isTicketStaff(ctx, cfg)) {
-          return ctx.ephemeral("Solo el equipo de soporte puede reclamar tickets");
-        }
+        const found = await requireTicketContext(ctx, {
+          notTicketMsg: "Este canal no es un ticket activo",
+          noPermMsg: "Solo el equipo de soporte puede reclamar tickets",
+        });
+        if (!found) return;
         await Ticket.updateOne({ channelId: ctx.channel.id }, { $set: { claimedBy: ctx.user.id } });
         await ctx.send(ComponentsV2Builder.card({ title: "Ticket reclamado", description: `Atendido por ${ctx.user}.`, color: GREEN }));
       },
@@ -197,14 +214,15 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         await ctx.defer();
-        const ticket = await Ticket.findOne({ channelId: ctx.channel.id }).lean();
-        if (!ticket) return ctx.ephemeral("Este canal no es un ticket registrado");
-        const cfg = await getTicketConfig(ctx.guild.id);
-        if (!isTicketStaff(ctx, cfg) && ctx.user.id !== ticket.openerId) {
-          return ctx.ephemeral("No tienes permisos para exportar este historial");
-        }
+        const found = await requireTicketContext(ctx, {
+          onlyOpen: false,
+          allowOpener: true,
+          notTicketMsg: "Este canal no es un ticket registrado",
+          noPermMsg: "No tienes permisos para exportar este historial",
+        });
+        if (!found) return;
         try {
-          const t = await generateTicketTranscript(ctx.channel, ticket);
+          const t = await generateTicketTranscript(ctx.channel, found.ticket);
           await ctx.send({
             content: `Transcripción exportada (**${t.count}** mensajes).`,
             files: [t.htmlAttachment, t.txtAttachment],
