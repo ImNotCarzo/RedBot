@@ -53,6 +53,18 @@ async function updateTicketConfig(guildId, patch) {
   return doc?.ticketConfig ?? null;
 }
 
+function isTicketConfigTouched(tc) {
+  if (!tc) return false;
+  return Boolean(
+    tc.enabled ||
+    (tc.counter && tc.counter > 0) ||
+    tc.categoryId ||
+    tc.logChannelId ||
+    tc.supportRoleId ||
+    (Array.isArray(tc.categories) && tc.categories.length > 0)
+  );
+}
+
 function isValidMenuEmoji(raw) {
   const s = String(raw ?? "").trim();
   if (!s) return false;
@@ -692,11 +704,15 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
     }
 
     const currentCfg = await getTicketConfig(guild.id);
-    if (!currentCfg.enabled) return { error: "disabled" };
+    const isTouched = isTicketConfigTouched(currentCfg);
+    if (isTouched && !currentCfg.enabled) return { error: "disabled" };
 
     const updatedGuild = await GuildConfig.findOneAndUpdate(
       { guildId: guild.id },
-      { $inc: { "ticketConfig.counter": 1 } },
+      {
+        $inc: { "ticketConfig.counter": 1 },
+        ...(!isTouched ? { $set: { "ticketConfig.enabled": true } } : {}),
+      },
       { upsert: true, returnDocument: "after" }
     ).lean();
 
