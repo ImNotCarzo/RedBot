@@ -2,7 +2,7 @@ const { ActivityType, ChannelType, PermissionFlagsBits, Routes } = require("disc
 const { AutopurgeRule, GuildConfig, StickyMessage, TempChannel, VoiceLink } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
-const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady } = require("./shared/utils");
+const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady, scheduleLongTimeout } = require("./shared/utils");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("CHANNELS_EXTRA");
@@ -142,16 +142,8 @@ function scheduleTempChannelExpiry(client, guildId, channelId, expiresAt) {
   const expMs = new Date(expiresAt).getTime();
   if (!Number.isFinite(expMs)) return;
 
-  clearTimerMap(tempChannelTimers, channelId);
-
-  const delay = Math.min(2_147_000_000, Math.max(1000, expMs - Date.now()));
-  const timer = setTimeout(async () => {
-    tempChannelTimers.delete(channelId);
+  scheduleLongTimeout(tempChannelTimers, channelId, expMs, async () => {
     try {
-      if (expMs > Date.now() + 2000) {
-        scheduleTempChannelExpiry(client, guildId, channelId, new Date(expMs));
-        return;
-      }
       if (isDbReady()) {
         const still = await TempChannel.findOne({ channelId }).lean().catch(() => null);
         if (!still) return;
@@ -165,9 +157,7 @@ function scheduleTempChannelExpiry(client, guildId, channelId, expiresAt) {
       const ch = client.channels?.cache?.get(channelId) ?? await client.channels?.fetch?.(channelId).catch(() => null);
       if (ch) await ch.delete("Canal temporal expirado").catch(() => {});
     } catch {}
-  }, delay);
-  timer.unref();
-  tempChannelTimers.set(channelId, timer);
+  });
 }
 
 async function restoreTempChannels(client) {

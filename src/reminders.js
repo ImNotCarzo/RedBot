@@ -3,11 +3,10 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("
 const { Reminder } = require("./database");
 const { RED } = require("./config");
 const { Logger, sanitizeError } = require("./runtime");
-const { clearTimerMap, isDbReady } = require("./shared/utils");
+const { clearTimerMap, isDbReady, scheduleLongTimeout } = require("./shared/utils");
 
 const log = new Logger("REMINDER_SERVICE");
 const timers = new Map();
-const MAX_TIMEOUT_MS = 2147483647;
 const MAX_PER_USER = 10;
 const RETRY_MS = 60_000;
 const MAX_DELIVERY_RETRIES = 3;
@@ -29,19 +28,7 @@ function scheduleReminder(client, doc, attempt = 0) {
   const when = new Date(doc.remindAt).getTime();
   if (Number.isNaN(when)) return;
 
-  const delay = when - Date.now();
-  if (delay <= 0) {
-    deliverReminder(client, doc, attempt);
-    return;
-  }
-
-  const timer = setTimeout(() => {
-    timers.delete(id);
-    if (delay > MAX_TIMEOUT_MS) scheduleReminder(client, doc, attempt);
-    else deliverReminder(client, doc, attempt);
-  }, Math.min(delay, MAX_TIMEOUT_MS));
-  timer.unref();
-  timers.set(id, timer);
+  scheduleLongTimeout(timers, id, when, () => deliverReminder(client, doc, attempt));
 }
 
 function buildSnoozeRow(userId, lang = "es", disabled = false) {

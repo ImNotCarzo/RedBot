@@ -511,6 +511,278 @@ function checkI18n(jsFiles, rawPayloads, helpCommands = {}) {
   };
 }
 
+async function checkSchedulersAndRestoration() {
+  const mongoose = require("mongoose");
+  const { MAX_TIMEOUT_MS, clearTimerMap, scheduleLongTimeout } = require(path.join(ROOT, "src/shared/utils"));
+  const { Reminder, TempBan, TempRole, TempChannel, UserConfig } = require(path.join(ROOT, "src/database"));
+  const { restoreReminders, stopReminderTimers } = require(path.join(ROOT, "src/reminders"));
+  const { scheduleTempUnban, stopTempBanTimers } = require(path.join(ROOT, "src/moderation"));
+  const { restoreTempRoles, stopTempRoleTimers } = require(path.join(ROOT, "src/reactionRoles"));
+  const { restoreTempChannels, stopChannelsWorkers } = require(path.join(ROOT, "src/channelsExtra"));
+
+  const origDateNow = Date.now;
+  const origSetTimeout = global.setTimeout;
+  const origClearTimeout = global.clearTimeout;
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origUserConfigFindOne = UserConfig.findOne;
+  const origReminderFind = Reminder.find;
+  const origReminderFindOneAndDelete = Reminder.findOneAndDelete;
+  const origTempBanExists = TempBan.exists;
+  const origTempBanDeleteOne = TempBan.deleteOne;
+  const origTempRoleFind = TempRole.find;
+  const origTempRoleFindOne = TempRole.findOne;
+  const origTempRoleDeleteOne = TempRole.deleteOne;
+  const origTempChannelFind = TempChannel.find;
+  const origTempChannelFindOne = TempChannel.findOne;
+  const origTempChannelDeleteOne = TempChannel.deleteOne;
+
+  let virtualNow = 1_700_000_000_000;
+  let nextTimerId = 1;
+  const pendingTimers = new Map();
+
+  const flushMicrotasks = async () => {
+    for (let i = 0; i < 6; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  };
+
+  const advanceTimeBy = async (deltaMs) => {
+    const targetNow = virtualNow + deltaMs;
+    while (true) {
+      let earliest = null;
+      for (const entry of pendingTimers.values()) {
+        if (entry.fireAt <= targetNow && (!earliest || entry.fireAt < earliest.fireAt || (entry.fireAt === earliest.fireAt && entry.id < earliest.id))) {
+          earliest = entry;
+        }
+      }
+      if (!earliest) break;
+      pendingTimers.delete(earliest.id);
+      virtualNow = earliest.fireAt;
+      await earliest.fn();
+      await flushMicrotasks();
+    }
+    virtualNow = targetNow;
+    await flushMicrotasks();
+  };
+
+  try {
+    Date.now = () => virtualNow;
+    global.setTimeout = (fn, delay = 0, ...args) => {
+      const numericDelay = Math.max(0, Number(delay) || 0);
+      const id = nextTimerId++;
+      const handle = {
+        id,
+        delay: numericDelay,
+        fireAt: virtualNow + numericDelay,
+        fn: () => fn(...args),
+        unref() {
+          return this;
+        },
+      };
+      pendingTimers.set(id, handle);
+      return handle;
+    };
+    global.clearTimeout = (handle) => {
+      if (handle && typeof handle.id === "number") {
+        pendingTimers.delete(handle.id);
+      }
+    };
+
+    // 1. Plazo corto (< 24.8 días)
+    const testMap = new Map();
+    let shortFired = 0;
+    scheduleLongTimeout(testMap, "short", virtualNow + 5_000, () => {
+      shortFired++;
+    });
+    assertCondition(testMap.size === 1, "scheduleLongTimeout corto: no registró el timer en el Map");
+    await advanceTimeBy(4_999);
+    assertCondition(shortFired === 0 && testMap.size === 1, "scheduleLongTimeout corto: disparó antes de tiempo");
+    await advanceTimeBy(1);
+    assertCondition(shortFired === 1 && testMap.size === 0, "scheduleLongTimeout corto: no disparó al vencer o no limpió el Map");
+
+    // 2. Plazo largo (> 24.8 días: 60 días = 2 tramos MAX_TIMEOUT_MS + 1 tramo final)
+    const sixtyDaysMs = 60 * 86_400_000;
+    let longFired = 0;
+    scheduleLongTimeout(testMap, "long60d", virtualNow + sixtyDaysMs, () => {
+      longFired++;
+    });
+    assertCondition(testMap.get("long60d")?.delay === MAX_TIMEOUT_MS, "scheduleLongTimeout >24.8d: primer tramo no usó MAX_TIMEOUT_MS");
+    await advanceTimeBy(MAX_TIMEOUT_MS);
+    assertCondition(longFired === 0 && testMap.get("long60d")?.delay === MAX_TIMEOUT_MS, "scheduleLongTimeout >24.8d: no encadenó segundo tramo MAX_TIMEOUT_MS");
+    await advanceTimeBy(MAX_TIMEOUT_MS);
+    const remainingChunk = sixtyDaysMs - 2 * MAX_TIMEOUT_MS;
+    assertCondition(longFired === 0 && testMap.get("long60d")?.delay === remainingChunk, "scheduleLongTimeout >24.8d: tercer tramo con delay incorrecto");
+    await advanceTimeBy(remainingChunk - 1);
+    assertCondition(longFired === 0, "scheduleLongTimeout >24.8d: disparó 1ms antes del tramo final");
+    await advanceTimeBy(1);
+    assertCondition(longFired === 1 && testMap.size === 0, "scheduleLongTimeout >24.8d: no disparó al finalizar el último tramo");
+
+    // 3. Cancelación a mitad de un tramo largo
+    let cancelFired = 0;
+    scheduleLongTimeout(testMap, "cancel40d", virtualNow + 40 * 86_400_000, () => {
+      cancelFired++;
+    });
+    await advanceTimeBy(MAX_TIMEOUT_MS);
+    assertCondition(cancelFired === 0 && testMap.has("cancel40d"), "scheduleLongTimeout cancelación: no estaba activo en el segundo tramo");
+    clearTimerMap(testMap, "cancel40d");
+    await advanceTimeBy(30 * 86_400_000);
+    assertCondition(cancelFired === 0 && !testMap.has("cancel40d"), "scheduleLongTimeout cancelación: disparó tras clearTimerMap");
+
+    // 4. Restauración tras reinicio de los 4 schedulers (con plazos > 24.8 días)
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+    UserConfig.findOne = () => ({ select: () => ({ lean: async () => ({ lang: "es" }) }) });
+
+    const thirtyDaysMs = 30 * 86_400_000;
+    const deliveredReminders = [];
+    const reminderDocs = [
+      { _id: "rem_due", userId: "u1", text: "Vencido", remindAt: new Date(virtualNow - 1_000) },
+      { _id: "rem_30d", userId: "u1", text: "En 30d", remindAt: new Date(virtualNow + thirtyDaysMs) },
+    ];
+    Reminder.find = () => ({ lean: async () => reminderDocs });
+    Reminder.findOneAndDelete = ({ _id }) => ({
+      lean: async () => reminderDocs.find((d) => d._id === _id) ?? null,
+    });
+
+    const unbannedUsers = [];
+    const deletedTempBans = [];
+    TempBan.exists = async ({ guildId, userId }) => guildId === "g1" && userId === "u_ban";
+    TempBan.deleteOne = async ({ guildId, userId }) => {
+      deletedTempBans.push(`${guildId}:${userId}`);
+    };
+
+    const removedRoles = [];
+    const deletedTempRoles = [];
+    const tempRoleExpireAt = new Date(virtualNow + thirtyDaysMs);
+    TempRole.find = () => ({
+      lean: async () => [{ guildId: "g1", userId: "u_role", roleId: "r1", expiresAt: tempRoleExpireAt }],
+    });
+    TempRole.findOne = () => ({
+      lean: async () => ({ guildId: "g1", userId: "u_role", roleId: "r1", expiresAt: tempRoleExpireAt }),
+    });
+    TempRole.deleteOne = async ({ guildId, userId, roleId }) => {
+      deletedTempRoles.push(`${guildId}:${userId}:${roleId}`);
+    };
+
+    const deletedChannels = [];
+    const deletedTempChannels = [];
+    const tempChannelExpireAt = new Date(virtualNow + thirtyDaysMs);
+    TempChannel.find = () => ({
+      lean: async () => [{ guildId: "g1", channelId: "c_temp", expiresAt: tempChannelExpireAt }],
+    });
+    TempChannel.findOne = () => ({
+      lean: async () => ({ guildId: "g1", channelId: "c_temp", expiresAt: tempChannelExpireAt }),
+    });
+    TempChannel.deleteOne = async ({ channelId }) => {
+      deletedTempChannels.push(channelId);
+    };
+
+    const mockGuild = {
+      id: "g1",
+      members: {
+        unban: async (userId) => {
+          unbannedUsers.push(userId);
+        },
+        fetch: async (userId) => ({
+          id: userId,
+          roles: {
+            cache: new Map([["r1", { id: "r1" }]]),
+            remove: async (roleId) => {
+              removedRoles.push(`${userId}:${roleId}`);
+            },
+          },
+        }),
+      },
+    };
+    const mockClient = {
+      users: {
+        fetch: async (userId) => ({
+          id: userId,
+          send: async () => {
+            deliveredReminders.push(userId);
+          },
+        }),
+      },
+      guilds: {
+        cache: new Map([["g1", mockGuild]]),
+        fetch: async (guildId) => (guildId === "g1" ? mockGuild : null),
+      },
+      channels: {
+        cache: new Map([
+          [
+            "c_temp",
+            {
+              id: "c_temp",
+              delete: async () => {
+                deletedChannels.push("c_temp");
+              },
+            },
+          ],
+        ]),
+        fetch: async () => null,
+      },
+    };
+
+    await restoreReminders(mockClient);
+    scheduleTempUnban(mockClient, "g1", "u_ban", new Date(virtualNow + thirtyDaysMs));
+    await restoreTempRoles(mockClient);
+    await restoreTempChannels(mockClient);
+    await flushMicrotasks();
+
+    assertCondition(deliveredReminders.length === 1, "restoreReminders: el recordatorio vencido no se entregó al restaurar");
+    assertCondition(
+      unbannedUsers.length === 0 && removedRoles.length === 0 && deletedChannels.length === 0,
+      "Restauración: algún scheduler de 30d disparó prematuramente en t=0"
+    );
+
+    // Avanzar primer tramo (24.85 días): ninguno de los de 30 días debe haber disparado aún
+    await advanceTimeBy(MAX_TIMEOUT_MS);
+    assertCondition(
+      deliveredReminders.length === 1 &&
+        unbannedUsers.length === 0 &&
+        removedRoles.length === 0 &&
+        deletedChannels.length === 0,
+      "Restauración >24.8d: algún scheduler de 30d disparó al terminar el primer tramo de 24.8d"
+    );
+
+    // Avanzar tramo restante hasta completar los 30 días
+    await advanceTimeBy(thirtyDaysMs - MAX_TIMEOUT_MS);
+    assertCondition(deliveredReminders.length === 2, "restoreReminders >24.8d: el recordatorio de 30d no se entregó tras 30 días");
+    assertCondition(
+      unbannedUsers.includes("u_ban") && deletedTempBans.includes("g1:u_ban"),
+      "scheduleTempUnban >24.8d: no desbaneó o no limpió TempBan tras 30 días"
+    );
+    assertCondition(
+      removedRoles.includes("u_role:r1") && deletedTempRoles.includes("g1:u_role:r1"),
+      "restoreTempRoles >24.8d: no quitó el rol o no limpió TempRole tras 30 días"
+    );
+    assertCondition(
+      deletedChannels.includes("c_temp") && deletedTempChannels.includes("c_temp"),
+      "restoreTempChannels >24.8d: no eliminó el canal o no limpió TempChannel tras 30 días"
+    );
+  } finally {
+    stopReminderTimers();
+    stopTempBanTimers();
+    stopTempRoleTimers();
+    stopChannelsWorkers();
+    Date.now = origDateNow;
+    global.setTimeout = origSetTimeout;
+    global.clearTimeout = origClearTimeout;
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    UserConfig.findOne = origUserConfigFindOne;
+    Reminder.find = origReminderFind;
+    Reminder.findOneAndDelete = origReminderFindOneAndDelete;
+    TempBan.exists = origTempBanExists;
+    TempBan.deleteOne = origTempBanDeleteOne;
+    TempRole.find = origTempRoleFind;
+    TempRole.findOne = origTempRoleFindOne;
+    TempRole.deleteOne = origTempRoleDeleteOne;
+    TempChannel.find = origTempChannelFind;
+    TempChannel.findOne = origTempChannelFindOne;
+    TempChannel.deleteOne = origTempChannelDeleteOne;
+  }
+}
+
 async function main() {
   const jsFiles = collectJsFiles(ROOT);
   const checkedFiles = checkSyntax(jsFiles);
@@ -528,6 +800,9 @@ async function main() {
     `[OK] i18n: ${i18nStats.stringsCount} claves STRINGS, ${i18nStats.exactCount} EXACT, ` +
     `${i18nStats.patternCount} PATTERN (${i18nStats.baselineStatus})`
   );
+
+  await checkSchedulersAndRestoration();
+  console.log("[OK] Schedulers: scheduleLongTimeout (<24.8d, >24.8d, cancelación) y restauración de 4 servicios verificados");
 }
 
 main()

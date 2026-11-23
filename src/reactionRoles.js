@@ -3,7 +3,7 @@ const { RED } = require("./config");
 const { ReactionRolePanel, TempRole } = require("./database");
 const { logAction } = require("./guild");
 const { Logger } = require("./runtime");
-const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady } = require("./shared/utils");
+const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady, scheduleLongTimeout } = require("./shared/utils");
 
 const log = new Logger("REACTION_ROLES");
 const MAX_PANELS_PER_GUILD = 40;
@@ -21,15 +21,8 @@ function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
   const targetMs = new Date(expiresAt).getTime();
   if (!Number.isFinite(targetMs)) return;
 
-  const delay = Math.min(2_147_000_000, Math.max(1000, targetMs - Date.now()));
-  const timer = setTimeout(async () => {
-    tempRoleTimers.delete(key);
+  scheduleLongTimeout(tempRoleTimers, key, targetMs, async () => {
     try {
-      if (targetMs > Date.now() + 2000) {
-        scheduleTempRoleExpiry(client, guildId, userId, roleId, new Date(targetMs));
-        return;
-      }
-
       if (isDbReady()) {
         const doc = await TempRole.findOne({ guildId, userId, roleId }).lean().catch(() => null);
         if (!doc) return;
@@ -52,9 +45,7 @@ function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
         await TempRole.deleteOne({ guildId, userId, roleId }).catch(() => {});
       }
     } catch {}
-  }, delay);
-  timer.unref();
-  tempRoleTimers.set(key, timer);
+  });
 }
 
 async function grantTempRole({ client, guild, member, role, durationMs, source = "manual" }) {

@@ -4,12 +4,11 @@ const { Warn, TempBan, ModCase } = require("./database");
 const { getLang, getWarnPolicy, logAction } = require("./guild");
 const { t } = require("./i18n");
 const { Logger } = require("./runtime");
-const { clearTimerMap, fetchBotMember, isDbReady } = require("./shared/utils");
+const { clearTimerMap, fetchBotMember, isDbReady, scheduleLongTimeout } = require("./shared/utils");
 
 const log = new Logger("MODERATION_SERVICE");
 const tempBanTimers = new Map();
 const TEMPBAN_RETRY_MS = 5 * 60_000;
-const MAX_TIMEOUT_MS = 2147483647;
 
 function generateId(length = 6) {
   const size = Number.isFinite(length) ? Math.max(4, Math.min(12, Math.floor(length))) : 6;
@@ -190,9 +189,7 @@ function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
   if (Number.isNaN(when.getTime())) return;
 
   const key = `${guildId}:${userId}`;
-  clearTimerMap(tempBanTimers, key);
-
-  const execute = async () => {
+  scheduleLongTimeout(tempBanTimers, key, when, async () => {
     let retry = false;
     let nextPermAttempt = permAttempt;
     try {
@@ -234,22 +231,7 @@ function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
         scheduleTempUnban(client, guildId, userId, new Date(Date.now() + TEMPBAN_RETRY_MS), nextPermAttempt);
       }
     }
-  };
-
-  const delay = when.getTime() - Date.now();
-  if (delay <= 0) {
-    execute();
-    return;
-  }
-
-  const timeout = setTimeout(() => {
-    if (tempBanTimers.get(key) !== timeout) return;
-    tempBanTimers.delete(key);
-    if (delay > MAX_TIMEOUT_MS) scheduleTempUnban(client, guildId, userId, when, permAttempt);
-    else execute();
-  }, Math.min(delay, MAX_TIMEOUT_MS));
-  timeout.unref();
-  tempBanTimers.set(key, timeout);
+  });
 }
 
 async function cancelTempBan(guildId, userId) {
