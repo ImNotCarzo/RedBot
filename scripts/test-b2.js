@@ -1,3 +1,6 @@
+const { execFileSync } = require("child_process");
+const vm = require("vm");
+const { createRequire } = require("module");
 const mongoose = require("mongoose");
 const { PermissionFlagsBits } = require("discord.js");
 const path = require("path");
@@ -175,11 +178,99 @@ async function testB2Bug4SendLogTransientErrors() {
   }
 }
 
+async function testB2Bug5ErrorRulesBaselineComparison() {
+  const { Errors } = require("gralonium");
+  const { data: currErrorEvent } = require(path.join(ROOT, "events/error"));
+
+  // Cargar baseline 397385c:events/error.js con el mismo contexto de runtime/i18n
+  const oldSrc = execFileSync("git", ["show", "397385c:events/error.js"], { cwd: ROOT, encoding: "utf8" });
+  const baseMod = { exports: {} };
+  const errRequire = createRequire(path.join(ROOT, "events/error.js"));
+  vm.runInNewContext(oldSrc, {
+    module: baseMod,
+    exports: baseMod.exports,
+    require: errRequire,
+    process,
+    console,
+  });
+  const baseErrorEvent = baseMod.exports.data;
+
+  const makeErr = (Type, extra = {}) => Object.assign(Object.create(Type.prototype), extra);
+  const runCase = async (eventHandler, err, { hasEmbedLinks = true } = {}) => {
+    const sent = [];
+    const ctx = {
+      channel: {
+        permissionsFor: () => ({
+          has: (perm) => (perm === "EmbedLinks" ? hasEmbedLinks : true),
+        }),
+      },
+      guild: { id: null, members: { me: {} } },
+      user: { id: "u_err_test" },
+      send: async (msg) => {
+        sent.push(msg);
+      },
+    };
+    await eventHandler.code({ user: { id: "bot_1" } }, Object.assign(err, { ctx }), ctx);
+    return sent.length ? sent[0] : null;
+  };
+
+  const identicalRules = [
+    ["1. GuildOnly", () => makeErr(Errors.GuildOnly)],
+    ["2. CommandNotFound (silent)", () => makeErr(Errors.CommandNotFound)],
+    ["3. NotOwner", () => makeErr(Errors.NotOwner)],
+    ["4. MissingPermission", () => makeErr(Errors.MissingPermission, { permissions: ["BanMembers"] })],
+    ["5b. MissingBotPermission explicit", () => makeErr(Errors.MissingBotPermission, { permissions: ["ManageRoles"] })],
+    ["6. MissingChannelPermission", () => makeErr(Errors.MissingChannelPermission, { permissions: ["ManageMessages"] })],
+    ["7. OnlyForIDs", () => makeErr(Errors.OnlyForIDs)],
+    ["8. CommandInCooldown", () => makeErr(Errors.CommandInCooldown, { timeLeft: 4200 })],
+    ["9. MissingRequiredParam", () => makeErr(Errors.MissingRequiredParam, { param: { name: "usuario" } })],
+    ["10. NotNSFW", () => makeErr(Errors.NotNSFW)],
+    ["11. NotInChannelType", () => makeErr(Errors.NotInChannelType)],
+    ["12. InvalidParamMember", () => makeErr(Errors.InvalidParamMember)],
+    ["13. InvalidParamChannel", () => makeErr(Errors.InvalidParamChannel)],
+    ["14. InvalidParamRole", () => makeErr(Errors.InvalidParamRole)],
+    ["15. InvalidParam", () => makeErr(Errors.InvalidParam, { message: "valor fuera de rango" })],
+    ["16. UnknownCommandError", () => makeErr(Errors.UnknownCommandError)],
+  ];
+
+  for (const [label, buildErr] of identicalRules) {
+    const baseOut = await runCase(baseErrorEvent, buildErr());
+    const currOut = await runCase(currErrorEvent, buildErr());
+    assertCondition(
+      baseOut === currOut,
+      `B2 #5 (${label}): salida difiere del baseline 397385c (${JSON.stringify(currOut)} vs ${JSON.stringify(baseOut)})`
+    );
+  }
+
+  // Regla 5 (caso 50013 cuando EmbedLinks SÍ está presente): diferencia intencional
+  const base50013 = await runCase(baseErrorEvent, Object.assign(new Error("Missing Permissions"), { code: 50013 }), { hasEmbedLinks: true });
+  const curr50013 = await runCase(currErrorEvent, Object.assign(new Error("Missing Permissions"), { code: 50013 }), { hasEmbedLinks: true });
+  assertCondition(
+    typeof base50013 === "string" && base50013.includes("EmbedLinks"),
+    `B2 #5: baseline debía reportar EmbedLinks (${base50013})`
+  );
+  assertCondition(
+    typeof curr50013 === "string" && !curr50013.includes("EmbedLinks") && curr50013.includes("los requeridos"),
+    `B2 #5 (diferencia intencional regla #5): debía usar fallback genérico sin EmbedLinks (${curr50013})`
+  );
+
+  // Cuando EmbedLinks realmente falta, sigue reportándose igual que baseline
+  const baseMissingEmbed = await runCase(baseErrorEvent, Object.assign(new Error("Missing Permissions"), { code: 50013 }), { hasEmbedLinks: false });
+  const currMissingEmbed = await runCase(currErrorEvent, Object.assign(new Error("Missing Permissions"), { code: 50013 }), { hasEmbedLinks: false });
+  assertCondition(
+    baseMissingEmbed === currMissingEmbed && String(currMissingEmbed).includes("EmbedLinks"),
+    "B2 #5: cuando falta EmbedLinks real, debe seguir reportando EmbedLinks"
+  );
+
+  return "16 reglas vs 397385c: 15 idénticas + regla #5 (50013 con EmbedLinks) diff intencional -> fallback genérico";
+}
+
 async function runB2Tests() {
   const checks = [
     ["#1 decodeHtmlEntities", testB2Bug1DecodeHtmlEntities],
     ["#7 ticketActions claim", testB2Bug7TicketClaimFilter],
     ["#4 sendLog 10003", testB2Bug4SendLogTransientErrors],
+    ["#5 error.js 16 reglas", testB2Bug5ErrorRulesBaselineComparison],
   ];
   const extras = [];
   for (const [, fn] of checks) {

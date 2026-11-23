@@ -44,10 +44,6 @@ function resolveMissingBotPermissions(ctx, err, client) {
     }
   }
 
-  if (!missing.length && isDiscordPermError(err)) {
-    missing.push("EmbedLinks");
-  }
-
   return [...new Set(missing)];
 }
 
