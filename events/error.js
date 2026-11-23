@@ -51,6 +51,63 @@ function resolveMissingBotPermissions(ctx, err, client) {
   return [...new Set(missing)];
 }
 
+const ERROR_RULES = [
+  { types: [Errors.GuildOnly], key: "error.guild_only" },
+  { types: [Errors.CommandNotFound], silent: true },
+  { types: [Errors.NotOwner], key: "error.not_owner" },
+  {
+    types: [Errors.MissingPermission],
+    key: "error.missing_perm",
+    vars: ({ err, requiredFallback }) => ({ perms: err.permissions?.join(", ") || requiredFallback }),
+  },
+  {
+    match: (err) =>
+      is(err, Errors.MissingBotPermission) ||
+      is(err, Errors.MissingBotChannelPermission) ||
+      isDiscordPermError(err),
+    key: "error.missing_bot_perm",
+    vars: ({ ctx, err, client, requiredFallback }) => {
+      const missing = resolveMissingBotPermissions(ctx, err, client);
+      return { perms: missing.length ? missing.join(", ") : requiredFallback };
+    },
+  },
+  {
+    types: [Errors.MissingChannelPermission],
+    key: "error.missing_channel_perm",
+    vars: ({ err, requiredFallback }) => ({ perms: err.permissions?.join(", ") || requiredFallback }),
+  },
+  { types: [Errors.OnlyForIDs, Errors.RestrictedUser, Errors.RestrictedGuild], key: "error.only_ids" },
+  {
+    types: [Errors.CommandInCooldown],
+    key: "error.cooldown",
+    vars: ({ err }) => ({ secs: Math.max(1, Math.ceil((err.timeLeft ?? 1000) / 1000)) }),
+  },
+  {
+    types: [Errors.MissingRequiredParam],
+    silent: (err) => !err.ctx,
+    key: "error.missing_param",
+    vars: ({ err, lang }) => ({ param: err.param?.name ?? (lang === "en" ? "required" : "requerido") }),
+  },
+  { types: [Errors.NotNSFW], key: "error.not_nsfw" },
+  { types: [Errors.NotInChannelType], key: "error.wrong_channel_type" },
+  { types: [Errors.InvalidParamMember], key: "error.invalid_member" },
+  { types: [Errors.InvalidParamChannel], key: "error.invalid_channel" },
+  { types: [Errors.InvalidParamRole], key: "error.invalid_role" },
+  {
+    types: [
+      Errors.InvalidParam,
+      Errors.InvalidParamBoolean,
+      Errors.InvalidParamNumber,
+      Errors.InvalidParamChoice,
+      Errors.InvalidParamAttachment,
+      Errors.InvalidChannelType,
+    ],
+    key: "error.invalid_param",
+    vars: ({ err, lang }) => ({ detail: err.message ?? (lang === "en" ? "invalid value" : "valor incorrecto") }),
+  },
+  { types: [Errors.UnknownCommandError], key: "error.unknown_command" },
+];
+
 const event = {
   name: "frameworkError",
   once: false,
@@ -89,89 +146,12 @@ const event = {
 
     const requiredFallback = lang === "en" ? "the required ones" : "los requeridos";
 
-    if (is(err, Errors.GuildOnly)) {
-      return safeSend(t(lang, "error.guild_only"));
-    }
-
-    if (is(err, Errors.CommandNotFound)) return;
-
-    if (is(err, Errors.NotOwner)) {
-      return safeSend(t(lang, "error.not_owner"));
-    }
-
-    if (is(err, Errors.MissingPermission)) {
-      const permisos = err.permissions?.join(", ") || requiredFallback;
-      return safeSend(t(lang, "error.missing_perm", { perms: permisos }));
-    }
-
-    if (
-      is(err, Errors.MissingBotPermission) ||
-      is(err, Errors.MissingBotChannelPermission) ||
-      isDiscordPermError(err)
-    ) {
-      const missing = resolveMissingBotPermissions(ctx, err, _client);
-      const permisos = missing.length ? missing.join(", ") : requiredFallback;
-      return safeSend(t(lang, "error.missing_bot_perm", { perms: permisos }));
-    }
-
-    if (is(err, Errors.MissingChannelPermission)) {
-      const permisos = err.permissions?.join(", ") || requiredFallback;
-      return safeSend(t(lang, "error.missing_channel_perm", { perms: permisos }));
-    }
-
-    if (
-      is(err, Errors.OnlyForIDs) ||
-      is(err, Errors.RestrictedUser) ||
-      is(err, Errors.RestrictedGuild)
-    ) {
-      return safeSend(t(lang, "error.only_ids"));
-    }
-
-    if (is(err, Errors.CommandInCooldown)) {
-      const secs = Math.max(1, Math.ceil((err.timeLeft ?? 1000) / 1000));
-      return safeSend(t(lang, "error.cooldown", { secs }));
-    }
-
-    if (is(err, Errors.MissingRequiredParam)) {
-      if (!err.ctx) return;
-      const paramName = err.param?.name ?? (lang === "en" ? "required" : "requerido");
-      return safeSend(t(lang, "error.missing_param", { param: paramName }));
-    }
-
-    if (is(err, Errors.NotNSFW)) {
-      return safeSend(t(lang, "error.not_nsfw"));
-    }
-
-    if (is(err, Errors.NotInChannelType)) {
-      return safeSend(t(lang, "error.wrong_channel_type"));
-    }
-
-    if (is(err, Errors.InvalidParamMember)) {
-      return safeSend(t(lang, "error.invalid_member"));
-    }
-
-    if (is(err, Errors.InvalidParamChannel)) {
-      return safeSend(t(lang, "error.invalid_channel"));
-    }
-
-    if (is(err, Errors.InvalidParamRole)) {
-      return safeSend(t(lang, "error.invalid_role"));
-    }
-
-    if (
-      is(err, Errors.InvalidParam) ||
-      is(err, Errors.InvalidParamBoolean) ||
-      is(err, Errors.InvalidParamNumber) ||
-      is(err, Errors.InvalidParamChoice) ||
-      is(err, Errors.InvalidParamAttachment) ||
-      is(err, Errors.InvalidChannelType)
-    ) {
-      const detail = err.message ?? (lang === "en" ? "invalid value" : "valor incorrecto");
-      return safeSend(t(lang, "error.invalid_param", { detail }));
-    }
-
-    if (is(err, Errors.UnknownCommandError)) {
-      return safeSend(t(lang, "error.unknown_command"));
+    for (const rule of ERROR_RULES) {
+      const matched = rule.match ? rule.match(err) : rule.types.some((T) => is(err, T));
+      if (!matched) continue;
+      if (typeof rule.silent === "function" ? rule.silent(err) : rule.silent) return;
+      const vars = rule.vars ? rule.vars({ ctx, err, client: _client, lang, requiredFallback }) : undefined;
+      return safeSend(t(lang, rule.key, vars));
     }
 
     log.error("FrameworkError no categorizado", {

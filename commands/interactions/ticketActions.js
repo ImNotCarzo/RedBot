@@ -4,6 +4,7 @@ const { RED, GREEN } = require("../../src/config");
 const { Ticket } = require("../../src/database");
 const { getLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
+const { replyInteractionEphemeral } = require("../../src/shared/ui");
 const {
   buildTicketControlCard,
   closeTicketChannel,
@@ -22,31 +23,35 @@ async function handleOpenTicketInteraction(interaction, categoryKey, lang) {
   }).catch(() => ({ error: "perm" }));
 
   if (res.error === "disabled") {
-    return interaction.editReply({
-      content: isEn
+    return replyInteractionEphemeral(
+      interaction,
+      isEn
         ? "Tickets are disabled in this server. Enable them with `/tickets setup`."
-        : "Los tickets están desactivados en este servidor. Actívalos con `/tickets setup`.",
-    }).catch(() => {});
+        : "Los tickets están desactivados en este servidor. Actívalos con `/tickets setup`."
+    );
   }
   if (res.error === "already_open") {
-    return interaction.editReply({
-      content: isEn
+    return replyInteractionEphemeral(
+      interaction,
+      isEn
         ? `You already have an open ticket in <#${res.channelId}>.`
-        : `Ya tienes un ticket abierto en <#${res.channelId}>.`,
-    }).catch(() => {});
+        : `Ya tienes un ticket abierto en <#${res.channelId}>.`
+    );
   }
   if (!res.ok) {
-    return interaction.editReply({
-      content: isEn
+    return replyInteractionEphemeral(
+      interaction,
+      isEn
         ? "Could not create the ticket. Check my channel permissions."
-        : "No pude crear el ticket. Revisa mis permisos para crear canales.",
-    }).catch(() => {});
+        : "No pude crear el ticket. Revisa mis permisos para crear canales."
+    );
   }
-  return interaction.editReply({
-    content: isEn
+  return replyInteractionEphemeral(
+    interaction,
+    isEn
       ? `Ticket created: <#${res.channel.id}>`
-      : `Ticket creado: <#${res.channel.id}>`,
-  }).catch(() => {});
+      : `Ticket creado: <#${res.channel.id}>`
+  );
 }
 
 const buttonData = {
@@ -73,10 +78,10 @@ const buttonData = {
 
       const ticket = await Ticket.findOne({ channelId: interaction.channelId, status: "open" }).lean().catch(() => null);
       if (!ticket) {
-        return interaction.reply({
-          content: isEn ? "This is not an active ticket channel." : "Este canal no es un ticket activo.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyInteractionEphemeral(
+          interaction,
+          isEn ? "This is not an active ticket channel." : "Este canal no es un ticket activo."
+        );
       }
 
       const cfg = await getTicketConfig(interaction.guildId);
@@ -86,10 +91,10 @@ const buttonData = {
 
       if (action === "claim") {
         if (!isStaff) {
-          return interaction.reply({
-            content: isEn ? "Only support staff can claim tickets." : "Solo el equipo de soporte puede reclamar tickets.",
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "Only support staff can claim tickets." : "Solo el equipo de soporte puede reclamar tickets."
+          );
         }
         await Ticket.updateOne({ channelId: interaction.channelId }, { $set: { claimedBy: interaction.user.id } }).catch(() => {});
         const updatedCard = buildTicketControlCard({
@@ -114,25 +119,25 @@ const buttonData = {
 
       if (action === "transcript") {
         if (!isStaff && interaction.user.id !== ticket.openerId) {
-          return interaction.reply({
-            content: isEn ? "You don't have permission to export this transcript." : "No tienes permisos para exportar este historial.",
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "You don't have permission to export this transcript." : "No tienes permisos para exportar este historial."
+          );
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
         const t = await generateTicketTranscript(interaction.channel, ticket);
-        return interaction.editReply({
+        return replyInteractionEphemeral(interaction, {
           content: isEn ? `Transcript generated (${t.count} messages).` : `Transcripción generada (${t.count} mensajes).`,
           files: [t.htmlAttachment, t.txtAttachment],
-        }).catch(() => {});
+        });
       }
 
       if (action === "close") {
         if (!isStaff && interaction.user.id !== ticket.openerId) {
-          return interaction.reply({
-            content: isEn ? "You don't have permission to close this ticket." : "No tienes permisos para cerrar este ticket.",
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "You don't have permission to close this ticket." : "No tienes permisos para cerrar este ticket."
+          );
         }
         const confirm = ComponentsV2Builder.confirm({
           title: isEn ? "Close ticket?" : "¿Cerrar ticket?",
@@ -146,7 +151,7 @@ const buttonData = {
           cancelStyle: "secondary",
           color: RED,
         });
-        return interaction.reply(confirm.toPayload({ ephemeral: true })).catch(() => {});
+        return replyInteractionEphemeral(interaction, confirm);
       }
 
       if (action === "close_cancel") {
@@ -157,10 +162,10 @@ const buttonData = {
 
       if (action === "close_confirm") {
         if (!isStaff && interaction.user.id !== ticket.openerId) {
-          return interaction.reply({
-            content: isEn ? "You don't have permission to close this ticket." : "No tienes permisos para cerrar este ticket.",
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "You don't have permission to close this ticket." : "No tienes permisos para cerrar este ticket."
+          );
         }
         await interaction.update(
           ComponentsV2Builder.card({ description: isEn ? "Saving transcript & closing ticket..." : "Guardando transcripción y cerrando ticket...", color: RED }).toPayload()

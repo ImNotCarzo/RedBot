@@ -15,18 +15,11 @@ const {
   MAX_EMBED_DESCRIPTION,
   RED,
 } = require("../src/config");
-
-const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+const { isValidImageAttachment } = require("../src/shared/utils");
 
 function extractReplyImageUrl(message) {
   const att = message?.attachments?.first?.();
-  if (!att) return null;
-  const ct = att.contentType ?? "";
-  const name = att.name ?? "";
-  const isImage = VALID_IMAGE_TYPES.some((t) => ct.startsWith(t)) || /\.(png|jpe?g|gif|webp)$/i.test(name);
-  if (!isImage || (att.size ?? 0) > MAX_IMAGE_SIZE_BYTES) return null;
-  return att.url ?? null;
+  return isValidImageAttachment(att) ? (att.url ?? null) : null;
 }
 
 const log = new Logger("EVENT_MESSAGE");

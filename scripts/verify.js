@@ -3,7 +3,7 @@
  * Comprueba:
  *  1. Sintaxis (`node --check`) de todos los archivos `.js`.
  *  2. Conteos estructurales: 12 raíces slash (128 subcomandos), 128 comandos con prefijo,
- *     12 módulos de interacción (6 menús contextuales), 24 listeners de eventos (15 archivos)
+ *     12 módulos de interacción (6 menús contextuales), 24 listeners de eventos (13 archivos)
  *     y paridad 1:1 con `commands/slash/help.js`.
  *  3. Integridad y comparación de `i18n` (`STRINGS`, claves `t()`, `localizeCommand` y `translatePayload`)
  *     frente al commit base `397385c` cuando el historial Git está disponible.
@@ -26,7 +26,7 @@ const EXPECTED = {
   helpEntries: 128,
   contextMenus: 6,
   interactions: 12,
-  eventFiles: 15,
+  eventFiles: 13,
   eventListeners: 24,
 };
 

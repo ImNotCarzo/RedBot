@@ -2,6 +2,7 @@ const { dispatchAutoRules } = require("../src/automation");
 const { sendWelcomeOrGoodbye, trackMemberJoinInvite } = require("../src/community");
 const { JoinRole } = require("../src/database");
 const { Logger } = require("../src/runtime");
+const { fetchBotMember } = require("../src/shared/utils");
 const log = new Logger("EVENT_GUILD_MEMBER_ADD");
 
 const event = {
@@ -37,7 +38,7 @@ const event = {
       return;
     }
 
-    const me = member.guild.members.me ?? await member.guild.members.fetchMe().catch(() => null);
+    const me = await fetchBotMember(member.guild);
     if (!me?.permissions?.has("ManageRoles")) {
       log.warn("Sin permisos para asignar rol automático", { event: "guildMemberAdd", guildId, userId, roleId: role.id });
       return;

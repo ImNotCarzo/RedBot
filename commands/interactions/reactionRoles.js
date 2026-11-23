@@ -4,6 +4,7 @@ const { ReactionRolePanel } = require("../../src/database");
 const { getLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
 const { applyPanelRoleAction } = require("../../src/reactionRoles");
+const { replyInteractionEphemeral } = require("../../src/shared/ui");
 
 const data = {
   data: new InteractionBuilder({
@@ -25,20 +26,15 @@ const data = {
       const isEn = lang === "en";
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
-      const replyEphemeral = (content) =>
-        interaction.deferred || interaction.replied
-          ? interaction.editReply({ content }).catch(() => {})
-          : interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
-
       const panel = await ReactionRolePanel.findOne({ guildId: interaction.guildId, panelId }).lean().catch(() => null);
       const entry = panel?.entries?.find((e) => e.key === entryKey);
       if (!panel || !entry) {
-        return replyEphemeral(isEn ? "This reaction role panel is no longer active." : "Este panel de roles ya no está activo.");
+        return replyInteractionEphemeral(interaction, isEn ? "This reaction role panel is no longer active." : "Este panel de roles ya no está activo.");
       }
 
       const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
       if (!member) {
-        return replyEphemeral(isEn ? "Could not resolve your server member profile." : "No pude verificar tu perfil en este servidor.");
+        return replyInteractionEphemeral(interaction, isEn ? "Could not resolve your server member profile." : "No pude verificar tu perfil en este servidor.");
       }
 
       const res = await applyPanelRoleAction({
@@ -50,24 +46,27 @@ const data = {
       });
 
       if (res.error === "hierarchy") {
-        return replyEphemeral(
+        return replyInteractionEphemeral(
+          interaction,
           isEn ? "I don't have permission or hierarchy to manage that role." : "No tengo permisos ni jerarquía suficiente para gestionar ese rol."
         );
       }
 
       if (res.error) {
-        return replyEphemeral(
+        return replyInteractionEphemeral(
+          interaction,
           isEn ? "Could not update your role right now." : "No pude actualizar tu rol en este momento."
         );
       }
 
       if (res.action === "verify") {
-        return replyEphemeral(isEn ? `You already have <@&${entry.roleId}>.` : `Ya tienes <@&${entry.roleId}>.`);
+        return replyInteractionEphemeral(interaction, isEn ? `You already have <@&${entry.roleId}>.` : `Ya tienes <@&${entry.roleId}>.`);
       }
 
       if (res.action === "added_temp") {
         const ts = Math.floor(new Date(res.expiresAt).getTime() / 1000);
-        return replyEphemeral(
+        return replyInteractionEphemeral(
+          interaction,
           isEn
             ? `Added temporary role <@&${entry.roleId}> (expires <t:${ts}:R>).`
             : `Rol temporal <@&${entry.roleId}> añadido (expira <t:${ts}:R>).`
@@ -78,7 +77,7 @@ const data = {
         ? (isEn ? `Role <@&${entry.roleId}> added.` : `Rol <@&${entry.roleId}> añadido.`)
         : (isEn ? `Role <@&${entry.roleId}> removed.` : `Rol <@&${entry.roleId}> quitado.`);
 
-      return replyEphemeral(msg);
+      return replyInteractionEphemeral(interaction, msg);
     });
   },
 };

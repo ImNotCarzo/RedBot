@@ -30,7 +30,7 @@ const {
 const { createReminder } = require("./reminders");
 const { Logger } = require("./runtime");
 const { replyInteractionEphemeral: replyEphemeral } = require("./shared/ui");
-const { VALID_IMAGE_TYPES, formatLanguageLabel: formatLang } = require("./shared/utils");
+const { fetchBotMember, formatLanguageLabel: formatLang, isValidImageAttachment } = require("./shared/utils");
 
 const log = new Logger("CONTEXT_MENU");
 
@@ -45,10 +45,8 @@ function extractContextImage(message) {
   for (const src of getMessageSources(message)) {
     const atts = [...(src?.attachments?.values?.() ?? [])];
     for (const att of atts) {
-      const ct = att?.contentType ?? "";
-      const name = att?.name ?? "";
-      if (VALID_IMAGE_TYPES.some((t) => ct.startsWith(t)) || /\.(png|jpe?g|gif|webp)$/i.test(name)) {
-        return { url: att.url, name: att.name ?? "imagen", contentType: ct, size: att.size ?? 0 };
+      if (isValidImageAttachment(att, Infinity)) {
+        return { url: att.url, name: att.name ?? "imagen", contentType: att.contentType ?? "", size: att.size ?? 0 };
       }
     }
     const embedImg = src?.embeds?.[0]?.image?.url ?? src?.embeds?.[0]?.thumbnail?.url;
@@ -131,7 +129,7 @@ async function handleOcrContext(interaction) {
     if (!img) {
       return replyEphemeral(interaction, "Este mensaje no contiene una imagen válida");
     }
-    if (img.size > 8 * 1024 * 1024) {
+    if (!isValidImageAttachment(img)) {
       return replyEphemeral(interaction, "La imagen no puede superar los 8MB");
     }
 
@@ -431,7 +429,7 @@ async function handleModDossierContext(interaction) {
             if (!btnPerms?.has?.(PermissionFlagsBits.ModerateMembers)) {
               return btn.reply({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
-            const me = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+            const me = await fetchBotMember(guild);
             if (!me?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
               return btn.reply({ content: "No tengo el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
             }

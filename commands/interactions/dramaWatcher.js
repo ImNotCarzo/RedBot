@@ -5,6 +5,8 @@ const { GREEN } = require("../../src/config");
 const { getLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
 const { executeDramaAction } = require("../../src/moderationExtra");
+const { replyInteractionEphemeral } = require("../../src/shared/ui");
+const { fetchBotMember } = require("../../src/shared/utils");
 
 const data = {
   data: new InteractionBuilder({
@@ -30,17 +32,17 @@ const data = {
           perms?.has?.(PermissionFlagsBits.ManageGuild) ||
           perms?.has?.(PermissionFlagsBits.Administrator);
         if (!canManage) {
-          return interaction.reply({
-            content: isEn ? "You need Manage Server permission to use Security Actions." : "Necesitas el permiso **Administrar servidor** para usar Seguridad.",
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "You need Manage Server permission to use Security Actions." : "Necesitas el permiso **Administrar servidor** para usar Seguridad."
+          );
         }
-        const me = interaction.guild.members.me ?? await interaction.guild.members.fetchMe().catch(() => null);
+        const me = await fetchBotMember(interaction.guild);
         if (!me?.permissions?.has?.(PermissionFlagsBits.ManageGuild)) {
-          return interaction.reply({
-            content: isEn ? "I need Manage Server permission to pause invites or DMs." : "Necesito el permiso **Administrar servidor** para pausar invitaciones o DMs.",
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "I need Manage Server permission to pause invites or DMs." : "Necesito el permiso **Administrar servidor** para pausar invitaciones o DMs."
+          );
         }
 
         const modalId = `drama_incident:${interaction.guildId}:${interaction.id}`;
@@ -68,7 +70,8 @@ const data = {
             ? `Pausados hasta <t:${Math.floor(new Date(res.dmsDisabledUntil).getTime() / 1000)}:R>`
             : "Activos (normal)";
 
-          await submitted.editReply(
+          await replyInteractionEphemeral(
+            submitted,
             ComponentsV2Builder.card({
               title: res.cleared ? "Seguridad restaurada" : "Protecciones de seguridad actualizadas",
               fields: [
@@ -76,29 +79,28 @@ const data = {
                 ["DMs de miembros", dmText],
               ],
               color: GREEN,
-            }).toPayload({ ephemeral: true })
-          ).catch(() => {});
+            })
+          );
         } catch {
-          await submitted.editReply({
-            content: isEn ? "Could not update server security incident actions." : "No pude actualizar las medidas de seguridad del servidor.",
-          }).catch(() => {});
+          await replyInteractionEphemeral(
+            submitted,
+            isEn ? "Could not update server security incident actions." : "No pude actualizar las medidas de seguridad del servidor."
+          );
         }
         return;
       }
 
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
-      const replyErr = (content) =>
-        interaction.deferred || interaction.replied
-          ? interaction.editReply({ content }).catch(() => {})
-          : interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
-
       try {
         const modMember =
           (interaction.member?.roles?.highest ? interaction.member : null) ??
           (await interaction.guild.members.fetch(interaction.user.id).catch(() => null));
         if (!modMember) {
-          return replyErr(isEn ? "Could not verify your server permissions." : "No pude verificar tus permisos en el servidor.");
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "Could not verify your server permissions." : "No pude verificar tus permisos en el servidor."
+          );
         }
 
         const res = await executeDramaAction({
@@ -111,27 +113,45 @@ const data = {
         });
 
         if (res.error === "no_perm") {
-          return replyErr(isEn ? "You don't have permission to execute that sanction." : "No tienes permisos para ejecutar esa sanción.");
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "You don't have permission to execute that sanction." : "No tienes permisos para ejecutar esa sanción."
+          );
         }
         if (res.error === "not_found") {
-          return replyErr(isEn ? "That user is no longer in the server." : "Ese usuario ya no está en el servidor.");
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "That user is no longer in the server." : "Ese usuario ya no está en el servidor."
+          );
         }
         if (res.error === "hierarchy" || res.error === "bot_hierarchy") {
-          return replyErr(isEn ? "Role hierarchy prevents acting on that member." : "La jerarquía de roles impide actuar sobre ese usuario.");
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "Role hierarchy prevents acting on that member." : "La jerarquía de roles impide actuar sobre ese usuario."
+          );
         }
         if (res.error === "in_progress") {
-          return replyErr(isEn ? "An action is already being processed on this alert." : "Ya se está procesando una acción en esta alerta.");
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "An action is already being processed on this alert." : "Ya se está procesando una acción en esta alerta."
+          );
         }
         if (res.error === "invalid_action") {
-          return replyErr(isEn ? "Invalid action." : "Acción inválida.");
+          return replyInteractionEphemeral(interaction, isEn ? "Invalid action." : "Acción inválida.");
         }
         if (!res.ok) {
-          return replyErr(isEn ? "Could not apply the sanction." : "No se pudo aplicar la sanción.");
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "Could not apply the sanction." : "No se pudo aplicar la sanción."
+          );
         }
 
         return interaction.deleteReply().catch(() => {});
       } catch {
-        return replyErr(isEn ? "An error occurred while applying the sanction." : "Ocurrió un error al aplicar la sanción.");
+        return replyInteractionEphemeral(
+          interaction,
+          isEn ? "An error occurred while applying the sanction." : "Ocurrió un error al aplicar la sanción."
+        );
       }
     });
   },

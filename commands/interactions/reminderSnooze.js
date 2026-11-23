@@ -1,9 +1,9 @@
-const { MessageFlags } = require("discord.js");
 const { ComponentsV2Builder, InteractionBuilder, Interactions, V2Text } = require("gralonium");
 const { GREEN } = require("../../src/config");
 const { resolveContextLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
 const { buildSnoozeRow, createReminder } = require("../../src/reminders");
+const { replyInteractionEphemeral } = require("../../src/shared/ui");
 
 const PRESET_MS = {
   "15m": 15 * 60_000,
@@ -32,17 +32,17 @@ const data = {
 
     return runWithLang(lang, async () => {
       if (ownerId && interaction.user?.id !== ownerId) {
-        return interaction.reply({
-          content: lang === "en" ? "You cannot snooze someone else's reminder." : "No puedes posponer un recordatorio ajeno.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyInteractionEphemeral(
+          interaction,
+          lang === "en" ? "You cannot snooze someone else's reminder." : "No puedes posponer un recordatorio ajeno."
+        );
       }
 
       if (!durationMs) {
-        return interaction.reply({
-          content: lang === "en" ? "Invalid snooze duration." : "Duración inválida para posponer.",
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyInteractionEphemeral(
+          interaction,
+          lang === "en" ? "Invalid snooze duration." : "Duración inválida para posponer."
+        );
       }
 
       const rawText = interaction.message?.embeds?.[0]?.description?.trim() ?? "";
@@ -58,13 +58,12 @@ const data = {
       });
 
       if (res.error === "limit") {
-        return interaction.reply({
-          content:
-            lang === "en"
-              ? `You already have ${res.max} pending reminders; wait until one triggers.`
-              : `Ya tienes ${res.max} recordatorios pendientes, espera a que alguno se cumpla.`,
-          flags: MessageFlags.Ephemeral,
-        }).catch(() => {});
+        return replyInteractionEphemeral(
+          interaction,
+          lang === "en"
+            ? `You already have ${res.max} pending reminders; wait until one triggers.`
+            : `Ya tienes ${res.max} recordatorios pendientes, espera a que alguno se cumpla.`
+        );
       }
 
       const ts = Math.floor(remindAt.getTime() / 1000);
