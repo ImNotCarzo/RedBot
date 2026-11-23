@@ -24,6 +24,7 @@ const {
   applyWarnEscalation,
   formatDuration,
   generateId,
+  hierarchyChecks,
   listUnifiedHistoryForUser,
   parseDuration,
 } = require("./moderation");
@@ -423,21 +424,35 @@ async function handleModDossierContext(interaction) {
       const lang = guild?.id ? await getLang(guild.id).catch(() => getCurrentLang()) : getCurrentLang();
       return runWithLang(lang, async () => {
         wrapInteractionForLang(btn, lang);
+        const resolveFreshMember = async (id, fallback) =>
+          (guild.members?.fetch ? await guild.members.fetch(id).catch(() => null) : null) ??
+          (fallback?.roles?.highest ? fallback : null) ??
+          guild.members?.cache?.get?.(id) ??
+          fallback ??
+          null;
         try {
           if (btn.customId === ids.mute) {
             const btnPerms = btn.memberPermissions ?? interaction.member.permissions;
             if (!btnPerms?.has?.(PermissionFlagsBits.ModerateMembers)) {
               return btn.reply({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
-            const me = await fetchBotMember(guild);
+            const [freshMod, freshTarget, me] = await Promise.all([
+              resolveFreshMember(interaction.user.id, btn.member ?? interaction.member),
+              resolveFreshMember(targetUser.id, member),
+              fetchBotMember(guild),
+            ]);
             if (!me?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
               return btn.reply({ content: "No tengo el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
-            if (!member?.moderatable) {
+            const hierr = hierarchyChecks({ guild, member: freshMod, me }, freshTarget, "silenciar a");
+            if (hierr) {
+              return btn.reply({ content: hierr, flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            if (!freshTarget?.moderatable) {
               return btn.reply({ content: "No puedo silenciar a este usuario (jerarquía)", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
             await btn.deferUpdate();
-            await member.timeout(10 * 60_000, `Mute rápido desde expediente por ${interaction.user.tag}`);
+            await freshTarget.timeout(10 * 60_000, `Mute rápido desde expediente por ${interaction.user.tag}`);
             await addModCase({
               guildId: guild.id,
               userId: targetUser.id,
@@ -456,7 +471,7 @@ async function handleModDossierContext(interaction) {
               ],
             });
             const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
-            await btn.editReply(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids }));
+            await btn.editReply(buildDossierPayload({ targetUser, member: freshTarget, cases: refreshed, modMember: freshMod, guild, ids }));
             return;
           }
 
@@ -498,7 +513,16 @@ async function handleModDossierContext(interaction) {
             if (!currentPerms?.has?.(PermissionFlagsBits.KickMembers)) {
               return sub.reply({ content: "No tienes el permiso `KickMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
-            if (!member?.kickable) {
+            const [freshMod, freshTarget, me] = await Promise.all([
+              resolveFreshMember(interaction.user.id, sub.member ?? btn.member ?? interaction.member),
+              resolveFreshMember(targetUser.id, member),
+              fetchBotMember(guild),
+            ]);
+            const hierr = hierarchyChecks({ guild, member: freshMod, me }, freshTarget, "expulsar a");
+            if (hierr) {
+              return sub.reply({ content: hierr, flags: MessageFlags.Ephemeral }).catch(() => {});
+            }
+            if (!freshTarget?.kickable) {
               return sub.reply({ content: "No puedo expulsar a este usuario (jerarquía o permisos)", flags: MessageFlags.Ephemeral }).catch(() => {});
             }
             await sub.deferReply({ flags: MessageFlags.Ephemeral });
@@ -507,7 +531,7 @@ async function handleModDossierContext(interaction) {
                 content: `Fuiste expulsado de **${guild.name}**\nRazón: ${reason}`,
               }).catch(() => {});
             }
-            await member.kick(`${interaction.user.tag}: ${reason}`);
+            await freshTarget.kick(`${interaction.user.tag}: ${reason}`);
             await addModCase({
               guildId: guild.id,
               userId: targetUser.id,
@@ -532,6 +556,15 @@ async function handleModDossierContext(interaction) {
           if (!currentPerms?.has?.(PermissionFlagsBits.ModerateMembers)) {
             return sub.reply({ content: "No tienes el permiso `ModerateMembers`", flags: MessageFlags.Ephemeral }).catch(() => {});
           }
+          const [freshMod, freshTarget, me] = await Promise.all([
+            resolveFreshMember(interaction.user.id, sub.member ?? btn.member ?? interaction.member),
+            resolveFreshMember(targetUser.id, member),
+            fetchBotMember(guild),
+          ]);
+          const hierr = hierarchyChecks({ guild, member: freshMod, me }, freshTarget, "advertir a");
+          if (hierr) {
+            return sub.reply({ content: hierr, flags: MessageFlags.Ephemeral }).catch(() => {});
+          }
           await sub.deferUpdate().catch(() => {});
           const warnId = generateId();
           const { total } = await addWarn({
@@ -546,7 +579,7 @@ async function handleModDossierContext(interaction) {
               content: `Fuiste advertido en **${guild.name}**\nRazón: ${reason}\nTotal warns: \`${total}\` · ID: \`${warnId}\``,
             }).catch(() => {});
           }
-          if (member) await applyWarnEscalation(guild, member, total);
+          if (freshTarget) await applyWarnEscalation(guild, freshTarget, total);
           await logAction(guild, {
             title: "Usuario Advertido (Expediente)",
             color: YELLOW,
@@ -559,7 +592,7 @@ async function handleModDossierContext(interaction) {
             ],
           });
           const refreshed = await listUnifiedHistoryForUser({ guildId: guild.id, userId: targetUser.id });
-          await sub.editReply(buildDossierPayload({ targetUser, member, cases: refreshed, modMember: interaction.member, guild, ids })).catch(async () => {
+          await sub.editReply(buildDossierPayload({ targetUser, member: freshTarget, cases: refreshed, modMember: freshMod, guild, ids })).catch(async () => {
             await sub.followUp({ content: `Advertencia \`${warnId}\` aplicada (total: \`${total}\`).`, flags: MessageFlags.Ephemeral }).catch(() => {});
           });
         } catch (btnErr) {

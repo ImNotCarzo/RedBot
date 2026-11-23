@@ -253,6 +253,22 @@ async function cancelTempBan(guildId, userId) {
   await TempBan.deleteOne({ guildId, userId }).catch(() => {});
 }
 
+function hierarchyChecks(ctx, member, action = "actuar sobre") {
+  if (!member?.roles?.highest) return "No pude obtener al miembro en el servidor";
+  const baseAction = action.replace(/\s+a$/, "");
+  const me = ctx.me ?? ctx.guild?.members?.me;
+  if (member.id === ctx.guild.ownerId) return `No puedo ${baseAction} al dueño del servidor`;
+  if (member.id === me?.id) return `No puedo ${baseAction} a mí mismo`;
+  if (me?.roles?.highest && member.roles.highest.position >= me.roles.highest.position) {
+    return `No puedo ${action} alguien con un rol igual o por encima del mío.`;
+  }
+  const modHighest = ctx.member?.roles?.highest?.position ?? -1;
+  if (ctx.member?.id !== ctx.guild.ownerId && member.roles.highest.position >= modHighest) {
+    return `No puedes ${action} alguien con un rol igual o por encima del tuyo.`;
+  }
+  return null;
+}
+
 async function applyWarnEscalation(guild, member, totalWarns) {
   if (!guild?.id || !member?.id) return null;
   const policy = await getWarnPolicy(guild.id);
@@ -315,4 +331,5 @@ module.exports = {
   upsertTempBan,
   listPendingTempBans,
   scheduleTempUnban,
+  hierarchyChecks,
 };

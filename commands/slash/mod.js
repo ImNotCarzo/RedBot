@@ -39,6 +39,7 @@ const {
   upsertTempBan,
   scheduleTempUnban,
   cancelTempBan,
+  hierarchyChecks,
 } = require("../../src/moderation");
 
 const CASE_TYPE_LABELS = {
@@ -62,20 +63,6 @@ function notifyUser(user, { description, color = RED, fields = null }) {
   if (fields?.length) embed.addFields(fields);
   const finalEmbed = getCurrentLang() === "en" ? translateEmbed(embed, "en") : embed;
   return user.send({ embeds: [finalEmbed] }).catch(() => {});
-}
-
-function hierarchyChecks(ctx, member, action = "actuar sobre") {
-  if (!member?.roles) return "No pude obtener al miembro en el servidor";
-  const baseAction = action.replace(/\s+a$/, "");
-  if (member.id === ctx.guild.ownerId) return `No puedo ${baseAction} al dueño del servidor`;
-  if (member.id === ctx.guild.members.me?.id) return `No puedo ${baseAction} a mí mismo`;
-  if (member.roles.highest.position >= ctx.guild.members.me.roles.highest.position) {
-    return `No puedo ${action} alguien con un rol igual o por encima del mío.`;
-  }
-  if (ctx.member.id !== ctx.guild.ownerId && member.roles.highest.position >= ctx.member.roles.highest.position) {
-    return `No puedes ${action} alguien con un rol igual o por encima del tuyo.`;
-  }
-  return null;
 }
 
 const modTag = (ctx) => ctx.user?.tag;

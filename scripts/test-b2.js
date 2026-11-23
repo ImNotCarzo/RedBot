@@ -574,6 +574,175 @@ async function testB2Bug2WarnModCaseSync() {
   }
 }
 
+async function testB2Bug8ModDossierHierarchy() {
+  const { Warn, ModCase } = require(path.join(ROOT, "src/database"));
+  const { handleModDossierContext } = require(path.join(ROOT, "src/contextMenus"));
+  const { hierarchyChecks } = require(path.join(ROOT, "src/moderation"));
+
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origWarnFind = Warn.find;
+  const origWarnCreate = Warn.create;
+  const origCaseFind = ModCase.find;
+
+  let collectorHandler = null;
+  let timeoutCalls = 0;
+  let kickCalls = 0;
+  let warnCreateCalls = 0;
+
+  let targetPos = 5;
+  const modPos = 10;
+
+  try {
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+    Warn.find = () => ({ sort() { return this; }, lean: async () => [] });
+    ModCase.find = () => ({ sort() { return this; }, lean: async () => [] });
+    Warn.create = async () => {
+      warnCreateCalls++;
+      return {};
+    };
+
+    const modMember = {
+      id: "u_mod_8",
+      permissions: { has: () => true },
+      roles: { highest: { position: modPos } },
+    };
+    const makeTargetMember = () => ({
+      id: "u_target_8",
+      user: { id: "u_target_8", bot: false, tag: "Target#0008", username: "Target", displayAvatarURL: () => "https://cdn.example.com/a.png" },
+      moderatable: true,
+      kickable: true,
+      roles: { highest: { position: targetPos } },
+      timeout: async () => { timeoutCalls++; },
+      kick: async () => { kickCalls++; },
+    });
+    const botMember = {
+      id: "bot_8",
+      permissions: { has: () => true },
+      roles: { highest: { position: 99 } },
+    };
+
+    const guild = {
+      id: null,
+      name: "TestGuild",
+      ownerId: "u_owner_8",
+      members: {
+        me: botMember,
+        cache: new Map([["bot_8", botMember], ["u_mod_8", modMember]]),
+        fetchMe: async () => botMember,
+        fetch: async (id) => {
+          if (id === "u_mod_8") return modMember;
+          if (id === "u_target_8") return makeTargetMember();
+          return null;
+        },
+      },
+    };
+
+    // Comprobar la misma hierarchyChecks directamente
+    assertCondition(
+      hierarchyChecks({ guild, member: modMember, me: botMember }, makeTargetMember(), "advertir a") === null,
+      "B2 #8: hierarchyChecks inicial debía permitir actuar cuando targetPos < modPos"
+    );
+
+    const interaction = {
+      id: "sess_8",
+      guildId: null,
+      guild,
+      user: { id: "u_mod_8", tag: "Mod#0008", username: "Mod" },
+      member: modMember,
+      targetUser: { id: "u_target_8", bot: false, tag: "Target#0008", username: "Target", createdTimestamp: 1_700_000_000_000, displayAvatarURL: () => "https://cdn.example.com/a.png" },
+      targetMember: makeTargetMember(),
+      deferReply: async () => {},
+      editReply: async () => ({
+        createMessageComponentCollector: () => ({
+          on(ev, fn) {
+            if (ev === "collect") collectorHandler = fn;
+          },
+          stop() {},
+        }),
+      }),
+      reply: async () => {},
+    };
+
+    await handleModDossierContext(interaction);
+    assertCondition(typeof collectorHandler === "function", "B2 #8: no se registró colector del expediente");
+
+    // El objetivo sube de rango por encima del moderador después de abrir el expediente
+    targetPos = 15;
+
+    const muteReplies = [];
+    await collectorHandler({
+      id: "btn_mute_8",
+      customId: "modctx:mute:sess_8",
+      memberPermissions: { has: () => true },
+      member: modMember,
+      replied: false,
+      deferred: false,
+      reply: async (p) => { muteReplies.push(p?.content ?? p); },
+      deferUpdate: async () => { throw new Error("No debía hacer deferUpdate en mute inválido"); },
+    });
+    assertCondition(
+      timeoutCalls === 0 && String(muteReplies[0]).includes("rol igual o por encima del tuyo"),
+      `B2 #8 (mute): no rechazó por jerarquía (${JSON.stringify(muteReplies)})`
+    );
+
+    const kickReplies = [];
+    await collectorHandler({
+      id: "btn_kick_8",
+      customId: "modctx:kick:sess_8",
+      memberPermissions: { has: () => true },
+      member: modMember,
+      replied: false,
+      deferred: false,
+      showModal: async () => {},
+      awaitModalSubmit: async () => ({
+        memberPermissions: { has: () => true },
+        member: modMember,
+        fields: {
+          getTextInputValue: () => "Motivo test",
+          getCheckbox: () => false,
+        },
+        reply: async (p) => { kickReplies.push(p?.content ?? p); },
+        deferReply: async () => { throw new Error("No debía hacer deferReply en kick inválido"); },
+      }),
+    });
+    assertCondition(
+      kickCalls === 0 && String(kickReplies[0]).includes("rol igual o por encima del tuyo"),
+      `B2 #8 (kick): no rechazó por jerarquía (${JSON.stringify(kickReplies)})`
+    );
+
+    const warnReplies = [];
+    await collectorHandler({
+      id: "btn_warn_8",
+      customId: "modctx:warn:sess_8",
+      memberPermissions: { has: () => true },
+      member: modMember,
+      replied: false,
+      deferred: false,
+      showModal: async () => {},
+      awaitModalSubmit: async () => ({
+        memberPermissions: { has: () => true },
+        member: modMember,
+        fields: {
+          getTextInputValue: () => "Motivo warn",
+          getCheckbox: () => false,
+        },
+        reply: async (p) => { warnReplies.push(p?.content ?? p); },
+        deferUpdate: async () => { throw new Error("No debía hacer deferUpdate en warn inválido"); },
+      }),
+    });
+    assertCondition(
+      warnCreateCalls === 0 && String(warnReplies[0]).includes("rol igual o por encima del tuyo"),
+      `B2 #8 (warn): no rechazó por jerarquía (${JSON.stringify(warnReplies)})`
+    );
+  } finally {
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    Warn.find = origWarnFind;
+    Warn.create = origWarnCreate;
+    ModCase.find = origCaseFind;
+  }
+}
+
 async function runB2Tests() {
   const checks = [
     ["#1 decodeHtmlEntities", testB2Bug1DecodeHtmlEntities],
@@ -583,6 +752,7 @@ async function runB2Tests() {
     ["#6 memberHasRole APIGuildMember", testB2Bug6MemberHasRole],
     ["#3 auto ruleadd menciones", testB2Bug3AutoRuleMentions],
     ["#2 removewarn/clearwarns ModCase", testB2Bug2WarnModCaseSync],
+    ["#8 expediente mod jerarquía", testB2Bug8ModDossierHierarchy],
   ];
   const extras = [];
   for (const [, fn] of checks) {
