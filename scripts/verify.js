@@ -1173,6 +1173,10 @@ async function main() {
   const { runAdapterTests } = require("./test-adapter");
   const adapterSummary = runAdapterTests();
   console.log(`[OK] Adapter: ${adapterSummary}`);
+
+  const { runApiTests } = require("./test-api");
+  const apiSummary = await runApiTests();
+  console.log(`[OK] API: ${apiSummary}`);
 }
 
 main()
