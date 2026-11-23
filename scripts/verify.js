@@ -315,6 +315,19 @@ function checkI18n(jsFiles, rawPayloads) {
     }
     assertCondition(exactDiffs.length === 0, `Regresión en EXACT_ES_TO_EN vs ${BASELINE_COMMIT}: ${exactDiffs.join(" | ")}`);
 
+    const oldPatternSigs = new Set(
+      oldInternals.PATTERN_ES_TO_EN.map((p) => `${p[0].source}__${p[0].flags}__${String(p[1])}`)
+    );
+    const missingPatternEntries = [];
+    for (const pair of PATTERN_ES_TO_EN) {
+      const sig = `${pair[0].source}__${pair[0].flags}__${String(pair[1])}`;
+      if (!oldPatternSigs.has(sig)) missingPatternEntries.push(pair[0].source);
+    }
+    assertCondition(
+      missingPatternEntries.length === 0,
+      `Patrones alterados respecto a ${BASELINE_COMMIT}: ${missingPatternEntries.join(" | ")}`
+    );
+
     const patternSamples = [
       "Moderador: @Mod",
       "Permisos de @User",
@@ -337,7 +350,46 @@ function checkI18n(jsFiles, rawPayloads) {
     }
     assertCondition(patternDiffs.length === 0, `Regresión en PATTERN_ES_TO_EN vs ${BASELINE_COMMIT}: ${patternDiffs.join(" | ")}`);
 
-    baselineStatus = `0 regresiones vs ${BASELINE_COMMIT} (${Object.keys(EXACT_ES_TO_EN).length} exact, ${patternSamples.length} pattern, ${localizedCurrent.size} payloads)`;
+    const codeDiff = execFileSync(
+      "git",
+      ["diff", "-U0", BASELINE_COMMIT, "--", "commands/", "events/", "src/", ":(exclude)src/i18n.js"],
+      { cwd: ROOT, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }
+    );
+    const diffLines = codeDiff.split(/\r?\n/);
+    const removedLiterals = new Set();
+    for (const line of diffLines) {
+      if (!line.startsWith("-") || line.startsWith("---")) continue;
+      for (const m of line.matchAll(/"([^"\n]{3,200})"/g)) {
+        if (/\s/.test(m[1])) removedLiterals.add(m[1]);
+      }
+    }
+    const addedMessages = new Set();
+    for (const line of diffLines) {
+      if (!line.startsWith("+") || line.startsWith("+++")) continue;
+      if (!/(?:ephemeral\(|replyError\(|error:|Msg\b)/.test(line)) continue;
+      for (const m of line.matchAll(/"([^"\n]{3,200})"/g)) {
+        const msg = m[1];
+        if (!/\s/.test(msg) || removedLiterals.has(msg)) continue;
+        if (/^Tickets are disabled in this server\./.test(msg)) continue;
+        addedMessages.add(msg);
+      }
+    }
+    const modifiedMsgs = [...addedMessages];
+    const missingEn = [];
+    for (const msg of modifiedMsgs) {
+      if (currentI18n.translatePayload({ content: msg }, "en").content === msg) {
+        missingEn.push(msg);
+      }
+    }
+    assertCondition(
+      missingEn.length === 0,
+      `Mensaje modificado sin traducción EN en src/i18n.js: ${missingEn.map((s) => `"${s}"`).join(", ")}`
+    );
+
+    baselineStatus =
+      `0 regresiones vs ${BASELINE_COMMIT} (${Object.keys(EXACT_ES_TO_EN).length} exact, ` +
+      `${PATTERN_ES_TO_EN.length}/${oldInternals.PATTERN_ES_TO_EN.length} pattern, ` +
+      `${modifiedMsgs.length} msg nuevos verificados, ${localizedCurrent.size} payloads)`;
   }
 
   return {
