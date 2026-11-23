@@ -86,19 +86,18 @@ function scheduleLongTimeout(timerMap, key, targetTime, onFire) {
   return timer;
 }
 
-function decodeHtmlEntities(str, { stripCdata = false, trim = false, ampFirst = true } = {}) {
+function decodeHtmlEntities(str, { stripCdata = false, trim = false } = {}) {
   if (!str) return "";
   let out = String(str);
   if (stripCdata) out = out.replace(/<!\[CDATA\[|\]\]>/g, "");
-  if (ampFirst) out = out.replace(/&amp;/g, "&");
   out = out
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"")
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, "/");
-  if (!ampFirst) out = out.replace(/&amp;/g, "&");
+    .replace(/&#x2F;/g, "/")
+    .replace(/&amp;/g, "&");
   return trim ? out.trim() : out;
 }
 

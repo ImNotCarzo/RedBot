@@ -1165,6 +1165,10 @@ async function main() {
 
   await checkGuildConfigCacheInvalidation();
   console.log("[OK] GuildConfig: caché unificada (8 lectores) e invalidación en los 14 flujos de escritura verificadas");
+
+  const { runB2Tests } = require("./test-b2");
+  const b2Summary = await runB2Tests();
+  console.log(`[OK] B2: ${b2Summary}`);
 }
 
 main()

@@ -260,7 +260,7 @@ async function performWebSearch(query) {
           const block = match[1];
           const rawTitle = block.match(/<title>([\s\S]*?)<\/title>/)?.[1];
           const rawDate = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1];
-          const title = rawTitle ? decodeHtmlEntities(rawTitle, { stripCdata: true, trim: true, ampFirst: false }) : "";
+          const title = rawTitle ? decodeHtmlEntities(rawTitle, { stripCdata: true, trim: true }) : "";
           const pubDate = rawDate ? rawDate.trim() : "";
           if (title) snippets.push(pubDate ? `[Noticia - ${pubDate}]: ${title}` : `[Noticia]: ${title}`);
         }
@@ -275,7 +275,7 @@ async function performWebSearch(query) {
         const data = JSON.parse(wpRaw);
         const searchResults = data?.query?.search ?? [];
         for (const item of searchResults.slice(0, 2)) {
-          const cleanSnippet = decodeHtmlEntities((item.snippet || "").replace(/<[^>]+>/g, ""), { stripCdata: true, trim: true, ampFirst: false });
+          const cleanSnippet = decodeHtmlEntities((item.snippet || "").replace(/<[^>]+>/g, ""), { stripCdata: true, trim: true });
           if (cleanSnippet) {
             snippets.push(`[Wikipedia - ${item.title}]: ${cleanSnippet}`);
           }
