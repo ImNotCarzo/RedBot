@@ -3,7 +3,7 @@ const { ChannelType } = require("discord.js");
 const { isObfuscatedChannel } = require("../runtime");
 const { state } = require("./context");
 const { json, isAuthorized, readJsonBody } = require("./http");
-const { getRequestSession, canManageGuild } = require("./session");
+const { getRequestSession, checkGuildAdminAccess } = require("./session");
 
 async function handleTicketsRoute(req, res, pathname, preloadedSession = undefined) {
   const match = pathname.match(/^\/api\/tickets\/(\d{17,22})(?:\/(config|panel))?$/);
@@ -15,8 +15,16 @@ async function handleTicketsRoute(req, res, pathname, preloadedSession = undefin
 
   const session = preloadedSession !== undefined ? preloadedSession : getRequestSession(req);
   const hasApiKey = Boolean(state.apiConfig?.API_KEY) && isAuthorized(req);
+  const isWrite = req.method === "PUT" || req.method === "POST";
   if (session) {
-    if (!canManageGuild(session, guildId, guild)) {
+    // Lecturas GET usan members.cache + fetch si falta; escrituras PUT/POST fuerzan fetch remoto.
+    // Si el bot no está en el servidor (guild === null), nunca se autoriza ni lectura ni escritura.
+    const perm = await checkGuildAdminAccess(session, guildId, guild, { force: isWrite });
+    if (!perm.ok) {
+      json(res, 503, { error: "No se pudieron verificar los permisos del servidor en Discord." }, { noStore: true });
+      return true;
+    }
+    if (!perm.allowed) {
       json(res, 403, { error: "No tienes permisos de administración (ManageGuild) en este servidor." });
       return true;
     }

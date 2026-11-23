@@ -10,6 +10,8 @@ const MAX_OAUTH_STATES = 2000;
 const DASHBOARD_SESSION_TTL_MS = 24 * 60 * 60_000;
 const MAX_DASHBOARD_SESSIONS = 2000;
 const MAX_REVOKED_SESSIONS = 5000;
+const MEMBER_ABSENCE_TTL_MS = 60_000;
+const MAX_MEMBER_ABSENCE_ENTRIES = 2000;
 const PUBLIC_BROWSER_ROUTES = new Set([
   "/api/stats",
   "/api/commands",
@@ -27,6 +29,8 @@ const rateStore = new Map();
 const oauthStates = new Map();
 const dashboardSessions = new Map();
 const revokedSessions = new Map();
+// Cachea unicamente ausencias confirmadas de miembro (10007/10013) durante 60s; nunca aciertos positivos.
+const memberPermCache = new Map();
 
 const state = {
   server: null,
@@ -47,6 +51,7 @@ function clearAllStores() {
   oauthStates.clear();
   dashboardSessions.clear();
   revokedSessions.clear();
+  memberPermCache.clear();
 }
 
 module.exports = {
@@ -59,11 +64,14 @@ module.exports = {
   DASHBOARD_SESSION_TTL_MS,
   MAX_DASHBOARD_SESSIONS,
   MAX_REVOKED_SESSIONS,
+  MEMBER_ABSENCE_TTL_MS,
+  MAX_MEMBER_ABSENCE_ENTRIES,
   PUBLIC_BROWSER_ROUTES,
   rateStore,
   oauthStates,
   dashboardSessions,
   revokedSessions,
+  memberPermCache,
   state,
   setApiContext,
   clearAllStores,

@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { withTimeout } = require("../runtime");
 const {
   EPHEMERAL_SESSION_SECRET,
   RATE_WINDOW_MS,
@@ -7,13 +8,18 @@ const {
   DASHBOARD_SESSION_TTL_MS,
   MAX_DASHBOARD_SESSIONS,
   MAX_REVOKED_SESSIONS,
+  MEMBER_ABSENCE_TTL_MS,
+  MAX_MEMBER_ABSENCE_ENTRIES,
   rateStore,
   oauthStates,
   dashboardSessions,
   revokedSessions,
+  memberPermCache,
   state,
 } = require("./context");
 const { parseCookies, safeEqualString } = require("./http");
+
+const MEMBER_FETCH_TIMEOUT_MS = 5000;
 
 function issueOAuthState(meta = null) {
   const now = Date.now();
@@ -156,16 +162,95 @@ function getRequestSession(req) {
   return null;
 }
 
-function canManageGuild(session, guildId, guild = null) {
-  if (!session) return false;
-  const gid = String(guildId);
-  if (Array.isArray(session.adminGuildIds) && session.adminGuildIds.includes(gid)) return true;
-  if (guild && String(guild.ownerId) === String(session.uid)) return true;
-  const member = guild?.members?.cache?.get?.(String(session.uid));
-  if (member?.permissions?.has?.(["ManageGuild"]) || member?.permissions?.has?.(["Administrator"])) {
-    return true;
+function hasLiveAdminPerms(member) {
+  return Boolean(
+    member?.permissions?.has?.(["ManageGuild"]) || member?.permissions?.has?.(["Administrator"])
+  );
+}
+
+function recordConfirmedMemberAbsence(cacheKey, now = Date.now()) {
+  if (memberPermCache.size >= MAX_MEMBER_ABSENCE_ENTRIES && !memberPermCache.has(cacheKey)) {
+    for (const [k, exp] of memberPermCache) {
+      if (!exp || exp <= now) memberPermCache.delete(k);
+    }
+    if (memberPermCache.size >= MAX_MEMBER_ABSENCE_ENTRIES) {
+      const oldest = memberPermCache.keys().next().value;
+      if (oldest !== undefined) memberPermCache.delete(oldest);
+    }
   }
-  return false;
+  memberPermCache.set(cacheKey, now + MEMBER_ABSENCE_TTL_MS);
+}
+
+function isConfirmedMemberAbsent(cacheKey, now = Date.now()) {
+  const exp = memberPermCache.get(cacheKey);
+  if (!exp) return false;
+  if (exp <= now) {
+    memberPermCache.delete(cacheKey);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Revalida permisos administrativos en vivo contra Discord para un usuario en un servidor.
+ * - Lecturas (GET, force=false): usa `guild.members.cache` (actualizado por GatewayIntentBits.GuildMembers)
+ *   y solo consulta REST si el miembro no está en caché.
+ * - Escrituras (PUT/POST, force=true): fuerza `guild.members.fetch({ user, force: true })` antes de
+ *   autorizar para evitar aceptar permisos en caché desfasados tras pérdidas de eventos Gateway o reconexiones.
+ * - Cachea en `memberPermCache` SOLO ausencias confirmadas (10007/10013) por 60s; nunca aciertos ni errores 5xx/timeout.
+ */
+async function resolveLiveGuildAdminStatus(guild, userId, { force = false } = {}) {
+  if (!guild || !userId) return { ok: true, allowed: false };
+  const uid = String(userId);
+  if (guild.ownerId && String(guild.ownerId) === uid) {
+    return { ok: true, allowed: true };
+  }
+
+  const cacheKey = `${guild.id}:${uid}`;
+  const cachedMember = guild.members?.cache?.get?.(uid) ?? null;
+  if (cachedMember) {
+    memberPermCache.delete(cacheKey);
+  }
+  if (!force && cachedMember) {
+    return { ok: true, allowed: hasLiveAdminPerms(cachedMember) };
+  }
+
+  if (isConfirmedMemberAbsent(cacheKey)) {
+    return { ok: true, allowed: false };
+  }
+
+  if (typeof guild.members?.fetch !== "function") {
+    return { ok: false, allowed: false };
+  }
+
+  try {
+    const fetchPromise = force
+      ? guild.members.fetch({ user: uid, force: true })
+      : guild.members.fetch(uid);
+    const member = await withTimeout(fetchPromise, MEMBER_FETCH_TIMEOUT_MS, "Verificación de permisos de miembro");
+    if (!member) {
+      recordConfirmedMemberAbsence(cacheKey);
+      return { ok: true, allowed: false };
+    }
+    memberPermCache.delete(cacheKey);
+    return { ok: true, allowed: hasLiveAdminPerms(member) };
+  } catch (err) {
+    if (err?.code === 10007 || err?.code === 10013) {
+      recordConfirmedMemberAbsence(cacheKey);
+      return { ok: true, allowed: false };
+    }
+    return { ok: false, allowed: false };
+  }
+}
+
+async function checkGuildAdminAccess(session, guildId, guild = null, { force = false } = {}) {
+  if (!session || !guild) return { ok: true, allowed: false };
+  return resolveLiveGuildAdminStatus(guild, session.uid, { force });
+}
+
+async function canManageGuild(session, guildId, guild = null, { force = false } = {}) {
+  const result = await checkGuildAdminAccess(session, guildId, guild, { force });
+  return Boolean(result.ok && result.allowed);
 }
 
 function revokeDashboardSession(session) {
@@ -192,6 +277,9 @@ function pruneExpiredStores(now = Date.now()) {
   for (const [sid, exp] of revokedSessions) {
     if (!exp || exp <= now) revokedSessions.delete(sid);
   }
+  for (const [key, exp] of memberPermCache) {
+    if (!exp || exp <= now) memberPermCache.delete(key);
+  }
 }
 
 module.exports = {
@@ -199,6 +287,9 @@ module.exports = {
   consumeOAuthStateEntry,
   getSessionSecret,
   hasManageGuildBits,
+  hasLiveAdminPerms,
+  resolveLiveGuildAdminStatus,
+  checkGuildAdminAccess,
   createDashboardSession,
   verifyDashboardSessionToken,
   getRequestSession,

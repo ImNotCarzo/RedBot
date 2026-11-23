@@ -12,6 +12,8 @@ const { ChannelType } = require("discord.js");
 const ROOT = path.resolve(__dirname, "..");
 const BASELINE_COMMIT = "2d06da3";
 const GUILD_ALLOWED = "111111111111111111";
+const GUILD_OWNER = "666666666666666666";
+const GUILD_ABSENT = "777777777777777777";
 const GUILD_FORBIDDEN = "888888888888888888";
 const GUILD_MISSING = "999888777666555444";
 const USER_ID = "222222222222222222";
@@ -316,6 +318,20 @@ function installApiMocks() {
   const roleMain = { id: ROLE_ID, name: "Soporte", position: 5, managed: false, hexColor: "#ff383d" };
   const roleEveryone = { id: GUILD_ALLOWED, name: "@everyone", position: 0, managed: false, hexColor: "#000000" };
 
+  const makeMockMember = (id, perms = []) => {
+    const set = new Set(perms);
+    return {
+      id,
+      permissions: {
+        has: (reqPerms) => {
+          const list = Array.isArray(reqPerms) ? reqPerms : [reqPerms];
+          return list.every((p) => set.has(p));
+        },
+      },
+    };
+  };
+
+  const defaultAllowedMember = makeMockMember(USER_ID, ["ManageGuild"]);
   const guildAllowed = {
     id: GUILD_ALLOWED,
     name: "TestGuild",
@@ -326,7 +342,10 @@ function installApiMocks() {
     roles: { cache: new Map([[GUILD_ALLOWED, roleEveryone], [ROLE_ID, roleMain]]) },
     emojis: { cache: new Map() },
     stickers: { cache: new Map() },
-    members: { cache: new Map() },
+    members: {
+      cache: new Map([[USER_ID, defaultAllowedMember]]),
+      fetch: async () => defaultAllowedMember,
+    },
   };
   const guildForbidden = {
     id: GUILD_FORBIDDEN,
@@ -338,7 +357,10 @@ function installApiMocks() {
     roles: { cache: new Map() },
     emojis: { cache: new Map() },
     stickers: { cache: new Map() },
-    members: { cache: new Map() },
+    members: {
+      cache: new Map(),
+      fetch: async () => makeMockMember(USER_ID, []),
+    },
   };
 
   const mockClient = {
@@ -368,6 +390,8 @@ function installApiMocks() {
     guildStore.clear();
     userStore.clear();
     invalidateGuildConfigCache();
+    guildAllowed.members.cache = new Map([[USER_ID, defaultAllowedMember]]);
+    guildAllowed.members.fetch = async () => defaultAllowedMember;
   };
 
   const setTestEnv = (vals = {}) => {
@@ -393,7 +417,7 @@ function installApiMocks() {
     global.fetch = origFetch;
   };
 
-  return { mockClient, silentLogger, resetStores, setTestEnv, restore };
+  return { mockClient, silentLogger, resetStores, setTestEnv, restore, makeMockMember };
 }
 
 function isRedirectTo(loc, prefix) {
@@ -725,6 +749,7 @@ function checkSingletonDeclarations() {
     "oauthStates",
     "dashboardSessions",
     "revokedSessions",
+    ...(isSplit ? ["memberPermCache"] : []),
   ];
   const counts = {};
   for (const name of singletons) {
@@ -892,6 +917,310 @@ async function verifyB3LogoutPostOnly(currentApi, baselineApi, envCtrl) {
   return { baselineGetStatus };
 }
 
+async function verifyB3CanManageGuildLive(currentApi, baselineApi, envCtrl) {
+  const { mockClient, silentLogger, resetStores, setTestEnv, makeMockMember } = envCtrl;
+  const contextMod = require(path.join(ROOT, "src/api/context"));
+  const sessionMod = require(path.join(ROOT, "src/api/session"));
+
+  resetStores();
+  setTestEnv({});
+
+  const configBase = {
+    API_HOST: "127.0.0.1",
+    TRUST_PROXY: true,
+    API_KEY: TEST_API_KEY,
+    CLIENT_ID: TEST_CLIENT_ID,
+    CLIENT_SECRET: TEST_CLIENT_SECRET,
+    SESSION_SECRET: TEST_SESSION_SECRET,
+    OAUTH_REDIRECT_URI: "http://127.0.0.1/api/oauth/callback",
+    DASHBOARD_URL: "https://redbot.me/tickets",
+  };
+
+  const categoryCh = { id: CAT_ID, name: "Tickets", type: ChannelType.GuildCategory };
+  const textCh = {
+    id: TEXT_CH_ID,
+    name: "soporte",
+    type: ChannelType.GuildText,
+    parentId: CAT_ID,
+    isTextBased: () => true,
+    send: async () => ({ id: "777777777777777777" }),
+    messages: { fetch: async () => null },
+  };
+  const roleMain = { id: ROLE_ID, name: "Soporte", position: 5, managed: false, hexColor: "#ff383d" };
+
+  let ownerFetchCalled = 0;
+  const guildOwner = {
+    id: GUILD_OWNER,
+    name: "OwnerGuild",
+    ownerId: USER_ID,
+    memberCount: 20,
+    iconURL: () => null,
+    channels: { cache: new Map([[CAT_ID, categoryCh], [TEXT_CH_ID, textCh]]) },
+    roles: { cache: new Map([[GUILD_OWNER, { id: GUILD_OWNER, name: "@everyone", position: 0 }], [ROLE_ID, roleMain]]) },
+    emojis: { cache: new Map() },
+    stickers: { cache: new Map() },
+    members: {
+      cache: new Map(),
+      fetch: async () => {
+        ownerFetchCalled++;
+        throw new Error("No debe hacer fetch si es dueño");
+      },
+    },
+  };
+
+  const guildAllowed = mockClient.guilds.cache.get(GUILD_ALLOWED);
+  const origGuildsCache = new Map(mockClient.guilds.cache);
+  mockClient.guilds.cache.set(GUILD_OWNER, guildOwner);
+
+  const port = await getFreePort();
+  await currentApi.startApi(mockClient, { ...configBase, API_PORT: port }, silentLogger);
+
+  try {
+    // Sesión con adminGuildIds que incluye GUILD_ALLOWED, GUILD_OWNER y GUILD_ABSENT (bot ausente)
+    const token = sessionMod.createDashboardSession({
+      user: { id: USER_ID, username: "Tester", globalName: "Tester", avatar: null },
+      guilds: [
+        { id: GUILD_ALLOWED, name: "TestGuild", icon: null, owner: false, permissions: String(1n << 5n) },
+        { id: GUILD_OWNER, name: "OwnerGuild", icon: null, owner: true, permissions: "0" },
+        { id: GUILD_ABSENT, name: "AbsentGuild", icon: null, owner: false, permissions: String(1n << 5n) },
+      ],
+    });
+    const baseAuth = { Cookie: `redbot_session=${encodeURIComponent(token)}` };
+    const headersFor = (ip) => ({ ...baseAuth, "X-Forwarded-For": ip });
+
+    let fetchCalls = [];
+    let liveMemberResult = makeMockMember(USER_ID, ["ManageGuild"]);
+    let fetchError = null;
+    guildAllowed.members.cache = new Map([[USER_ID, makeMockMember(USER_ID, ["ManageGuild"])]]);
+    guildAllowed.members.fetch = async (arg) => {
+      fetchCalls.push(arg);
+      if (fetchError) throw fetchError;
+      if (liveMemberResult) guildAllowed.members.cache.set(USER_ID, liveMemberResult);
+      return liveMemberResult;
+    };
+
+    // 1. GET usa cache (0 fetch); si falta cache hace 1 fetch sin force; PUT/POST SIEMPRE usan force:true
+    const rGetCached = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.1") });
+    assertCondition(rGetCached.status === 200 && fetchCalls.length === 0, "B3 #1: GET con caché no debe llamar fetch");
+
+    guildAllowed.members.cache.clear();
+    const rGetMiss = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.1") });
+    assertCondition(
+      rGetMiss.status === 200 && fetchCalls.length === 1 && fetchCalls[0] === USER_ID,
+      "B3 #1: GET sin caché debe hacer 1 fetch sin force"
+    );
+
+    const rPutForce = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_ALLOWED}/config`,
+      headers: headersFor("10.1.0.1"),
+      body: { enabled: true },
+    });
+    assertCondition(
+      rPutForce.status === 200 &&
+        fetchCalls.length === 2 &&
+        typeof fetchCalls[1] === "object" &&
+        fetchCalls[1]?.user === USER_ID &&
+        fetchCalls[1]?.force === true,
+      "B3 #1: PUT debe forzar members.fetch({ user, force: true })"
+    );
+    assertCondition(contextMod.memberPermCache.size === 0, "B3 #1: memberPermCache no debe cachear aciertos de permiso");
+
+    // 2. Admin degradado: caché stale en PUT/POST -> 403; luego en GET -> 403; y desaparece del listado
+    liveMemberResult = makeMockMember(USER_ID, []);
+    guildAllowed.members.cache.set(USER_ID, makeMockMember(USER_ID, ["ManageGuild"])); // caché obsoleta antes de PUT
+    const rPutDemoted = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_ALLOWED}/config`,
+      headers: headersFor("10.1.0.2"),
+      body: { enabled: false },
+    });
+    assertCondition(rPutDemoted.status === 403, `B3 #1: admin degradado en PUT esperado 403, obtuvo ${rPutDemoted.status}`);
+
+    const rPanelDemoted = await httpRequest(port, {
+      method: "POST",
+      path: `/api/tickets/${GUILD_ALLOWED}/panel`,
+      headers: headersFor("10.1.0.2"),
+      body: { channelId: TEXT_CH_ID, title: "X" },
+    });
+    assertCondition(rPanelDemoted.status === 403, `B3 #1: admin degradado en POST panel esperado 403, obtuvo ${rPanelDemoted.status}`);
+
+    const rGetDemoted = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.2") });
+    assertCondition(rGetDemoted.status === 403, `B3 #1: admin degradado en GET esperado 403, obtuvo ${rGetDemoted.status}`);
+
+    const rListDemoted = await httpRequest(port, { path: "/api/dashboard/guilds", headers: headersFor("10.1.0.2") });
+    assertCondition(
+      rListDemoted.status === 200 &&
+        !rListDemoted.json?.guilds?.some((g) => g.id === GUILD_ALLOWED),
+      "B3 #1: admin degradado debe desaparecer de /api/dashboard/guilds"
+    );
+    const rMeDemoted = await httpRequest(port, { path: "/api/auth/me", headers: headersFor("10.1.0.2") });
+    assertCondition(
+      rMeDemoted.status === 200 && !rMeDemoted.json?.guilds?.some((g) => g.id === GUILD_ALLOWED),
+      "B3 #1: admin degradado debe desaparecer de /api/auth/me"
+    );
+
+    // 3. Miembro que sale del servidor (10007 Unknown Member) -> 403 y cacheado 60s solo como ausencia
+    guildAllowed.members.cache.clear();
+    fetchCalls = [];
+    fetchError = Object.assign(new Error("Unknown Member"), { code: 10007 });
+    const rLeftGet1 = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.3") });
+    assertCondition(rLeftGet1.status === 403 && fetchCalls.length === 1, "B3 #1: miembro 10007 esperado 403");
+    assertCondition(contextMod.memberPermCache.size === 1, "B3 #1: ausencia 10007 debe cachearse en memberPermCache");
+
+    const rLeftGet2 = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.3") });
+    assertCondition(rLeftGet2.status === 403 && fetchCalls.length === 1, "B3 #1: ausencia cacheada no debe repetir fetch por 60s");
+
+    const rLeftPut = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_ALLOWED}/config`,
+      headers: headersFor("10.1.0.3"),
+      body: { enabled: true },
+    });
+    assertCondition(rLeftPut.status === 403 && fetchCalls.length === 1, "B3 #1: ausencia 10007 en PUT esperado 403");
+
+    const rLeftList = await httpRequest(port, { path: "/api/dashboard/guilds", headers: headersFor("10.1.0.3") });
+    assertCondition(
+      rLeftList.status === 200 && !rLeftList.json?.guilds?.some((g) => g.id === GUILD_ALLOWED),
+      "B3 #1: miembro ausente 10007 no debe aparecer en listado"
+    );
+
+    // 4. Fallo de Discord (5xx / timeout) -> 503 y SIN cachear el error; recuperación inmediata al restaurar
+    contextMod.memberPermCache.clear();
+    guildAllowed.members.cache.clear();
+    fetchCalls = [];
+    fetchError = Object.assign(new Error("Discord 503 Service Unavailable"), { status: 503 });
+    const r503Get = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.4") });
+    assertCondition(
+      r503Get.status === 503 && r503Get.headers["cache-control"] === "no-store",
+      `B3 #1: fallo Discord 5xx en GET esperado 503 no-store, obtuvo ${r503Get.status}`
+    );
+    assertCondition(contextMod.memberPermCache.size === 0, "B3 #1: error 5xx no debe cachearse en memberPermCache");
+
+    const r503Put = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_ALLOWED}/config`,
+      headers: headersFor("10.1.0.4"),
+      body: { enabled: true },
+    });
+    assertCondition(r503Put.status === 503 && contextMod.memberPermCache.size === 0, "B3 #1: fallo 5xx en PUT esperado 503 sin caché");
+
+    const r503List = await httpRequest(port, { path: "/api/dashboard/guilds", headers: headersFor("10.1.0.4") });
+    assertCondition(
+      r503List.status === 200 && !r503List.json?.guilds?.some((g) => g.id === GUILD_ALLOWED),
+      "B3 #1: fallo Discord debe omitir temporalmente la guild no verificable del listado"
+    );
+
+    // Timeout / error transitorio en siguiente intento y recuperación inmediata
+    fetchError = Object.assign(new Error("Request timed out"), { code: "ETIMEDOUT" });
+    const rTimeout503 = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.4") });
+    assertCondition(rTimeout503.status === 503 && contextMod.memberPermCache.size === 0, "B3 #1: timeout esperado 503 sin caché");
+
+    fetchError = null;
+    liveMemberResult = makeMockMember(USER_ID, ["Administrator"]); // Administrator sin ManageGuild
+    const rRecoveredAdmin = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: headersFor("10.1.0.4") });
+    assertCondition(rRecoveredAdmin.status === 200 && contextMod.memberPermCache.size === 0, "B3 #1: recuperación inmediata con Administrator debe dar 200");
+
+    // 5. Administrator sin ManageGuild permitido en lectura, escritura y listado
+    const rAdminWrite = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_ALLOWED}/config`,
+      headers: headersFor("10.1.0.5"),
+      body: { enabled: true },
+    });
+    assertCondition(rAdminWrite.status === 200, `B3 #1: Administrator sin ManageGuild en PUT esperado 200, obtuvo ${rAdminWrite.status}`);
+
+    const rAdminList = await httpRequest(port, { path: "/api/dashboard/guilds", headers: headersFor("10.1.0.5") });
+    const adminEntry = rAdminList.json?.guilds?.find((g) => g.id === GUILD_ALLOWED);
+    assertCondition(adminEntry?.botPresent === true, "B3 #1: Administrator debe listarse con botPresent:true");
+
+    // 6. Dueño del servidor siempre permitido (sin llamar fetch)
+    const rOwnerGet = await httpRequest(port, { path: `/api/tickets/${GUILD_OWNER}`, headers: headersFor("10.1.0.6") });
+    const rOwnerPut = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_OWNER}/config`,
+      headers: headersFor("10.1.0.6"),
+      body: { enabled: true },
+    });
+    assertCondition(
+      rOwnerGet.status === 200 && rOwnerPut.status === 200 && ownerFetchCalled === 0,
+      "B3 #1: dueño debe autorizarse siempre sin llamar fetch"
+    );
+    const ownerEntry = rAdminList.json?.guilds?.find((g) => g.id === GUILD_OWNER);
+    assertCondition(ownerEntry?.botPresent === true, "B3 #1: servidor propio debe listarse con botPresent:true");
+
+    // 7. Sesión válida con el bot ausente: sin acceso en lecturas ni escrituras y nunca botPresent:true
+    const rAbsentGet = await httpRequest(port, { path: `/api/tickets/${GUILD_ABSENT}`, headers: headersFor("10.1.0.7") });
+    const rAbsentPut = await httpRequest(port, {
+      method: "PUT",
+      path: `/api/tickets/${GUILD_ABSENT}/config`,
+      headers: headersFor("10.1.0.7"),
+      body: { enabled: true },
+    });
+    const rAbsentPost = await httpRequest(port, {
+      method: "POST",
+      path: `/api/tickets/${GUILD_ABSENT}/panel`,
+      headers: headersFor("10.1.0.7"),
+      body: { channelId: TEXT_CH_ID },
+    });
+    assertCondition(
+      rAbsentGet.status === 403 && rAbsentPut.status === 403 && rAbsentPost.status === 403,
+      `B3 #1: bot ausente debe devolver 403 en GET/PUT/POST, obtuvo ${rAbsentGet.status}/${rAbsentPut.status}/${rAbsentPost.status}`
+    );
+    const absentEntry = rAdminList.json?.guilds?.find((g) => g.id === GUILD_ABSENT);
+    assertCondition(absentEntry && absentEntry.botPresent === false, "B3 #1: bot ausente solo puede aparecer con botPresent:false");
+
+    // 8. Verificar que el orden (OPTIONS 204 -> 405 -> 429 -> 401 -> 404) y rate limit siguen idénticos
+    const rlHeaders = headersFor("10.1.0.99");
+    for (let i = 0; i < 30; i++) {
+      const r = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: rlHeaders });
+      assertCondition(r.headers["x-ratelimit-remaining"] === String(29 - i), "B3 #1: rate limit alterado en tickets");
+    }
+    const callsBefore429 = fetchCalls.length;
+    const rTickets429 = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: rlHeaders });
+    assertCondition(
+      rTickets429.status === 429 && fetchCalls.length === callsBefore429,
+      "B3 #1: 429 debe disparar antes de auth/revalidación Discord"
+    );
+  } finally {
+    await currentApi.stopApi();
+    mockClient.guilds.cache.clear();
+    for (const [k, v] of origGuildsCache) mockClient.guilds.cache.set(k, v);
+    resetStores();
+  }
+
+  assertCondition(contextMod.memberPermCache.size === 0, "B3 #1: stopApi() debe vaciar memberPermCache");
+
+  // Confirmar diff intencional contra baseline 2d06da3 (degradado seguía recibiendo 200 por adminGuildIds)
+  let baselineDemotedStatus = null;
+  if (baselineApi) {
+    resetStores();
+    guildAllowed.members.cache = new Map([[USER_ID, makeMockMember(USER_ID, [])]]);
+    const portBase = await getFreePort();
+    await baselineApi.startApi(mockClient, { ...configBase, API_PORT: portBase }, silentLogger);
+    try {
+      const rLogin = await httpRequest(portBase, { path: "/api/auth/login?return_to=http://127.0.0.1:4321/tickets" });
+      const dashState = extractCookieValue(rLogin.headers["set-cookie"], "redbot_oauth_state");
+      const rCb = await httpRequest(portBase, {
+        path: `/api/oauth/callback?code=dashcode&state=${encodeURIComponent(dashState)}`,
+        headers: { Cookie: `redbot_oauth_state=${dashState}` },
+      });
+      const baseToken = extractCookieValue(rCb.headers["set-cookie"], "redbot_session");
+      const rBaseTickets = await httpRequest(portBase, {
+        path: `/api/tickets/${GUILD_ALLOWED}`,
+        headers: { Cookie: `redbot_session=${encodeURIComponent(baseToken)}` },
+      });
+      baselineDemotedStatus = rBaseTickets.status;
+      assertCondition(baselineDemotedStatus === 200, `Baseline ${BASELINE_COMMIT} debía permitir 200 por adminGuildIds`);
+    } finally {
+      await baselineApi.stopApi();
+      resetStores();
+    }
+  }
+
+  return { baselineDemotedStatus };
+}
+
 async function runApiTests({ verbose = false } = {}) {
   const envCtrl = installApiMocks();
   try {
@@ -917,12 +1246,13 @@ async function runApiTests({ verbose = false } = {}) {
 
     const splitChecks = await verifySplitModuleSingletons(envCtrl);
     const b3LogoutCheck = await verifyB3LogoutPostOnly(currentApi, baselineApi, envCtrl);
+    const b3PermCheck = await verifyB3CanManageGuildLive(currentApi, baselineApi, envCtrl);
 
     const modeLabel = singletonInfo.isSplit ? "modular (src/api/)" : "monolito (src/api.js)";
     const vsLabel = baselineRun ? `vs ${BASELINE_COMMIT}: 0 diffs` : "sin historial git";
     const summary =
       `${snapshotKeys.length} escenarios HTTP (${modeLabel}, ${vsLabel}), ` +
-      `B3 #2 (logout solo POST, GET->405 intencional vs ${BASELINE_COMMIT}), ` +
+      `B3 #2 (logout solo POST, GET->405), B3 #1 (permisos en vivo: degradado/10007->403, 5xx/timeout->503, owner/Admin->200, bot ausente->403), ` +
       `rate limit compartido, orden 204/405/429/401/404, stopApi sin fugas OK`;
 
     if (verbose) {
@@ -932,6 +1262,9 @@ async function runApiTests({ verbose = false } = {}) {
       console.log(`Módulos split (session -> tickets + EPHEMERAL_SESSION_SECRET): ${splitChecks.tested ? "OK" : "N/A (aún monolito)"}`);
       console.log(
         `B3 #2 logout solo POST: GET /auth/logout y GET /api/auth/logout -> 405 (diff intencional vs ${BASELINE_COMMIT} GET->${b3LogoutCheck.baselineGetStatus ?? "N/A"}), POST -> 200 y revoca`
+      );
+      console.log(
+        `B3 #1 revalidación en vivo: GET cache/miss-fetch, PUT/POST force:true, degradado/10007 -> 403 (diff intencional vs ${BASELINE_COMMIT} ->${b3PermCheck.baselineDemotedStatus ?? "N/A"}), 5xx/timeout -> 503 sin caché, owner/Admin -> 200, bot ausente -> 403, memberPermCache limpia en stopApi()`
       );
       console.log(
         `Handles tras stopApi(): TCPServerWrap ${currentRun.resourcesBefore.TCPServerWrap} -> ${currentRun.resourcesAfter.TCPServerWrap}, ` +

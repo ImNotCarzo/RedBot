@@ -866,6 +866,8 @@ const EXACT_ES_TO_EN = {
   "No encontré ese canal en el servidor": "Could not find that channel in this server",
   "No encontré ese rol en el servidor": "Could not find that role in this server",
   "No puedo advertir a alguien con un rol igual o por encima del mío.": "I can't warn someone with a role equal to or above mine.",
+  // Lote B3
+  "No se pudieron verificar los permisos del servidor en Discord.": "Could not verify server permissions on Discord.",
 };
 
 const LANG_NAME_ES_TO_EN = {

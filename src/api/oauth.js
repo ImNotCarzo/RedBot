@@ -4,6 +4,8 @@ const { json, sendHtml, parseCookies, safeEqualString } = require("./http");
 const {
   issueOAuthState,
   consumeOAuthStateEntry,
+  hasLiveAdminPerms,
+  resolveLiveGuildAdminStatus,
   createDashboardSession,
   getRequestSession,
   revokeDashboardSession,
@@ -223,46 +225,76 @@ function handleAuthLoginRedirect(req, res, urlObj) {
   res.end();
 }
 
-function handleDashboardGuilds(req, res, preloadedSession = undefined) {
+async function handleDashboardGuilds(req, res, preloadedSession = undefined) {
   const session = preloadedSession !== undefined ? preloadedSession : getRequestSession(req);
   if (!session) {
     return json(res, 401, { error: "Unauthorized" }, { noStore: true });
   }
 
   const byId = new Map();
+  const seenIds = new Set();
+  const pendingLiveChecks = [];
   const botGuilds = state.botClient?.guilds?.cache;
+  const uid = String(session.uid);
+
+  const buildBotGuildEntry = (id, botGuild, cachedGuild = null) => ({
+    id,
+    name: botGuild?.name ?? String(cachedGuild?.name || id),
+    icon:
+      botGuild?.iconURL?.({ size: 128 }) ??
+      (cachedGuild?.icon ? `https://cdn.discordapp.com/icons/${id}/${cachedGuild.icon}.png?size=128` : null),
+    botPresent: Boolean(botGuild),
+    memberCount: botGuild?.memberCount ?? null,
+  });
 
   for (const g of session.cached?.guilds ?? []) {
     if (!g?.id) continue;
     const id = String(g.id);
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
     const botGuild = botGuilds?.get?.(id) ?? null;
-    byId.set(id, {
-      id,
-      name: botGuild?.name ?? String(g.name || id),
-      icon: botGuild?.iconURL?.({ size: 128 }) ?? (g.icon ? `https://cdn.discordapp.com/icons/${id}/${g.icon}.png?size=128` : null),
-      botPresent: Boolean(botGuild),
-      memberCount: botGuild?.memberCount ?? null,
-    });
+    if (!botGuild) {
+      byId.set(id, buildBotGuildEntry(id, null, g));
+    } else {
+      pendingLiveChecks.push({ id, botGuild, cachedGuild: g });
+    }
   }
 
   if (botGuilds) {
     const adminSet = new Set((session.adminGuildIds || []).map(String));
     for (const bg of botGuilds.values()) {
       const id = String(bg.id);
-      if (byId.has(id)) continue;
-      const member = bg.members?.cache?.get?.(String(session.uid));
-      const isAllowed =
-        adminSet.has(id) ||
-        String(bg.ownerId) === String(session.uid) ||
-        Boolean(member?.permissions?.has?.(["ManageGuild"]) || member?.permissions?.has?.(["Administrator"]));
-      if (isAllowed) {
-        byId.set(id, {
-          id,
-          name: bg.name ?? id,
-          icon: bg.iconURL?.({ size: 128 }) ?? null,
-          botPresent: true,
-          memberCount: bg.memberCount ?? null,
-        });
+      if (seenIds.has(id)) continue;
+      if (String(bg.ownerId) === uid) {
+        seenIds.add(id);
+        byId.set(id, buildBotGuildEntry(id, bg, null));
+        continue;
+      }
+      const member = bg.members?.cache?.get?.(uid);
+      if (member) {
+        seenIds.add(id);
+        if (hasLiveAdminPerms(member)) {
+          byId.set(id, buildBotGuildEntry(id, bg, null));
+        }
+        continue;
+      }
+      if (adminSet.has(id)) {
+        seenIds.add(id);
+        pendingLiveChecks.push({ id, botGuild: bg, cachedGuild: null });
+      }
+    }
+  }
+
+  const LIVE_CHECK_BATCH = 5;
+  for (let i = 0; i < pendingLiveChecks.length; i += LIVE_CHECK_BATCH) {
+    const chunk = pendingLiveChecks.slice(i, i + LIVE_CHECK_BATCH);
+    const results = await Promise.all(
+      chunk.map((item) => resolveLiveGuildAdminStatus(item.botGuild, uid, { force: false }))
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      if (results[j]?.ok && results[j].allowed) {
+        const item = chunk[j];
+        byId.set(item.id, buildBotGuildEntry(item.id, item.botGuild, item.cachedGuild));
       }
     }
   }
