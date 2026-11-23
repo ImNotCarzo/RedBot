@@ -816,6 +816,37 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
   }
 }
 
+const TRANSCRIPT_CSS = [
+  "body{background:#141518;color:#f2f3f5;font-family:system-ui,sans-serif;margin:0;padding:24px}",
+  ".wrap{max-width:860px;margin:auto;background:#1e1f24;border:1px solid #ff383d55;border-radius:12px;padding:20px}",
+  "h1{margin:0 0 6px;font-size:20px;color:#ff5a5e}.sub{color:#b5bac1;font-size:13px;margin-bottom:16px}",
+  ".msg{padding:10px 12px;border-top:1px solid #2b2d31}.meta{font-size:12px;margin-bottom:4px}",
+  ".author{font-weight:700;color:#fff;margin-right:8px}.time{color:#949ba4}",
+  ".body{white-space:pre-wrap;line-height:1.45;font-size:14px}.att a{color:#ff5a5e;font-size:13px}",
+].join("\n");
+
+function renderTranscriptMessageRow({ author, iso, text, attLinks }) {
+  return (
+    `<div class="msg"><div class="meta"><span class="author">${escapeHtml(author)}</span>` +
+    `<span class="time">${escapeHtml(iso)}</span></div>` +
+    (text ? `<div class="body">${escapeHtml(text)}</div>` : "") +
+    attLinks.map((u) => `<div class="att"><a href="${escapeHtml(u)}" target="_blank">${escapeHtml(u)}</a></div>`).join("") +
+    `</div>`
+  );
+}
+
+function buildTranscriptHtmlDoc({ channelName, guildName, messageCount, htmlRows }) {
+  const safeChannel = escapeHtml(channelName);
+  const safeGuild = escapeHtml(guildName || "");
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"><title>Transcript #${safeChannel}</title>\n` +
+    `<style>${TRANSCRIPT_CSS}</style></head>\n` +
+    `<body><div class="wrap"><h1>Transcript #${safeChannel}</h1>\n` +
+    `<div class="sub">Server: ${safeGuild} · Messages: ${messageCount}</div>\n` +
+    `${htmlRows.join("\n")}</div></body></html>`
+  );
+}
+
 async function generateTicketTranscript(channel, ticket) {
   const collected = [];
   let before;
@@ -846,25 +877,15 @@ async function generateTicketTranscript(channel, ticket) {
     txtLines.push(`[${iso}] ${author} (${m.author?.id ?? "?"}): ${text}`);
     for (const u of attLinks) txtLines.push(`  [Attachment]: ${u}`);
 
-    htmlRows.push(
-      `<div class="msg"><div class="meta"><span class="author">${escapeHtml(author)}</span>` +
-      `<span class="time">${escapeHtml(iso)}</span></div>` +
-      (text ? `<div class="body">${escapeHtml(text)}</div>` : "") +
-      attLinks.map((u) => `<div class="att"><a href="${escapeHtml(u)}" target="_blank">${escapeHtml(u)}</a></div>`).join("") +
-      `</div>`
-    );
+    htmlRows.push(renderTranscriptMessageRow({ author, iso, text, attLinks }));
   }
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Transcript #${escapeHtml(channel.name)}</title>
-<style>body{background:#141518;color:#f2f3f5;font-family:system-ui,sans-serif;margin:0;padding:24px}
-.wrap{max-width:860px;margin:auto;background:#1e1f24;border:1px solid #ff383d55;border-radius:12px;padding:20px}
-h1{margin:0 0 6px;font-size:20px;color:#ff5a5e}.sub{color:#b5bac1;font-size:13px;margin-bottom:16px}
-.msg{padding:10px 12px;border-top:1px solid #2b2d31}.meta{font-size:12px;margin-bottom:4px}
-.author{font-weight:700;color:#fff;margin-right:8px}.time{color:#949ba4}
-.body{white-space:pre-wrap;line-height:1.45;font-size:14px}.att a{color:#ff5a5e;font-size:13px}</style></head>
-<body><div class="wrap"><h1>Transcript #${escapeHtml(channel.name)}</h1>
-<div class="sub">Server: ${escapeHtml(channel.guild?.name || "")} · Messages: ${ordered.length}</div>
-${htmlRows.join("\n")}</div></body></html>`;
+  const html = buildTranscriptHtmlDoc({
+    channelName: channel.name,
+    guildName: channel.guild?.name || "",
+    messageCount: ordered.length,
+    htmlRows,
+  });
 
   const baseName = `transcript-${channel.name}`;
   return {
