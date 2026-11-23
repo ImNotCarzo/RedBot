@@ -4,6 +4,7 @@ const { RED, GREEN } = require("../../src/config");
 const { Ticket } = require("../../src/database");
 const { getCurrentLang } = require("../../src/i18n");
 const { Logger, noGuildReply } = require("../../src/runtime");
+const { memberHasRole } = require("../../src/shared/utils");
 const {
   buildTicketPanelPayload,
   closeTicketChannel,
@@ -21,7 +22,7 @@ const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
 function isTicketStaff(ctx, cfg) {
   return Boolean(
     ctx.member?.permissions?.has?.(PermissionFlagsBits.ManageChannels) ||
-    (cfg?.supportRoleId && ctx.member?.roles?.cache?.has?.(cfg.supportRoleId))
+    (cfg?.supportRoleId && memberHasRole(ctx.member, cfg.supportRoleId))
   );
 }
 

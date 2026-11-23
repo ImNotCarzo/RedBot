@@ -5,6 +5,7 @@ const { Ticket } = require("../../src/database");
 const { getLang } = require("../../src/guild");
 const { runWithLang } = require("../../src/i18n");
 const { replyInteractionEphemeral } = require("../../src/shared/ui");
+const { memberHasRole } = require("../../src/shared/utils");
 const {
   buildTicketControlCard,
   closeTicketChannel,
@@ -87,7 +88,7 @@ const buttonData = {
       const cfg = await getTicketConfig(interaction.guildId);
       const isStaff =
         interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels) ||
-        (cfg.supportRoleId && interaction.member?.roles?.cache?.has(cfg.supportRoleId));
+        (cfg.supportRoleId && memberHasRole(interaction.member, cfg.supportRoleId));
 
       if (action === "claim") {
         if (!isStaff) {

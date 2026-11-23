@@ -2,7 +2,7 @@ const { PermissionFlagsBits } = require("discord.js");
 const { AutoRule, AutoTimer, CustomCommand } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
-const { canBotManageRole, fetchBotMember, isDbReady, isSafeRegexPattern } = require("./shared/utils");
+const { canBotManageRole, fetchBotMember, isDbReady, isSafeRegexPattern, memberHasRole } = require("./shared/utils");
 const { resolveEmbedTemplate, runTagScript, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("AUTOMATION");
@@ -78,13 +78,13 @@ async function executeTagActions({ message = null, member = null, guild, channel
     if (me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) {
       for (const rid of actions.addRoles) {
         const role = guild.roles.cache.get(rid);
-        if (canBotManageRole(me, role) && !targetMember.roles.cache.has(rid)) {
+        if (canBotManageRole(me, role) && !memberHasRole(targetMember, rid)) {
           await targetMember.roles.add(role, "Custom Command TagScript").catch(() => {});
         }
       }
       for (const rid of actions.removeRoles) {
         const role = guild.roles.cache.get(rid);
-        if (canBotManageRole(me, role) && targetMember.roles.cache.has(rid)) {
+        if (canBotManageRole(me, role) && memberHasRole(targetMember, rid)) {
           await targetMember.roles.remove(role, "Custom Command TagScript").catch(() => {});
         }
       }
@@ -168,7 +168,7 @@ function matchesRuleCondition(rule, { message = null, member = null, channel = n
   const val = String(rule.conditionValue || "");
   if (type === "always") return true;
   if (type === "contains" && message) return (message.content || "").toLowerCase().includes(val.toLowerCase());
-  if (type === "has_role" && member) return member.roles?.cache?.has(val);
+  if (type === "has_role" && member) return memberHasRole(member, val);
   if (type === "is_bot" && member) return Boolean(member.user?.bot);
   if (type === "not_bot" && member) return !member.user?.bot;
   if (type === "in_channel" && channel) return channel.id === val;

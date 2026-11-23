@@ -265,12 +265,89 @@ async function testB2Bug5ErrorRulesBaselineComparison() {
   return "16 reglas vs 397385c: 15 idénticas + regla #5 (50013 con EmbedLinks) diff intencional -> fallback genérico";
 }
 
+async function testB2Bug6MemberHasRole() {
+  const { memberHasRole } = require(path.join(ROOT, "src/shared/utils"));
+  const { runTagScript } = require(path.join(ROOT, "src/tagscript"));
+  const { Ticket, GuildConfig } = require(path.join(ROOT, "src/database"));
+  const { invalidateGuildConfigCache } = require(path.join(ROOT, "src/guild"));
+  const { data: ticketInteractionModules } = require(path.join(ROOT, "commands/interactions/ticketActions"));
+  const buttonData = ticketInteractionModules[0];
+
+  assertCondition(memberHasRole({ roles: { cache: new Set(["r1"]) } }, "r1") === true, "B2 #6: GuildMember cached falló");
+  assertCondition(memberHasRole({ roles: ["r1", "sup_role_1"] }, "sup_role_1") === true, "B2 #6: APIGuildMember roles[] falló");
+  assertCondition(memberHasRole({ roles: ["r1"] }, "missing") === false, "B2 #6: APIGuildMember falso positivo");
+  assertCondition(memberHasRole(null, "r1") === false && memberHasRole({ roles: [] }, null) === false, "B2 #6: nulidad falló");
+
+  assertCondition(
+    runTagScript("{if(hasrole:sup_role_1):OK|NO}", { member: { roles: ["sup_role_1"] } }).text === "OK",
+    "B2 #6: tagscript hasrole no soportó APIGuildMember roles[]"
+  );
+
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origFindOne = Ticket.findOne;
+  const origUpdateOne = Ticket.updateOne;
+  const origGuildFindOne = GuildConfig.findOne;
+
+  let claimCalled = false;
+  try {
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+    invalidateGuildConfigCache("g_tkt_6");
+
+    GuildConfig.findOne = () => ({
+      select() { return this; },
+      lean: async () => ({
+        guildId: "g_tkt_6",
+        lang: "es",
+        ticketConfig: { supportRoleId: "sup_role_1", welcomeMessage: "Hola" },
+      }),
+    });
+    Ticket.findOne = () => ({
+      lean: async () => ({
+        _id: "tkt_doc_6",
+        guildId: "g_tkt_6",
+        channelId: "ch_tkt_6",
+        openerId: "u_open",
+        category: "General",
+        status: "open",
+        number: 6,
+      }),
+    });
+    Ticket.updateOne = async () => {
+      claimCalled = true;
+      return { matchedCount: 1, modifiedCount: 1 };
+    };
+
+    await buttonData.code({}, {
+      guildId: "g_tkt_6",
+      guild: { id: "g_tkt_6", name: "Test" },
+      channelId: "ch_tkt_6",
+      customId: "tkt:claim",
+      user: { id: "u_support_api" },
+      memberPermissions: { has: () => false },
+      member: { id: "u_support_api", roles: ["sup_role_1"] },
+      update: async () => {},
+      followUp: async () => {},
+      reply: async () => {},
+    });
+
+    assertCondition(claimCalled, "B2 #6: ticketActions no reconoció supportRoleId en APIGuildMember no cacheado");
+  } finally {
+    invalidateGuildConfigCache("g_tkt_6");
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    Ticket.findOne = origFindOne;
+    Ticket.updateOne = origUpdateOne;
+    GuildConfig.findOne = origGuildFindOne;
+  }
+}
+
 async function runB2Tests() {
   const checks = [
     ["#1 decodeHtmlEntities", testB2Bug1DecodeHtmlEntities],
     ["#7 ticketActions claim", testB2Bug7TicketClaimFilter],
     ["#4 sendLog 10003", testB2Bug4SendLogTransientErrors],
     ["#5 error.js 16 reglas", testB2Bug5ErrorRulesBaselineComparison],
+    ["#6 memberHasRole APIGuildMember", testB2Bug6MemberHasRole],
   ];
   const extras = [];
   for (const [, fn] of checks) {

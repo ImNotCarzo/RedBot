@@ -172,6 +172,17 @@ async function fetchBotMember(guild, { force = false } = {}) {
   return guild.members?.me ?? guild.members?.fetchMe?.().catch(() => null) ?? null;
 }
 
+function memberHasRole(member, roleId) {
+  if (!member || !roleId) return false;
+  if (typeof member.roles?.cache?.has === "function") {
+    return member.roles.cache.has(roleId);
+  }
+  if (Array.isArray(member.roles)) {
+    return member.roles.includes(roleId);
+  }
+  return false;
+}
+
 function canBotManageRole(me, role) {
   return Boolean(
     role &&
@@ -255,6 +266,7 @@ module.exports = {
   isValidImageAttachment,
   validateImageAttachment,
   fetchBotMember,
+  memberHasRole,
   canBotManageRole,
   validateRoleHierarchy,
   checkTargetChannelAccess,

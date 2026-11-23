@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require("discord.js");
 const { RED } = require("./config");
 const { EmbedTemplate } = require("./database");
-const { isDbReady } = require("./shared/utils");
+const { isDbReady, memberHasRole } = require("./shared/utils");
 
 const OPEN_BRACE_SENTINEL = "\uE000";
 const CLOSE_BRACE_SENTINEL = "\uE001";
@@ -85,7 +85,7 @@ function evaluateCondition(expr, ctx, locals) {
   const raw = unescapeBraces(String(expr || "").trim());
   const hasRoleMatch = raw.match(/^hasrole:(\d{17,22})$/i);
   if (hasRoleMatch) {
-    return Boolean(ctx.member?.roles?.cache?.has(hasRoleMatch[1]));
+    return memberHasRole(ctx.member, hasRoleMatch[1]);
   }
 
   // Evaluar operadores compuestos y "contains" antes de < / > para no partir menciones <@id>

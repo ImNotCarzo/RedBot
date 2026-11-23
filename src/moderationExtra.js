@@ -5,7 +5,7 @@ const { GuildConfig } = require("./database");
 const { getGuildConfigCached, invalidateGuildConfigCache, logAction } = require("./guild");
 const { addModCase, addWarn } = require("./moderation");
 const { Logger } = require("./runtime");
-const { fetchBotMember, isDbReady } = require("./shared/utils");
+const { fetchBotMember, isDbReady, memberHasRole } = require("./shared/utils");
 const { substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("MOD_EXTRA");
@@ -249,7 +249,7 @@ async function evaluateMessageAutomod(message) {
   const cfg = await getAutomodConfig(message.guild.id);
   if (!cfg.enabled) return false;
   if (cfg.ignoredChannels?.includes(message.channelId)) return false;
-  if (cfg.ignoredRoles?.some((r) => message.member.roles?.cache?.has(r))) return false;
+  if (cfg.ignoredRoles?.some((r) => memberHasRole(message.member, r))) return false;
 
   const text = message.content ?? "";
   let violation = null;
