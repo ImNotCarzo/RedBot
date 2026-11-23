@@ -80,7 +80,7 @@ const buttonData = {
       if (!ticket) {
         return replyInteractionEphemeral(
           interaction,
-          isEn ? "This is not an active ticket channel." : "Este canal no es un ticket activo."
+          isEn ? "This is not an open ticket." : "Esto no es un ticket abierto."
         );
       }
 

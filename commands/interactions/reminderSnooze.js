@@ -34,7 +34,7 @@ const data = {
       if (ownerId && interaction.user?.id !== ownerId) {
         return replyInteractionEphemeral(
           interaction,
-          lang === "en" ? "You cannot snooze someone else's reminder." : "No puedes posponer un recordatorio ajeno."
+          lang === "en" ? "That reminder is not yours." : "Ese recordatorio no es tuyo."
         );
       }
 

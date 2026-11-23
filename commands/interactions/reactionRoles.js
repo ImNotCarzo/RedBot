@@ -29,7 +29,7 @@ const data = {
       const panel = await ReactionRolePanel.findOne({ guildId: interaction.guildId, panelId }).lean().catch(() => null);
       const entry = panel?.entries?.find((e) => e.key === entryKey);
       if (!panel || !entry) {
-        return replyInteractionEphemeral(interaction, isEn ? "This reaction role panel is no longer active." : "Este panel de roles ya no está activo.");
+        return replyInteractionEphemeral(interaction, isEn ? "This role panel or button no longer exists." : "Este panel o botón de rol ya no existe.");
       }
 
       const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
@@ -48,14 +48,16 @@ const data = {
       if (res.error === "hierarchy") {
         return replyInteractionEphemeral(
           interaction,
-          isEn ? "I don't have permission or hierarchy to manage that role." : "No tengo permisos ni jerarquía suficiente para gestionar ese rol."
+          isEn
+            ? "I can't give you that role: I'm missing permissions or it's above my highest role."
+            : "No puedo darte ese rol: me falta permiso o está por encima de mi rol."
         );
       }
 
       if (res.error) {
         return replyInteractionEphemeral(
           interaction,
-          isEn ? "Could not update your role right now." : "No pude actualizar tu rol en este momento."
+          isEn ? "Couldn't change your role right now. Try again." : "No pude cambiar tu rol ahora mismo. Intenta otra vez."
         );
       }
 

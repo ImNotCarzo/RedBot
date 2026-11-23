@@ -133,7 +133,9 @@ const data = {
         if (res.error === "in_progress") {
           return replyInteractionEphemeral(
             interaction,
-            isEn ? "An action is already being processed on this alert." : "Ya se está procesando una acción en esta alerta."
+            isEn
+              ? "Someone is already applying an action on this alert. Wait a second."
+              : "Ya hay alguien aplicando una acción en esta alerta. Espera un segundo."
           );
         }
         if (res.error === "invalid_action") {

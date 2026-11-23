@@ -216,11 +216,11 @@ const event = {
       const isRateLimit = err?.status === 429 || (err?.message ?? "").includes("429");
       const errorMsg = lang === "en"
         ? (isRateLimit
-            ? "AI request quota reached for now. Try again in a few minutes."
-            : "An error occurred while processing your reply with AI.")
+            ? "AI quota reached for now. Try again in a few minutes."
+            : "The AI failed to respond. Try again in a moment.")
         : (isRateLimit
-            ? "Se agotó el límite de consultas de la IA por ahora. Intenta en unos minutos."
-            : "Ocurrió un error al procesar tu respuesta con la IA.");
+            ? "Se acabó la cuota de la IA por ahora. Prueba en unos minutos."
+            : "Falló la IA al responder. Intenta de nuevo en un momento.");
 
       await message.reply({
         content: errorMsg,

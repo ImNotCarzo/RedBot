@@ -851,6 +851,17 @@ const EXACT_ES_TO_EN = {
   "Ejemplo: .rolerename @gamers trasnochadores```": "Example: .rolerename @gamers night-owls```",
   "Ejemplo: .describe <captura-sospechosa.png>```": "Example: .describe <suspicious-screenshot.png>```",
   "Ejemplo: .resume Mucho texto con las notas del último parche que nadie leyó completo...```": "Example: .resume Long text with the latest patch notes that nobody read in full...```",
+  // Lote 6 (events, interactions, contextMenus)
+  "Se acabó la cuota de la IA por ahora. Prueba en unos minutos.": "AI quota reached for now. Try again in a few minutes.",
+  "Falló la IA al responder. Intenta de nuevo en un momento.": "The AI failed to respond. Try again in a moment.",
+  "Ya hay alguien aplicando una acción en esta alerta. Espera un segundo.": "Someone is already applying an action on this alert. Wait a second.",
+  "Este panel o botón de rol ya no existe.": "This role panel or button no longer exists.",
+  "No puedo darte ese rol: me falta permiso o está por encima de mi rol.": "I can't give you that role: I'm missing permissions or it's above my highest role.",
+  "No pude cambiar tu rol ahora mismo. Intenta otra vez.": "Couldn't change your role right now. Try again.",
+  "Ese recordatorio no es tuyo.": "That reminder is not yours.",
+  "Esto no es un ticket abierto.": "This is not an open ticket.",
+  "Ese mensaje es muy corto para resumir (mínimo 60 caracteres).": "That message is too short to summarize (minimum 60 characters).",
+  "No pude abrir el expediente de ese usuario. Intenta otra vez.": "Couldn't open that user's dossier. Try again.",
 };
 
 const LANG_NAME_ES_TO_EN = {

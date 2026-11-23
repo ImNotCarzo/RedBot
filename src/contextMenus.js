@@ -164,7 +164,7 @@ async function handleResumeContext(interaction) {
       return replyEphemeral(interaction, "Este mensaje no tiene texto para resumir");
     }
     if (text.length < 60) {
-      return replyEphemeral(interaction, "El mensaje es demasiado corto para resumir");
+      return replyEphemeral(interaction, "Ese mensaje es muy corto para resumir (mínimo 60 caracteres).");
     }
 
     const isEn = getCurrentLang() === "en";
@@ -572,7 +572,7 @@ async function handleModDossierContext(interaction) {
     });
   } catch (err) {
     log.error("[ctx mod]", { err: err?.message ?? String(err) });
-    await replyEphemeral(interaction, "No se pudo cargar el expediente del usuario");
+    await replyEphemeral(interaction, "No pude abrir el expediente de ese usuario. Intenta otra vez.");
   }
 }
 

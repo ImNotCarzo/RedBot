@@ -392,17 +392,72 @@ function checkI18n(jsFiles, rawPayloads, helpCommands = {}) {
         if (/\s/.test(m[1])) removedLiterals.add(m[1]);
       }
     }
+    const knownEnValues = new Set(Object.values(EXACT_ES_TO_EN));
     const addedMessages = new Set();
     for (const line of diffLines) {
       if (!line.startsWith("+") || line.startsWith("+++")) continue;
-      if (!/(?:ephemeral\(|replyError\(|ctx\.send\(|return "|error:|Msg\b)/.test(line)) continue;
+      if (!/(?:ephemeral\(|replyError\(|replyEphemeral\(|replyInteractionEphemeral\(|ctx\.send\(|return "|error:|Msg\b)/.test(line)) continue;
       for (const m of line.matchAll(/"([^"\n]{3,200})"/g)) {
         const msg = m[1];
-        if (!/\s/.test(msg) || removedLiterals.has(msg)) continue;
-        if (/^Tickets are disabled in this server\./.test(msg)) continue;
+        if (!/\s/.test(msg) || removedLiterals.has(msg) || knownEnValues.has(msg)) continue;
         addedMessages.add(msg);
       }
     }
+
+    const extractInlineBilingualPairs = (src) => {
+      const pairs = [];
+      const nestedRe =
+        /(?:isEn|lang\s*===\s*["']en["'])\s*\?\s*\(\s*\w+\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\)\s*:\s*\(\s*\w+\s*\?\s*"([^"]+)"\s*:\s*"([^"]+)"\s*\)/g;
+      for (const m of src.matchAll(nestedRe)) {
+        pairs.push([m[1], m[3]], [m[2], m[4]]);
+      }
+      const simpleRe =
+        /(?:isEn|(?:lang|currentLang|nextLang|active)\s*===\s*["']en["'])\s*\?\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1\s*:\s*(["'`])((?:\\.|(?!\3)[^\\])*)\3/g;
+      for (const m of src.matchAll(simpleRe)) {
+        pairs.push([m[2], m[4]]);
+      }
+      return pairs;
+    };
+
+    const inlineFiles = [
+      "events/messageCreate.js",
+      "commands/interactions/dramaWatcher.js",
+      "commands/interactions/reactionRoles.js",
+      "commands/interactions/reminderSnooze.js",
+      "commands/interactions/ticketActions.js",
+    ];
+    let verifiedInlinePairs = 0;
+    for (const relFile of inlineFiles) {
+      const currSrc = fs.readFileSync(path.join(ROOT, relFile), "utf8");
+      let oldSrc = "";
+      try {
+        oldSrc = execFileSync("git", ["show", `${BASELINE_COMMIT}:${relFile}`], {
+          cwd: ROOT,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch {}
+      const oldPairs = extractInlineBilingualPairs(oldSrc);
+      const currPairs = extractInlineBilingualPairs(currSrc);
+      const oldEsToEn = new Map(oldPairs.map(([en, es]) => [es, en]));
+      const oldEnSet = new Set(oldPairs.map(([en]) => en));
+
+      for (const [en, es] of currPairs) {
+        assertCondition(
+          Boolean(en && es && en !== es),
+          `Par bilingüe inline inválido en ${relFile}: EN="${en}" ES="${es}"`
+        );
+        verifiedInlinePairs++;
+        if (!oldEsToEn.has(es)) {
+          assertCondition(
+            !oldEnSet.has(en),
+            `Texto inline modificado en ${relFile} sin actualizar su par EN: ES="${es}" sigue con EN antiguo="${en}"`
+          );
+          if (!es.includes("${")) addedMessages.add(es);
+        }
+      }
+    }
+
     const modifiedMsgs = [...addedMessages];
     const missingEn = [];
     for (const msg of modifiedMsgs) {
@@ -445,7 +500,7 @@ function checkI18n(jsFiles, rawPayloads, helpCommands = {}) {
     baselineStatus =
       `0 regresiones vs ${BASELINE_COMMIT} (${Object.keys(EXACT_ES_TO_EN).length} exact, ` +
       `${PATTERN_ES_TO_EN.length}/${oldInternals.PATTERN_ES_TO_EN.length} pattern, ` +
-      `${modifiedMsgs.length} msg nuevos verificados, ${localizedCurrent.size} payloads)`;
+      `${modifiedMsgs.length} msg nuevos + ${verifiedInlinePairs} pares inline verificados, ${localizedCurrent.size} payloads)`;
   }
 
   return {
