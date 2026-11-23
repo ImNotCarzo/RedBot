@@ -385,13 +385,19 @@ async function sendLog(guild, embed, context = {}) {
     const channelId = await getLogChannelId(guild.id);
     if (!channelId) return false;
 
-    const channel = guild.channels.cache.get(channelId)
-      ?? (await guild.channels.fetch(channelId).catch(() => null));
+    let channel = guild.channels.cache.get(channelId) ?? null;
     if (!channel) {
-      await Log.deleteOne({ guildId: guild.id }).catch(() => {});
-      logChannelCache.delete(guild.id);
-      return false;
+      try {
+        channel = await guild.channels.fetch(channelId);
+      } catch (fetchErr) {
+        if (fetchErr?.code === 10003) {
+          await Log.deleteOne({ guildId: guild.id }).catch(() => {});
+          logChannelCache.delete(guild.id);
+        }
+        return false;
+      }
     }
+    if (!channel) return false;
 
     if (!channel.isTextBased()) return false;
     const lang = await getLang(guild.id);

@@ -111,10 +111,75 @@ async function testB2Bug7TicketClaimFilter() {
   }
 }
 
+async function testB2Bug4SendLogTransientErrors() {
+  const { Log } = require(path.join(ROOT, "src/database"));
+  const { getLogChannelId, sendLog } = require(path.join(ROOT, "src/guild"));
+
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origLogFindOne = Log.findOne;
+  const origLogDeleteOne = Log.deleteOne;
+
+  let logFindCount = 0;
+  let logDeleteCount = 0;
+
+  try {
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+    Log.findOne = () => {
+      logFindCount++;
+      return { lean: async () => ({ channelId: "ch_log_1" }) };
+    };
+    Log.deleteOne = async () => {
+      logDeleteCount++;
+      return { deletedCount: 1 };
+    };
+
+    const makeMockGuild = (id, fetchFn) => ({
+      id,
+      channels: {
+        cache: new Map(),
+        fetch: fetchFn,
+      },
+    });
+
+    // Errores que NO deben borrar Log: 50001, 50013, timeout y 5xx
+    const transientErrors = [
+      ["50001", Object.assign(new Error("Missing Access"), { code: 50001 })],
+      ["50013", Object.assign(new Error("Missing Permissions"), { code: 50013 })],
+      ["timeout", new Error("ETIMEDOUT")],
+      ["503", Object.assign(new Error("Service Unavailable"), { status: 503 })],
+    ];
+
+    for (const [label, err] of transientErrors) {
+      const gid = `g_log_${label}`;
+      const ok = await sendLog(makeMockGuild(gid, async () => { throw err; }), { title: "test" });
+      assertCondition(ok === false, `B2 #4 (${label}): sendLog debió devolver false`);
+      assertCondition(logDeleteCount === 0, `B2 #4 (${label}): no debió borrar Log ante error no-10003`);
+    }
+
+    // Error 10003 (Unknown Channel): SÍ debe borrar Log e invalidar caché
+    const gidDeleted = "g_log_10003";
+    const findBefore = logFindCount;
+    const ok10003 = await sendLog(
+      makeMockGuild(gidDeleted, async () => { throw Object.assign(new Error("Unknown Channel"), { code: 10003 }); }),
+      { title: "test" }
+    );
+    assertCondition(ok10003 === false && logDeleteCount === 1, "B2 #4 (10003): debió borrar Log ante Unknown Channel 10003");
+    assertCondition(logFindCount === findBefore + 1, "B2 #4 (10003): debió consultar Log inicialmente");
+    await getLogChannelId(gidDeleted);
+    assertCondition(logFindCount === findBefore + 2, "B2 #4 (10003): no invalidó logChannelCache tras borrar");
+  } finally {
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    Log.findOne = origLogFindOne;
+    Log.deleteOne = origLogDeleteOne;
+  }
+}
+
 async function runB2Tests() {
   const checks = [
     ["#1 decodeHtmlEntities", testB2Bug1DecodeHtmlEntities],
     ["#7 ticketActions claim", testB2Bug7TicketClaimFilter],
+    ["#4 sendLog 10003", testB2Bug4SendLogTransientErrors],
   ];
   const extras = [];
   for (const [, fn] of checks) {
