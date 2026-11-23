@@ -71,7 +71,7 @@ const data = {
 
         if (!trigger) return ctx.ephemeral("Indica un disparador válido");
         if (matchType === "regex" && !isSafeRegexPattern(trigger)) {
-          return ctx.ephemeral("Expresión regular inválida o insegura");
+          return ctx.ephemeral("Ese regex no es válido o es demasiado pesado. Simplifícalo o usa `contains`.");
         }
 
         const roleTagMatches = [...response.matchAll(/\{(?:addrole|removerole):(\d{17,20})\}/gi)];
@@ -258,7 +258,7 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const channel = ctx.get("canal");
-        if (!channel?.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
+        if (!channel?.isTextBased?.()) return ctx.ephemeral("Ese no es un canal de texto. Elige uno.");
         const intervalMs = parseDuration(ctx.get("intervalo"));
         if (!intervalMs || intervalMs < 60_000 || intervalMs > 30 * 86_400_000) {
           return ctx.ephemeral("El intervalo debe estar entre `1m` y `30d`");
@@ -301,7 +301,7 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const timerId = String(ctx.get("id") ?? "").trim().toUpperCase();
         const res = await AutoTimer.deleteOne({ guildId: ctx.guild.id, timerId });
-        if (!res.deletedCount) return ctx.ephemeral("No encontré ese temporizador");
+        if (!res.deletedCount) return ctx.ephemeral("No existe ningún temporizador con ese ID. Consulta los activos con `/auto timerlist`.");
         await ctx.send(ComponentsV2Builder.card({ title: "Temporizador eliminado", description: `Se borró \`${timerId}\`.`, color: RED }));
       },
     })

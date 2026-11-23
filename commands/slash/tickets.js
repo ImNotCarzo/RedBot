@@ -28,7 +28,7 @@ function isTicketStaff(ctx, cfg) {
 async function requireTicketContext(ctx, {
   onlyOpen = true,
   allowOpener = false,
-  notTicketMsg = "Este canal no es un ticket activo",
+  notTicketMsg = "Esto no es un ticket abierto. Úsalo dentro de uno.",
   noPermMsg = "No tienes permisos para gestionar este ticket",
 } = {}) {
   const query = onlyOpen ? { channelId: ctx.channel.id, status: "open" } : { channelId: ctx.channel.id };
@@ -139,7 +139,7 @@ const data = {
         const res = await openTicket({ guild: ctx.guild, user: ctx.user, category: ctx.get("motivo") || "General" });
         if (res.error === "disabled") return ctx.ephemeral("Los tickets están desactivados en este servidor. Actívalos con `/tickets setup`.");
         if (res.error === "already_open") return ctx.ephemeral(`Ya tienes un ticket abierto en <#${res.channelId}>`);
-        if (!res.ok) return ctx.ephemeral("No se pudo abrir el ticket");
+        if (!res.ok) return ctx.ephemeral("No pude abrir el ticket. Revisa mis permisos en la categoría.");
         await ctx.ephemeral(`Ticket creado en <#${res.channel.id}>`);
       },
     })
@@ -151,7 +151,7 @@ const data = {
         await ctx.defer({ ephemeral: true });
         const found = await requireTicketContext(ctx, {
           allowOpener: true,
-          notTicketMsg: "Este canal no es un ticket activo",
+          notTicketMsg: "Esto no es un ticket abierto. Úsalo dentro de uno.",
           noPermMsg: "No tienes permisos para cerrar este ticket",
         });
         if (!found) return;
@@ -166,7 +166,7 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const found = await requireTicketContext(ctx, {
-          notTicketMsg: "Este canal no es un ticket activo",
+          notTicketMsg: "Esto no es un ticket abierto. Úsalo dentro de uno.",
           noPermMsg: "Solo el equipo de soporte puede añadir usuarios al ticket",
         });
         if (!found) return;
@@ -182,13 +182,13 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const found = await requireTicketContext(ctx, {
-          notTicketMsg: "Este canal no es un ticket activo",
+          notTicketMsg: "Esto no es un ticket abierto. Úsalo dentro de uno.",
           noPermMsg: "Solo el equipo de soporte puede retirar usuarios del ticket",
         });
         if (!found) return;
         const member = ctx.get("usuario");
         if (member.id === found.ticket.openerId || member.id === ctx.guild.members.me?.id) {
-          return ctx.ephemeral("No puedes retirar al creador del ticket ni al bot");
+          return ctx.ephemeral("No puedo sacar al creador del ticket ni a mí mismo.");
         }
         await ctx.channel.permissionOverwrites.delete(member.id);
         await ctx.send(ComponentsV2Builder.card({ title: "Usuario retirado", description: `${member} ya no tiene acceso al ticket.`, color: RED }));
@@ -200,7 +200,7 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const found = await requireTicketContext(ctx, {
-          notTicketMsg: "Este canal no es un ticket activo",
+          notTicketMsg: "Esto no es un ticket abierto. Úsalo dentro de uno.",
           noPermMsg: "Solo el equipo de soporte puede reclamar tickets",
         });
         if (!found) return;
@@ -229,7 +229,7 @@ const data = {
           });
         } catch (err) {
           log.error("[tickets transcript]", { err: err?.message });
-          await ctx.ephemeral("No se pudo generar la transcripción");
+          await ctx.ephemeral("Falló la transcripción del historial. Intenta otra vez en unos segundos.");
         }
       },
     }),

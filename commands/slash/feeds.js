@@ -30,7 +30,7 @@ function parseFeedTarget(ctx, { maxLen = 0, requireAccount = false } = {}) {
   if (maxLen > 0) rawAccount = rawAccount.slice(0, maxLen);
   const storedAccount = normalizeFeedAccount(platform, rawAccount);
   if (requireAccount && !storedAccount) {
-    return { error: "Indica una cuenta válida" };
+    return { error: "Falta la cuenta. Indica un usuario, @handle, ID de canal (UC...) o subreddit (r/...)." };
   }
   return { platform, rawAccount, storedAccount };
 }
@@ -62,7 +62,7 @@ const data = {
         if (target.error) return ctx.ephemeral(target.error);
         const { platform, rawAccount, storedAccount } = target;
         const channel = ctx.get("canal");
-        if (!channel?.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
+        if (!channel?.isTextBased?.()) return ctx.ephemeral("Ese no es un canal de texto. Elige uno.");
 
         const existing = await SocialFeed.findOne({ guildId: ctx.guild.id, platform, account: storedAccount }).lean();
         if (!existing) {
@@ -121,7 +121,7 @@ const data = {
         if (!res.deletedCount && account !== rawAccount.toLowerCase()) {
           res = await SocialFeed.deleteOne({ guildId: ctx.guild.id, platform, account: rawAccount.toLowerCase() });
         }
-        if (!res.deletedCount) return ctx.ephemeral("No encontré esa alerta social");
+        if (!res.deletedCount) return ctx.ephemeral("No encontré esa alerta. Revisa las activas con `/feeds list`.");
         await ctx.send(ComponentsV2Builder.card({ title: "Alerta eliminada", description: `Se quitó **${platform}** · \`${account}\`.`, color: RED }));
       },
     })
@@ -158,10 +158,10 @@ const data = {
         await ctx.defer({ thinking: true, thinkingText: THINKING_TEXT, color: RED });
         const latest = await fetchLatestForFeed(platform, account).catch(() => null);
         if (!latest || latest.offline) {
-          return ctx.ephemeral(latest?.offline ? "El canal está desconectado (offline) ahora mismo." : "No pude obtener publicaciones recientes de esa cuenta.");
+          return ctx.ephemeral(latest?.offline ? "El canal está desconectado (offline) ahora mismo." : "No pude leer esa cuenta. Revisa el nombre o prueba en un rato.");
         }
         await dispatchFeedNotification(ctx.bot ?? ctx.guild.client, { channelId: ctx.channel.id, customMessage: "" }, latest);
-        await ctx.ephemeral("Prueba enviada");
+        await ctx.ephemeral("Ahí va la prueba.");
       },
     }),
 };

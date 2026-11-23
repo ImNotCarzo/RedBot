@@ -25,7 +25,7 @@ async function runGreetingConfig(ctx, { configKey, kind, title, allowDm = false,
   if (ctx.get("estado")) setObj[`${configKey}.enabled`] = ctx.get("estado") === "on";
   const ch = ctx.get("canal");
   if (ch) {
-    if (!ch.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
+    if (!ch.isTextBased?.()) return ctx.ephemeral("Ese no es un canal de texto. Elige uno.");
     setObj[`${configKey}.channelId`] = ch.id;
     setObj[`${configKey}.enabled`] = true;
   }
@@ -147,7 +147,7 @@ const data = {
           !Number.isFinite(month) || month < 1 || month > 12 ||
           !Number.isFinite(day) || day < 1 || day > DAYS_IN_MONTH[month - 1]
         ) {
-          return ctx.ephemeral("Fecha inválida. Indica día (1-31) y mes (1-12).");
+          return ctx.ephemeral("Esa fecha no cuadra. Pon un día (1-31) y un mes válidos (1-12).");
         }
         const maxYear = new Date().getFullYear();
         const validYear = Number.isFinite(year) && year > 1920 && year <= maxYear ? year : null;
@@ -169,7 +169,7 @@ const data = {
       async code(ctx) {
         if (!ctx.guild) return noGuildReply(ctx);
         const list = await Birthday.find({ guildId: ctx.guild.id }).sort({ month: 1, day: 1 }).lean();
-        if (!list.length) return ctx.ephemeral("No hay cumpleaños registrados aún");
+        if (!list.length) return ctx.ephemeral("Nadie ha guardado su cumpleaños todavía. Estrena la lista con `/community birthday`.");
         const rows = list.map((b) => `• **${String(b.day).padStart(2, "0")} ${MONTHS[b.month - 1]}** — <@${b.userId}>`);
         const paginator = createStandardListPaginator({
           items: rows,
@@ -199,7 +199,7 @@ const data = {
         if (ctx.get("estado")) setObj["birthdayConfig.enabled"] = ctx.get("estado") === "on";
         const ch = ctx.get("canal");
         if (ch) {
-          if (!ch.isTextBased?.()) return ctx.ephemeral("El canal debe ser de texto");
+          if (!ch.isTextBased?.()) return ctx.ephemeral("Ese no es un canal de texto. Elige uno.");
           setObj["birthdayConfig.channelId"] = ch.id;
           setObj["birthdayConfig.enabled"] = true;
         }
@@ -285,7 +285,7 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const member = ctx.get("usuario");
         const delta = Number.parseInt(ctx.get("cantidad"), 10);
-        if (!Number.isFinite(delta) || delta === 0) return ctx.ephemeral("Indica un número distinto de 0");
+        if (!Number.isFinite(delta) || delta === 0) return ctx.ephemeral("Pon un número distinto de `0` (positivo para sumar, negativo para restar).");
         await InviteStat.findOneAndUpdate(
           { guildId: ctx.guild.id, userId: member.id },
           { $inc: { bonus: delta } },

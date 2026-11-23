@@ -769,6 +769,23 @@ const EXACT_ES_TO_EN = {
   "Eliminar regla": "Delete rule",
   "Mensaje reenviado nativamente al canal.": "Message natively forwarded to the channel.",
   "Tag de servidor": "Server Tag",
+  // Lote 3 (feeds, tickets, community, auto)
+  "Falta la cuenta. Indica un usuario, @handle, ID de canal (UC...) o subreddit (r/...).": "Missing account. Provide a username, @handle, channel ID (UC...), or subreddit (r/...).",
+  "Ese no es un canal de texto. Elige uno.": "That is not a text channel. Pick one.",
+  "No encontré esa alerta. Revisa las activas con `/feeds list`.": "Couldn't find that alert. Check active ones with `/feeds list`.",
+  "No pude leer esa cuenta. Revisa el nombre o prueba en un rato.": "Couldn't read that account. Check the name or try again in a bit.",
+  "Ahí va la prueba.": "There goes the test.",
+  "No pude abrir el ticket. Revisa mis permisos en la categoría.": "Couldn't open the ticket. Check my permissions in the category.",
+  "Esto no es un ticket abierto. Úsalo dentro de uno.": "This is not an open ticket. Use it inside one.",
+  "No puedo sacar al creador del ticket ni a mí mismo.": "I can't remove the ticket creator or myself.",
+  "Falló la transcripción del historial. Intenta otra vez en unos segundos.": "Failed to generate the transcript. Try again in a few seconds.",
+  "Esa fecha no cuadra. Pon un día (1-31) y un mes válidos (1-12).": "That date doesn't add up. Enter a valid day (1-31) and month (1-12).",
+  "Nadie ha guardado su cumpleaños todavía. Estrena la lista con `/community birthday`.": "Nobody has saved their birthday yet. Be the first with `/community birthday`.",
+  "Pon un número distinto de `0` (positivo para sumar, negativo para restar).": "Enter a non-zero number (positive to add, negative to subtract).",
+  "Ese regex no es válido o es demasiado pesado. Simplifícalo o usa `contains`.": "That regex is invalid or too heavy. Simplify it or use `contains`.",
+  "No existe ningún temporizador con ese ID. Consulta los activos con `/auto timerlist`.": "No timer exists with that ID. Check active ones with `/auto timerlist`.",
+  "No tienes permisos para ver ese canal": "You do not have permission to view that channel",
+  "No tienes permisos para gestionar este ticket": "You do not have permission to manage this ticket",
 };
 
 const LANG_NAME_ES_TO_EN = {
