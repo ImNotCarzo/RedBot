@@ -4,6 +4,7 @@ const { Warn, TempBan, ModCase } = require("./database");
 const { getLang, getWarnPolicy, logAction } = require("./guild");
 const { t } = require("./i18n");
 const { Logger } = require("./runtime");
+const { clearTimerMap, fetchBotMember, isDbReady } = require("./shared/utils");
 
 const log = new Logger("MODERATION_SERVICE");
 const tempBanTimers = new Map();
@@ -43,7 +44,7 @@ function formatDuration(ms) {
 
 async function addModCase({ guildId, userId, moderatorId, type, reason = "Sin razón", durationMs = null, caseId = null }) {
   if (!guildId || !userId || !moderatorId || !type) return null;
-  if (ModCase?.db?.readyState !== 1) return null;
+  if (!isDbReady(ModCase)) return null;
   const normalizedReason = (typeof reason === "string" ? reason.trim() : "") || "Sin razón";
   const resolvedCaseId = String(caseId || generateId()).trim().toUpperCase();
   try {
@@ -74,14 +75,14 @@ async function addModCase({ guildId, userId, moderatorId, type, reason = "Sin ra
 }
 
 async function listModCasesForUser({ guildId, userId }) {
-  if (!guildId || !userId || ModCase?.db?.readyState !== 1) return [];
+  if (!guildId || !userId || !isDbReady(ModCase)) return [];
   const q = ModCase.find({ guildId, userId }).sort({ createdAt: -1 });
   return typeof q?.lean === "function" ? q.lean() : q;
 }
 
 async function listUnifiedHistoryForUser({ guildId, userId }) {
   const fetchWarns = async () => {
-    if (Warn?.db?.readyState !== 1) return [];
+    if (!isDbReady(Warn)) return [];
     const q = Warn.find({ guildId, userId }).sort({ createdAt: -1 });
     return typeof q?.lean === "function" ? q.lean() : q;
   };
@@ -179,10 +180,7 @@ async function listPendingTempBans() {
 const MAX_TEMPBAN_PERM_RETRIES = 3;
 
 function stopTempBanTimers() {
-  for (const entry of tempBanTimers.values()) {
-    if (entry?.timeout) clearTimeout(entry.timeout);
-  }
-  tempBanTimers.clear();
+  clearTimerMap(tempBanTimers);
 }
 
 function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
@@ -192,12 +190,7 @@ function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
   if (Number.isNaN(when.getTime())) return;
 
   const key = `${guildId}:${userId}`;
-  const existing = tempBanTimers.get(key);
-  if (existing?.timeout) {
-    clearTimeout(existing.timeout);
-  }
-  const token = { timeout: null };
-  tempBanTimers.set(key, token);
+  clearTimerMap(tempBanTimers, key);
 
   const execute = async () => {
     let retry = false;
@@ -237,9 +230,8 @@ function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
       retry = true;
       log.error("Fallo al expirar tempban; reintentando", { guildId, userId, err: err?.message ?? String(err) });
     } finally {
-      if (tempBanTimers.get(key) === token) {
-        tempBanTimers.delete(key);
-        if (retry) scheduleTempUnban(client, guildId, userId, new Date(Date.now() + TEMPBAN_RETRY_MS), nextPermAttempt);
+      if (retry && !tempBanTimers.has(key)) {
+        scheduleTempUnban(client, guildId, userId, new Date(Date.now() + TEMPBAN_RETRY_MS), nextPermAttempt);
       }
     }
   };
@@ -251,21 +243,18 @@ function scheduleTempUnban(client, guildId, userId, unbanAt, permAttempt = 0) {
   }
 
   const timeout = setTimeout(() => {
-    if (tempBanTimers.get(key) !== token) return;
+    if (tempBanTimers.get(key) !== timeout) return;
+    tempBanTimers.delete(key);
     if (delay > MAX_TIMEOUT_MS) scheduleTempUnban(client, guildId, userId, when, permAttempt);
     else execute();
   }, Math.min(delay, MAX_TIMEOUT_MS));
   timeout.unref();
-  token.timeout = timeout;
+  tempBanTimers.set(key, timeout);
 }
 
 async function cancelTempBan(guildId, userId) {
   const key = `${guildId}:${userId}`;
-  const entry = tempBanTimers.get(key);
-  if (entry?.timeout) {
-    clearTimeout(entry.timeout);
-  }
-  tempBanTimers.delete(key);
+  clearTimerMap(tempBanTimers, key);
   await TempBan.deleteOne({ guildId, userId }).catch(() => {});
 }
 
@@ -274,7 +263,7 @@ async function applyWarnEscalation(guild, member, totalWarns) {
   const policy = await getWarnPolicy(guild.id);
   if (!policy.warnThreshold || totalWarns < policy.warnThreshold) return null;
 
-  const me = guild.members?.me ?? (await guild.members?.fetchMe?.().catch(() => null));
+  const me = await fetchBotMember(guild);
   if (me?.permissions?.has && !me.permissions.has("ModerateMembers")) return null;
   if (!member.moderatable || typeof member.timeout !== "function") return null;
 

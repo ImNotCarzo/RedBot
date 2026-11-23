@@ -1,9 +1,9 @@
-const mongoose = require("mongoose");
 const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { RED } = require("./config");
 const { ReactionRolePanel, TempRole } = require("./database");
 const { logAction } = require("./guild");
 const { Logger } = require("./runtime");
+const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady } = require("./shared/utils");
 
 const log = new Logger("REACTION_ROLES");
 const MAX_PANELS_PER_GUILD = 40;
@@ -16,8 +16,7 @@ function tempRoleKey(guildId, userId, roleId) {
 
 function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
   const key = tempRoleKey(guildId, userId, roleId);
-  const prev = tempRoleTimers.get(key);
-  if (prev) clearTimeout(prev);
+  clearTimerMap(tempRoleTimers, key);
 
   const targetMs = new Date(expiresAt).getTime();
   if (!Number.isFinite(targetMs)) return;
@@ -31,7 +30,7 @@ function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
         return;
       }
 
-      if (mongoose.connection.readyState === 1) {
+      if (isDbReady()) {
         const doc = await TempRole.findOne({ guildId, userId, roleId }).lean().catch(() => null);
         if (!doc) return;
         const docMs = new Date(doc.expiresAt).getTime();
@@ -49,7 +48,7 @@ function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
         }
       }
 
-      if (mongoose.connection.readyState === 1) {
+      if (isDbReady()) {
         await TempRole.deleteOne({ guildId, userId, roleId }).catch(() => {});
       }
     } catch {}
@@ -61,7 +60,7 @@ function scheduleTempRoleExpiry(client, guildId, userId, roleId, expiresAt) {
 async function grantTempRole({ client, guild, member, role, durationMs, source = "manual" }) {
   const expiresAt = new Date(Date.now() + durationMs);
   await member.roles.add(role, `Rol temporal (${source})`);
-  if (mongoose.connection.readyState === 1) {
+  if (isDbReady()) {
     await TempRole.findOneAndUpdate(
       { guildId: guild.id, userId: member.id, roleId: role.id },
       { $set: { expiresAt, source } },
@@ -73,7 +72,7 @@ async function grantTempRole({ client, guild, member, role, durationMs, source =
 }
 
 async function restoreTempRoles(client) {
-  if (mongoose.connection.readyState !== 1) return;
+  if (!isDbReady()) return;
   const rows = await TempRole.find().lean().catch(() => []);
   for (const r of rows) {
     scheduleTempRoleExpiry(client, r.guildId, r.userId, r.roleId, r.expiresAt);
@@ -81,8 +80,7 @@ async function restoreTempRoles(client) {
 }
 
 function stopTempRoleTimers() {
-  for (const t of tempRoleTimers.values()) clearTimeout(t);
-  tempRoleTimers.clear();
+  clearTimerMap(tempRoleTimers);
 }
 
 function buildReactionRolePanelPayload(panel) {
@@ -118,9 +116,9 @@ function normalizeEmojiKey(emoji) {
 }
 
 async function applyPanelRoleAction({ client, guild, member, panel, entry, isAddIntent = null }) {
-  const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+  const me = await fetchBotMember(guild);
   const role = guild.roles.cache.get(entry.roleId);
-  if (!role || role.managed || !me?.permissions?.has?.("ManageRoles") || role.position >= me.roles.highest.position) {
+  if (!canBotManageRole(me, role)) {
     return { error: "hierarchy" };
   }
 
@@ -166,12 +164,8 @@ async function applyPanelRoleAction({ client, guild, member, panel, entry, isAdd
   }
   if (panel.mode === "temp") {
     const key = tempRoleKey(guild.id, member.id, role.id);
-    const prev = tempRoleTimers.get(key);
-    if (prev) {
-      clearTimeout(prev);
-      tempRoleTimers.delete(key);
-    }
-    if (mongoose.connection.readyState === 1) {
+    clearTimerMap(tempRoleTimers, key);
+    if (isDbReady()) {
       await TempRole.deleteOne({ guildId: guild.id, userId: member.id, roleId: role.id }).catch(() => {});
     }
   }
@@ -180,7 +174,7 @@ async function applyPanelRoleAction({ client, guild, member, panel, entry, isAdd
 
 async function handleEmojiReactionRole(bot, reaction, user, isAdding) {
   if (!user || user.bot || !reaction?.message?.guildId) return;
-  if (mongoose.connection.readyState !== 1) return;
+  if (!isDbReady()) return;
 
   try {
     if (reaction.partial) await reaction.fetch().catch(() => {});

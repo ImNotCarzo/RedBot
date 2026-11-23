@@ -14,6 +14,7 @@ const { GREEN, RED } = require("./config");
 const { getPrefix, setPrefix, setLogChannel, clearLogChannel, logAction, getLang, setLang, getWarnPolicy, setWarnPolicy, getAiContext, setAiContext } = require("./guild");
 const { t } = require("./i18n");
 const { formatDuration } = require("./moderation");
+const { fetchBotMember } = require("./shared/utils");
 
 const WARN_AUTO_STEPS = [0, 3, 5];
 
@@ -241,7 +242,7 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
           await interaction.reply({ content: "No puedes seleccionar `@everyone`", flags: MessageFlags.Ephemeral }).catch(() => {});
           return false;
         }
-        const me = guild.members.me ?? (await guild.members.fetchMe().catch(() => null));
+        const me = await fetchBotMember(guild);
         if (role.managed) {
           await interaction.reply({ content: "Ese rol es gestionado por una integración y no se puede asignar", flags: MessageFlags.Ephemeral }).catch(() => {});
           return false;
@@ -363,7 +364,7 @@ async function sendServerSetupPanel(ctx, { onOpenCustomBot = null } = {}) {
         return false;
       },
       incidents: async ({ interaction, state, view: activeView }) => {
-        const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+        const me = await fetchBotMember(guild);
         if (!me?.permissions?.has?.(PermissionFlagsBits.ManageGuild)) {
           await interaction.reply({
             content: state.lang === "en"

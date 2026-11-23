@@ -1,8 +1,8 @@
 const { PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
 const { Birthday, GuildConfig, InviteJoin, InviteReward, InviteStat } = require("./database");
 const { grantTempRole } = require("./reactionRoles");
 const { Logger } = require("./runtime");
+const { canBotManageRole, fetchBotMember, isDbReady } = require("./shared/utils");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("COMMUNITY");
@@ -45,7 +45,7 @@ function clearGuildInviteCache(guildId) {
 }
 
 async function syncInviteRewards(member, inviterId) {
-  if (!member?.guild?.id || !inviterId || mongoose.connection.readyState !== 1) return;
+  if (!member?.guild?.id || !inviterId || !isDbReady()) return;
   const stat = await InviteStat.findOne({ guildId: member.guild.id, userId: inviterId }).lean().catch(() => null);
   if (!stat) return;
   const totalInvites = (stat.regular || 0) + (stat.bonus || 0) - (stat.left || 0) - (stat.fake || 0);
@@ -54,12 +54,12 @@ async function syncInviteRewards(member, inviterId) {
   if (!rewards.length) return;
 
   const inviterMember = await member.guild.members.fetch(inviterId).catch(() => null);
-  const me = member.guild.members.me ?? await member.guild.members.fetchMe().catch(() => null);
+  const me = await fetchBotMember(member.guild);
   if (!inviterMember || !me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) return;
 
   for (const rw of rewards) {
     const role = member.guild.roles.cache.get(rw.roleId);
-    if (role && !role.managed && role.position < me.roles.highest.position && !inviterMember.roles.cache.has(role.id)) {
+    if (canBotManageRole(me, role) && !inviterMember.roles.cache.has(role.id)) {
       await inviterMember.roles.add(role, `Recompensa por ${rw.invitesRequired} invitaciones`).catch(() => {});
     }
   }
@@ -89,7 +89,7 @@ async function trackMemberJoinInvite(member) {
   if (!hasBaseline) return null;
 
   const inviterId = used?.inviterId ?? used?.inviter?.id ?? null;
-  if (!inviterId || mongoose.connection.readyState !== 1) return { inviterId, code: used?.code ?? null, total: null };
+  if (!inviterId || !isDbReady()) return { inviterId, code: used?.code ?? null, total: null };
 
   const isFake = (Date.now() - (member.user?.createdTimestamp ?? 0)) < 7 * 86_400_000;
   await InviteJoin.findOneAndUpdate(
@@ -110,7 +110,7 @@ async function trackMemberJoinInvite(member) {
 }
 
 async function trackMemberLeaveInvite(member) {
-  if (!member?.guild?.id || !member.id || member.user?.bot || mongoose.connection.readyState !== 1) return;
+  if (!member?.guild?.id || !member.id || member.user?.bot || !isDbReady()) return;
   const join = await InviteJoin.findOneAndDelete({ guildId: member.guild.id, memberId: member.id }).lean().catch(() => null);
   if (!join?.inviterId) return;
 
@@ -121,7 +121,7 @@ async function trackMemberLeaveInvite(member) {
 }
 
 async function getMemberInviteStats(guildId, userId) {
-  if (!guildId || !userId || mongoose.connection.readyState !== 1) {
+  if (!guildId || !userId || !isDbReady()) {
     return { regular: 0, fake: 0, bonus: 0, left: 0, total: 0 };
   }
   const s = await InviteStat.findOne({ guildId, userId }).lean().catch(() => null);
@@ -134,7 +134,7 @@ async function getMemberInviteStats(guildId, userId) {
 
 async function sendWelcomeOrGoodbye(member, kind, inviteInfo = null) {
   const guild = member?.guild;
-  if (!guild?.id || mongoose.connection.readyState !== 1) return;
+  if (!guild?.id || !isDbReady()) return;
 
   const field = kind === "goodbye" ? "goodbyeConfig" : "welcomeConfig";
   const doc = await GuildConfig.findOne({ guildId: guild.id }).select(field).lean().catch(() => null);
@@ -179,7 +179,7 @@ async function sendWelcomeOrGoodbye(member, kind, inviteInfo = null) {
 }
 
 async function checkBirthdaysToday(client) {
-  if (isCheckingBirthdays || !client?.guilds || mongoose.connection.readyState !== 1) return;
+  if (isCheckingBirthdays || !client?.guilds || !isDbReady()) return;
   isCheckingBirthdays = true;
   try {
     const now = new Date();
@@ -220,8 +220,8 @@ async function checkBirthdaysToday(client) {
 
         if (cfg.roleId) {
           const role = guild.roles.cache.get(cfg.roleId);
-          const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
-          if (role && !role.managed && me?.permissions?.has?.(PermissionFlagsBits.ManageRoles) && role.position < me.roles.highest.position) {
+          const me = await fetchBotMember(guild);
+          if (canBotManageRole(me, role)) {
             await grantTempRole({ client, guild, member, role, durationMs: 24 * 60 * 60_000, source: "birthday" }).catch(() => {});
           }
         }

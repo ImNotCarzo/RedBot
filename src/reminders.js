@@ -3,6 +3,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("
 const { Reminder } = require("./database");
 const { RED } = require("./config");
 const { Logger, sanitizeError } = require("./runtime");
+const { clearTimerMap, isDbReady } = require("./shared/utils");
 
 const log = new Logger("REMINDER_SERVICE");
 const timers = new Map();
@@ -12,16 +13,11 @@ const RETRY_MS = 60_000;
 const MAX_DELIVERY_RETRIES = 3;
 
 function clearTimer(id) {
-  const existing = timers.get(id);
-  if (existing) {
-    clearTimeout(existing);
-    timers.delete(id);
-  }
+  clearTimerMap(timers, id);
 }
 
 function stopReminderTimers() {
-  for (const t of timers.values()) clearTimeout(t);
-  timers.clear();
+  clearTimerMap(timers);
 }
 
 function scheduleReminder(client, doc, attempt = 0) {
@@ -65,7 +61,7 @@ function buildSnoozeRow(userId, lang = "es", disabled = false) {
 
 async function deliverReminder(client, doc, attempt = 0) {
   const id = String(doc._id);
-  if (Reminder.db?.readyState !== 1) {
+  if (!isDbReady(Reminder)) {
     if (attempt < MAX_DELIVERY_RETRIES) {
       scheduleReminder(client, { ...doc, remindAt: new Date(Date.now() + RETRY_MS) }, attempt + 1);
     }
@@ -119,7 +115,7 @@ async function deliverReminder(client, doc, attempt = 0) {
 }
 
 async function createReminder(client, { userId, guildId = null, channelId = null, text, remindAt }) {
-  if (Reminder.db?.readyState !== 1) return { error: "db" };
+  if (!isDbReady(Reminder)) return { error: "db" };
   const count = await Reminder.countDocuments({ userId });
   if (count >= MAX_PER_USER) return { error: "limit", max: MAX_PER_USER };
 
@@ -130,7 +126,7 @@ async function createReminder(client, { userId, guildId = null, channelId = null
 }
 
 async function listUserReminders(userId) {
-  if (!userId || Reminder.db?.readyState !== 1) return [];
+  if (!userId || !isDbReady(Reminder)) return [];
   try {
     return await Reminder.find({ userId }).sort({ remindAt: 1 }).lean();
   } catch {
@@ -139,7 +135,7 @@ async function listUserReminders(userId) {
 }
 
 async function cancelReminder(userId, reminderId = null) {
-  if (!userId || Reminder.db?.readyState !== 1) return { deleted: 0 };
+  if (!userId || !isDbReady(Reminder)) return { deleted: 0 };
   if (!reminderId || reminderId === "all") {
     const docs = await Reminder.find({ userId }).select("_id").lean();
     for (const d of docs) clearTimer(String(d._id));
@@ -156,7 +152,7 @@ async function cancelReminder(userId, reminderId = null) {
 }
 
 async function restoreReminders(client) {
-  if (Reminder.db?.readyState !== 1) return;
+  if (!isDbReady(Reminder)) return;
   try {
     const pending = await Reminder.find({}).lean();
     for (const doc of pending) scheduleReminder(client, doc);

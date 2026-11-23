@@ -9,13 +9,13 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require("discord.js");
-const mongoose = require("mongoose");
 const { ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("./config");
 const { GuildConfig, Ticket } = require("./database");
 const { getCurrentLang } = require("./i18n");
 const { Logger } = require("./runtime");
 const { escapeHtml } = require("./security");
+const { fetchBotMember, isDbReady } = require("./shared/utils");
 
 const log = new Logger("TICKETS");
 const openingTickets = new Set();
@@ -32,7 +32,7 @@ async function getTicketConfig(guildId) {
     categories: [],
     counter: 0,
   };
-  if (!guildId || mongoose.connection.readyState !== 1) return defaults;
+  if (!guildId || !isDbReady()) return defaults;
   try {
     const doc = await GuildConfig.findOne({ guildId }).select("ticketConfig").lean();
     return { ...defaults, ...(doc?.ticketConfig || {}) };
@@ -42,7 +42,7 @@ async function getTicketConfig(guildId) {
 }
 
 async function updateTicketConfig(guildId, patch) {
-  if (!guildId || mongoose.connection.readyState !== 1) return null;
+  if (!guildId || !isDbReady()) return null;
   const setObj = {};
   for (const [k, v] of Object.entries(patch)) setObj[`ticketConfig.${k}`] = v;
   const doc = await GuildConfig.findOneAndUpdate(
@@ -684,7 +684,7 @@ async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
 }
 
 async function openTicket({ guild, user, category = "General", categoryChannelId = null, supportRoleId = null }) {
-  if (!guild?.id || !user?.id || mongoose.connection.readyState !== 1) return { error: "unavailable" };
+  if (!guild?.id || !user?.id || !isDbReady()) return { error: "unavailable" };
 
   const lockKey = `${guild.id}:${user.id}`;
   if (openingTickets.has(lockKey)) return { error: "already_open", channelId: null };
@@ -698,7 +698,7 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
       await Ticket.updateOne({ channelId: existing.channelId }, { $set: { status: "closed" } }).catch(() => {});
     }
 
-    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    const me = await fetchBotMember(guild);
     if (!me?.permissions?.has?.(PermissionFlagsBits.ManageChannels)) {
       throw new Error("Missing ManageChannels permission");
     }
@@ -876,7 +876,7 @@ ${htmlRows.join("\n")}</div></body></html>`;
 
 async function closeTicketChannel({ channel, closedByUser, reason = null }) {
   const guild = channel?.guild;
-  if (!guild || mongoose.connection.readyState !== 1) return { error: "unavailable" };
+  if (!guild || !isDbReady()) return { error: "unavailable" };
 
   if (closingTickets.has(channel.id)) return { error: "not_ticket" };
   closingTickets.add(channel.id);

@@ -1,9 +1,8 @@
 const { PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
 const { AutoRule, AutoTimer, CustomCommand } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
-const { isSafeRegexPattern } = require("./shared/utils");
+const { canBotManageRole, fetchBotMember, isDbReady, isSafeRegexPattern } = require("./shared/utils");
 const { resolveEmbedTemplate, runTagScript, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("AUTOMATION");
@@ -82,17 +81,17 @@ async function executeTagActions({ message = null, member = null, guild, channel
 
   const targetMember = member ?? message?.member;
   if (grantRoleAllowed && targetMember && (actions.addRoles?.length || actions.removeRoles?.length)) {
-    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    const me = await fetchBotMember(guild);
     if (me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) {
       for (const rid of actions.addRoles) {
         const role = guild.roles.cache.get(rid);
-        if (role && !role.managed && role.position < me.roles.highest.position && !targetMember.roles.cache.has(rid)) {
+        if (canBotManageRole(me, role) && !targetMember.roles.cache.has(rid)) {
           await targetMember.roles.add(role, "Custom Command TagScript").catch(() => {});
         }
       }
       for (const rid of actions.removeRoles) {
         const role = guild.roles.cache.get(rid);
-        if (role && !role.managed && role.position < me.roles.highest.position && targetMember.roles.cache.has(rid)) {
+        if (canBotManageRole(me, role) && targetMember.roles.cache.has(rid)) {
           await targetMember.roles.remove(role, "Custom Command TagScript").catch(() => {});
         }
       }
@@ -118,7 +117,7 @@ async function executeTagActions({ message = null, member = null, guild, channel
 
 async function handleCustomCommandsOnMessage(message, prefix = ".") {
   if (!message?.guild?.id || message.author?.bot || !message.content) return false;
-  if (mongoose.connection.readyState !== 1) return false;
+  if (!isDbReady()) return false;
 
   const list = await getGuildCustomCommands(message.guild.id);
   if (!list.length) return false;
@@ -188,7 +187,7 @@ function matchesRuleCondition(rule, { message = null, member = null, channel = n
 }
 
 async function dispatchAutoRules(event, { guild, message = null, member = null, channel = null } = {}) {
-  if (!guild?.id || mongoose.connection.readyState !== 1) return;
+  if (!guild?.id || !isDbReady()) return;
   const rules = await getGuildAutoRules(guild.id, event);
   if (!rules.length) return;
 
@@ -215,15 +214,15 @@ async function dispatchAutoRules(event, { guild, message = null, member = null, 
       } else if (rule.actionType === "send_dm" && targetMember?.user) {
         if (actionVal) await targetMember.user.send({ content: actionVal }).catch(() => {});
       } else if (rule.actionType === "add_role" && targetMember) {
-        const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+        const me = await fetchBotMember(guild);
         const role = guild.roles.cache.get(actionVal.trim());
-        if (role && !role.managed && me?.permissions?.has?.(PermissionFlagsBits.ManageRoles) && role.position < me.roles.highest.position) {
+        if (canBotManageRole(me, role)) {
           await targetMember.roles.add(role, `AutoRule: ${rule.name}`).catch(() => {});
         }
       } else if (rule.actionType === "remove_role" && targetMember) {
-        const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+        const me = await fetchBotMember(guild);
         const role = guild.roles.cache.get(actionVal.trim());
-        if (role && !role.managed && me?.permissions?.has?.(PermissionFlagsBits.ManageRoles) && role.position < me.roles.highest.position) {
+        if (canBotManageRole(me, role)) {
           await targetMember.roles.remove(role, `AutoRule: ${rule.name}`).catch(() => {});
         }
       } else if (rule.actionType === "delete_message" && message?.deletable) {
@@ -236,7 +235,7 @@ async function dispatchAutoRules(event, { guild, message = null, member = null, 
 }
 
 async function runAutoTimersTick(client) {
-  if (isRunningTimers || !client?.channels || mongoose.connection.readyState !== 1) return;
+  if (isRunningTimers || !client?.channels || !isDbReady()) return;
   isRunningTimers = true;
   try {
     const now = new Date();

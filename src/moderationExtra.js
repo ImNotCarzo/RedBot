@@ -1,11 +1,11 @@
 const { PermissionFlagsBits } = require("discord.js");
-const mongoose = require("mongoose");
 const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { RED, YELLOW, GREEN } = require("./config");
 const { GuildConfig } = require("./database");
 const { logAction, TtlCache } = require("./guild");
 const { addModCase, addWarn } = require("./moderation");
 const { Logger } = require("./runtime");
+const { fetchBotMember, isDbReady } = require("./shared/utils");
 const { substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("MOD_EXTRA");
@@ -39,7 +39,7 @@ const AUTOMOD_DEFAULTS = {
 };
 
 async function getAutomodConfig(guildId) {
-  if (!guildId || mongoose.connection.readyState !== 1) return { ...AUTOMOD_DEFAULTS };
+  if (!guildId || !isDbReady()) return { ...AUTOMOD_DEFAULTS };
   const cached = automodConfigCache.get(guildId);
   if (cached !== undefined) return cached;
   try {
@@ -53,7 +53,7 @@ async function getAutomodConfig(guildId) {
 }
 
 async function updateAutomodConfig(guildId, patch) {
-  if (!guildId || mongoose.connection.readyState !== 1) return null;
+  if (!guildId || !isDbReady()) return null;
   const setObj = {};
   for (const [k, v] of Object.entries(patch)) setObj[`automodConfig.${k}`] = v;
   const doc = await GuildConfig.findOneAndUpdate(
@@ -72,7 +72,7 @@ function invalidateDramaChannelCache(guildId) {
 }
 
 async function getDramaChannelId(guildId) {
-  if (!guildId || mongoose.connection.readyState !== 1) return null;
+  if (!guildId || !isDbReady()) return null;
   const cached = dramaChannelCache.get(guildId);
   if (cached !== undefined) return cached;
   const doc = await GuildConfig.findOne({ guildId }).select("dramaChannelId").lean().catch(() => null);
@@ -157,7 +157,7 @@ async function executeDramaAction({ guild, modMember, modUser, targetId, action,
     const target = await guild.members.fetch(targetId).catch(() => null);
     if (!target) return { error: "not_found" };
     if (target.id === guild.ownerId || target.id === guild.members.me?.id) return { error: "hierarchy" };
-    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    const me = await fetchBotMember(guild);
     if (!me || target.roles.highest.position >= me.roles.highest.position) return { error: "bot_hierarchy" };
     if (action !== "warn" && !me.permissions?.has?.(requiredPerm)) return { error: "bot_hierarchy" };
     if (action === "ban" && !target.bannable) return { error: "bot_hierarchy" };
@@ -260,7 +260,7 @@ async function evaluateMessageAutomod(message) {
   if (message.member.permissions?.has?.(PermissionFlagsBits.ManageMessages) || message.member.id === message.guild.ownerId) {
     return false;
   }
-  if (mongoose.connection.readyState !== 1) return false;
+  if (!isDbReady()) return false;
 
   const cfg = await getAutomodConfig(message.guild.id);
   if (!cfg.enabled) return false;

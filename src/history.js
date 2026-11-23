@@ -1,9 +1,10 @@
-const mongoose = require("mongoose");
 const { MessageFlags } = require("discord.js");
 const { ComponentsV2Builder, V2Paginator, V2Text } = require("gralonium");
 const { ImageHistory } = require("./database");
 const { RED } = require("./config");
 const { fetchPublic, readBodyLimited } = require("./security");
+const { THIRD_PARTY_MESSAGE } = require("./shared/ui");
+const { isDbReady } = require("./shared/utils");
 
 const MAX_HISTORY_PER_TARGET = 15;
 const MAX_BACKUP_BYTES = 250 * 1024;
@@ -59,7 +60,7 @@ function extractImageBuffer(raw) {
 }
 
 async function recordImageIfNew(targetType, targetId, url) {
-  if (!targetType || !targetId || !url || mongoose.connection.readyState !== 1) return false;
+  if (!targetType || !targetId || !url || !isDbReady()) return false;
 
   const hash = extractImageHash(url);
   if (!hash) return false;
@@ -103,7 +104,7 @@ async function recordImageIfNew(targetType, targetId, url) {
 }
 
 async function getImageHistory(targetType, targetId, limit = MAX_HISTORY_PER_TARGET) {
-  if (!targetType || !targetId || mongoose.connection.readyState !== 1) return [];
+  if (!targetType || !targetId || !isDbReady()) return [];
   try {
     return await ImageHistory.find({ targetType, targetId })
       .sort({ createdAt: -1 })
@@ -129,7 +130,7 @@ async function replyWithImageHistory(interaction, { targetType, targetId, title,
     ownerId: interaction.user?.id,
     isEphemeral: true,
     thirdPartyMode: "ephemeral-view",
-    thirdPartyMessage: "No es tu comando",
+    thirdPartyMessage: THIRD_PARTY_MESSAGE,
     wrap: false,
     prevButton: { label: "◀" },
     nextButton: { label: "▶" },

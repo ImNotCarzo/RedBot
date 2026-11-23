@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require("discord.js");
 const { GuildConfig, UserConfig, Log, Afk } = require("./database");
 const { Logger, parsePositiveInt, withTimeout, sanitizeError } = require("./runtime");
+const { isDbReady } = require("./shared/utils");
 
 const log = new Logger("GUILD_SERVICE");
 
@@ -69,7 +70,7 @@ async function getLang(guildId) {
   if (!guildId) return "es";
   const cached = langCache.get(guildId);
   if (cached !== undefined) return cached;
-  if (GuildConfig.db?.readyState !== 1) return "es";
+  if (!isDbReady(GuildConfig)) return "es";
   try {
     const doc = await withTimeout(
       GuildConfig.findOne({ guildId }).select("lang langSource").lean(),
@@ -91,7 +92,7 @@ async function getLangSource(guildId) {
   if (!guildId) return "auto";
   const cached = langSourceCache.get(guildId);
   if (cached) return cached;
-  if (GuildConfig.db?.readyState !== 1) return "auto";
+  if (!isDbReady(GuildConfig)) return "auto";
   try {
     const doc = await GuildConfig.findOne({ guildId }).select("langSource").lean();
     const source = VALID_LANG_SOURCES.has(doc?.langSource) ? doc.langSource : "auto";
@@ -113,7 +114,7 @@ async function setLang(guildId, lang, { source = "manual" } = {}) {
     recent.lang = resolved;
     recent.source = resolvedSource;
   }
-  if (GuildConfig.db?.readyState === 1) {
+  if (isDbReady(GuildConfig)) {
     try {
       await GuildConfig.findOneAndUpdate(
         { guildId },
@@ -174,7 +175,7 @@ async function getUserLang(userId) {
   if (!userId) return null;
   const cached = userLangCache.get(userId);
   if (cached !== undefined) return cached;
-  if (UserConfig.db?.readyState !== 1) return null;
+  if (!isDbReady(UserConfig)) return null;
   try {
     const doc = await withTimeout(
       UserConfig.findOne({ userId }).select("lang").lean(),
@@ -193,7 +194,7 @@ async function setUserLang(userId, lang) {
   const resolved = normalizeLang(lang);
   if (!userId) return resolved;
   userLangCache.set(userId, resolved);
-  if (UserConfig.db?.readyState === 1) {
+  if (isDbReady(UserConfig)) {
     try {
       await UserConfig.findOneAndUpdate(
         { userId },
@@ -218,7 +219,7 @@ async function getAiContext(guildId) {
   if (!guildId) return "";
   const cached = aiContextCache.get(guildId);
   if (cached !== undefined) return cached;
-  if (GuildConfig.db?.readyState !== 1) return "";
+  if (!isDbReady(GuildConfig)) return "";
   try {
     const doc = await GuildConfig.findOne({ guildId }).select("aiContext").lean();
     const ctxText = typeof doc?.aiContext === "string" ? doc.aiContext.trim() : "";
@@ -233,7 +234,7 @@ async function setAiContext(guildId, text) {
   const clean = typeof text === "string" ? text.trim().slice(0, 1000) : "";
   if (!guildId) return clean;
   aiContextCache.set(guildId, clean);
-  if (GuildConfig.db?.readyState === 1) {
+  if (isDbReady(GuildConfig)) {
     try {
       await GuildConfig.findOneAndUpdate(
         { guildId },
@@ -250,7 +251,7 @@ async function getWarnPolicy(guildId) {
   if (!guildId) return fallback;
   const cached = warnPolicyCache.get(guildId);
   if (cached) return cached;
-  if (GuildConfig.db?.readyState !== 1) return fallback;
+  if (!isDbReady(GuildConfig)) return fallback;
   try {
     const doc = await GuildConfig.findOne({ guildId }).select("warnThreshold warnMuteMs").lean();
     const policy = {
@@ -270,7 +271,7 @@ async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_
   const policy = { warnThreshold: threshold, warnMuteMs: muteMs };
   if (!guildId) return policy;
   warnPolicyCache.set(guildId, policy);
-  if (GuildConfig.db?.readyState === 1) {
+  if (isDbReady(GuildConfig)) {
     try {
       await GuildConfig.findOneAndUpdate(
         { guildId },
@@ -285,7 +286,7 @@ async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_
 async function getPrefix(guildId) {
   const cached = prefixCache.get(guildId);
   if (cached !== undefined) return cached;
-  if (GuildConfig.db?.readyState !== 1) return DEFAULT_PREFIX;
+  if (!isDbReady(GuildConfig)) return DEFAULT_PREFIX;
   try {
     const doc = await withTimeout(
       GuildConfig.findOne({ guildId }).lean(),
@@ -322,7 +323,7 @@ async function getAfk(guildId, userId) {
   const key = `${guildId}:${userId}`;
   const cached = afkCache.get(key);
   if (cached !== undefined) return cached;
-  if (Afk.db?.readyState !== 1) return null;
+  if (!isDbReady(Afk)) return null;
   try {
     const doc = await withTimeout(
       Afk.findOne({ guildId, userId }).lean(),
@@ -363,7 +364,7 @@ async function getLogChannelId(guildId) {
   if (!guildId) return null;
   const cached = logChannelCache.get(guildId);
   if (cached !== undefined) return cached;
-  if (Log.db?.readyState !== 1) return null;
+  if (!isDbReady(Log)) return null;
   try {
     const doc = await Log.findOne({ guildId }).lean();
     const channelId = doc?.channelId ?? null;

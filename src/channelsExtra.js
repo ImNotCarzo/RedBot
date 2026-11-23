@@ -1,8 +1,8 @@
 const { ActivityType, ChannelType, PermissionFlagsBits, Routes } = require("discord.js");
-const mongoose = require("mongoose");
 const { AutopurgeRule, GuildConfig, StickyMessage, TempChannel, VoiceLink } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
+const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady } = require("./shared/utils");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("CHANNELS_EXTRA");
@@ -32,7 +32,7 @@ async function hasActiveSticky(channelId) {
 
 async function handleStickyOnMessage(message) {
   if (!message?.guild?.id || !message.channelId || message.author?.bot) return;
-  if (mongoose.connection.readyState !== 1) return;
+  if (!isDbReady()) return;
 
   const channelId = message.channelId;
   if (stickyDebounceTimers.has(channelId) || stickyInFlight.has(channelId)) return;
@@ -85,7 +85,7 @@ async function handleStickyOnMessage(message) {
 }
 
 async function runAutopurgeSweep(client) {
-  if (isSweepingAutopurge || !client?.guilds || mongoose.connection.readyState !== 1) return;
+  if (isSweepingAutopurge || !client?.guilds || !isDbReady()) return;
   isSweepingAutopurge = true;
   try {
     const rules = await AutopurgeRule.find().lean().catch(() => []);
@@ -142,8 +142,7 @@ function scheduleTempChannelExpiry(client, guildId, channelId, expiresAt) {
   const expMs = new Date(expiresAt).getTime();
   if (!Number.isFinite(expMs)) return;
 
-  const existing = tempChannelTimers.get(channelId);
-  if (existing) clearTimeout(existing);
+  clearTimerMap(tempChannelTimers, channelId);
 
   const delay = Math.min(2_147_000_000, Math.max(1000, expMs - Date.now()));
   const timer = setTimeout(async () => {
@@ -153,7 +152,7 @@ function scheduleTempChannelExpiry(client, guildId, channelId, expiresAt) {
         scheduleTempChannelExpiry(client, guildId, channelId, new Date(expMs));
         return;
       }
-      if (mongoose.connection.readyState === 1) {
+      if (isDbReady()) {
         const still = await TempChannel.findOne({ channelId }).lean().catch(() => null);
         if (!still) return;
         const dbExpMs = still.expiresAt ? new Date(still.expiresAt).getTime() : NaN;
@@ -172,7 +171,7 @@ function scheduleTempChannelExpiry(client, guildId, channelId, expiresAt) {
 }
 
 async function restoreTempChannels(client) {
-  if (mongoose.connection.readyState !== 1) return;
+  if (!isDbReady()) return;
   const rows = await TempChannel.find({ expiresAt: { $ne: null } }).lean().catch(() => []);
   for (const r of rows) {
     scheduleTempChannelExpiry(client, r.guildId, r.channelId, r.expiresAt);
@@ -180,7 +179,7 @@ async function restoreTempChannels(client) {
 }
 
 async function createTimedTempChannel({ client, guild, name, type = ChannelType.GuildText, durationMs, ownerId = null, parentId = null }) {
-  if (mongoose.connection.readyState !== 1) return { error: "db" };
+  if (!isDbReady()) return { error: "db" };
   const count = await TempChannel.countDocuments({ guildId: guild.id }).catch(() => 0);
   if (count >= MAX_TEMP_CHANNELS_PER_GUILD) {
     return { error: "limit", max: MAX_TEMP_CHANNELS_PER_GUILD };
@@ -205,12 +204,12 @@ async function createTimedTempChannel({ client, guild, name, type = ChannelType.
 }
 
 async function applyVoiceLinksForTransition(member, oldChannelId, newChannelId) {
-  if (!member?.guild?.id || mongoose.connection.readyState !== 1) return;
+  if (!member?.guild?.id || !isDbReady()) return;
   const links = await VoiceLink.find({ guildId: member.guild.id }).lean().catch(() => []);
   if (!links.length) return;
 
   const guild = member.guild;
-  const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+  const me = await fetchBotMember(guild);
 
   for (const link of links) {
     const matchesOld = link.voiceChannelId === "any" ? Boolean(oldChannelId) : link.voiceChannelId === oldChannelId;
@@ -227,9 +226,8 @@ async function applyVoiceLinksForTransition(member, oldChannelId, newChannelId) 
         await textCh.permissionOverwrites.delete(member.id, "Voice-Text Unlink").catch(() => {});
       }
     } else if (link.targetType === "role") {
-      if (!me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) continue;
       const role = guild.roles.cache.get(link.targetId);
-      if (!role || role.managed || role.position >= me.roles.highest.position) continue;
+      if (!canBotManageRole(me, role)) continue;
       if (matchesNew && !member.roles.cache.has(role.id)) {
         await member.roles.add(role, "Voice-Role Link").catch(() => {});
       } else if (!matchesNew && member.roles.cache.has(role.id)) {
@@ -241,7 +239,7 @@ async function applyVoiceLinksForTransition(member, oldChannelId, newChannelId) 
 
 async function handleVoiceHubTransition(oldState, newState) {
   const guild = newState?.guild ?? oldState?.guild;
-  if (!guild?.id || mongoose.connection.readyState !== 1) return;
+  if (!guild?.id || !isDbReady()) return;
 
   // Limpiar sala de Voice Hub si quedó vacía o si el canal ya fue borrado manualmente
   const leftId = oldState?.channelId;
@@ -317,7 +315,7 @@ function invalidateVoiceAutoStatusCache(guildId) {
 }
 
 async function isVoiceAutoStatusEnabled(guildId) {
-  if (!guildId || mongoose.connection.readyState !== 1) return false;
+  if (!guildId || !isDbReady()) return false;
   const cached = voiceAutoStatusCache.get(guildId);
   if (cached !== undefined) return cached;
   const doc = await GuildConfig.findOne({ guildId }).select("voiceAutoStatus").lean().catch(() => null);
@@ -400,8 +398,7 @@ function scheduleVoiceAutoStatusSync(voiceChannel) {
   const guild = voiceChannel?.guild;
   if (!channelId || !guild?.id || voiceChannel.type !== ChannelType.GuildVoice) return;
 
-  const existing = voiceStatusTimers.get(channelId);
-  if (existing) clearTimeout(existing);
+  clearTimerMap(voiceStatusTimers, channelId);
 
   const timer = setTimeout(async () => {
     voiceStatusTimers.delete(channelId);
@@ -413,7 +410,7 @@ function scheduleVoiceAutoStatusSync(voiceChannel) {
       }
       if (!(await isVoiceAutoStatusEnabled(guild.id))) return;
 
-      const me = guild.members?.me ?? await guild.members?.fetchMe?.().catch(() => null);
+      const me = await fetchBotMember(guild);
       const perms = me ? ch.permissionsFor?.(me) : null;
       if (
         !perms?.has?.(PermissionFlagsBits.ViewChannel) ||
@@ -448,12 +445,9 @@ function stopChannelsWorkers() {
     clearInterval(autopurgeInterval);
     autopurgeInterval = null;
   }
-  for (const t of stickyDebounceTimers.values()) clearTimeout(t);
-  stickyDebounceTimers.clear();
-  for (const t of tempChannelTimers.values()) clearTimeout(t);
-  tempChannelTimers.clear();
-  for (const t of voiceStatusTimers.values()) clearTimeout(t);
-  voiceStatusTimers.clear();
+  clearTimerMap(stickyDebounceTimers);
+  clearTimerMap(tempChannelTimers);
+  clearTimerMap(voiceStatusTimers);
 }
 
 module.exports = {
