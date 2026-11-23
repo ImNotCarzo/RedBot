@@ -165,8 +165,11 @@ function validateImageAttachment(ctx, attachment) {
   return null;
 }
 
-async function fetchBotMember(guild) {
+async function fetchBotMember(guild, { force = false } = {}) {
   if (!guild) return null;
+  if (force) {
+    return guild.members?.fetchMe?.({ force: true }).catch(() => guild.members?.me ?? null) ?? guild.members?.me ?? null;
+  }
   return guild.members?.me ?? guild.members?.fetchMe?.().catch(() => null) ?? null;
 }
 
@@ -213,16 +216,24 @@ function isObfuscatedChannel(channel) {
   return Boolean(channel?.flags?.has?.(ChannelFlags.ChannelObfuscated)) || channel?.name === "___hidden___";
 }
 
-function checkTargetChannelAccess(ctx, channel, requiredPerms = []) {
+function checkTargetChannelAccess(
+  ctx,
+  channel,
+  requiredPerms = [],
+  {
+    crossGuildMsg = "Ese canal no pertenece a este servidor",
+    permMsg = "No tienes permisos suficientes en ese canal",
+  } = {}
+) {
   if (!channel) return "No se pudo obtener el canal";
   if (isObfuscatedChannel(channel)) return "No tengo acceso a ese canal";
   if (channel.guildId && ctx.guild?.id && channel.guildId !== ctx.guild.id) {
-    return "Ese canal no pertenece a este servidor";
+    return crossGuildMsg;
   }
   if (ctx.member && ctx.member.id !== ctx.guild?.ownerId && typeof channel.permissionsFor === "function") {
     const perms = channel.permissionsFor(ctx.member);
     if (perms && (!perms.has(PermissionFlagsBits.ViewChannel) || requiredPerms.some((p) => !perms.has(p)))) {
-      return "No tienes permisos suficientes en ese canal";
+      return permMsg;
     }
   }
   return null;

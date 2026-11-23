@@ -2,7 +2,8 @@ const { ChannelFlags, ChannelType, PermissionFlagsBits } = require("discord.js")
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
 const { logAction } = require("../../src/guild");
-const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith, isObfuscatedChannel } = require("../../src/runtime");
+const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
+const { checkTargetChannelAccess, fetchBotMember } = require("../../src/shared/utils");
 const { getMessageText } = require("../../src/adapter");
 const { generateText } = require("../../src/ai");
 const { AutopurgeRule, EmbedTemplate, GuildConfig, StickyMessage, VoiceLink } = require("../../src/database");
@@ -24,21 +25,6 @@ const { renderEmbedTemplate } = require("../../src/tagscript");
 const log = new Logger("CMD_CHANNEL");
 
 const MANAGE_CHANNELS_PLUGINS = [Plugins.hasPerms("ManageChannels"), Plugins.hasBotPerms("ManageChannels")];
-
-function checkTargetChannelPerms(ctx, channel, requiredPerms = []) {
-  if (!channel) return "No se pudo obtener el canal";
-  if (isObfuscatedChannel(channel)) return "No tengo acceso a ese canal";
-  if (channel.guildId && ctx.guild?.id && channel.guildId !== ctx.guild.id) {
-    return "Ese canal no pertenece a este servidor";
-  }
-  if (ctx.member && ctx.member.id !== ctx.guild?.ownerId && typeof channel.permissionsFor === "function") {
-    const perms = channel.permissionsFor(ctx.member);
-    if (perms && (!perms.has(PermissionFlagsBits.ViewChannel) || requiredPerms.some((p) => !perms.has(p)))) {
-      return "No tienes permisos suficientes en ese canal";
-    }
-  }
-  return null;
-}
 
 function formatSlowmode(seconds) {
   if (seconds === 0) return "desactivado";
@@ -79,7 +65,7 @@ function createEveryoneOverwriteCommand({ name, description, paramDesc, overwrit
       await ctx.defer();
       if (!ctx.guild) return noGuildReply(ctx);
       const channel = ctx.get("canal") ?? ctx.channel;
-      const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageChannels]);
+      const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageChannels]);
       if (permErr) return ctx.ephemeral(permErr);
       const modTag = ctx.user?.tag;
 
@@ -127,7 +113,7 @@ function createMemberAccessCommand({ name, description, allow, publicText, color
       if (!ctx.guild) return noGuildReply(ctx);
       const member = ctx.get("usuario");
       const channel = ctx.get("canal") ?? ctx.channel;
-      const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageChannels]);
+      const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageChannels]);
       if (permErr) return ctx.ephemeral(permErr);
       const modTag = ctx.user?.tag;
 
@@ -190,7 +176,7 @@ const data = {
           const channel = ctx.get("canal") ?? ctx.channel;
           const guild = ctx.guild;
           if (!guild) return noGuildReply(ctx);
-          const permErr = checkTargetChannelPerms(ctx, channel, []);
+          const permErr = checkTargetChannelAccess(ctx, channel, []);
           if (permErr) return ctx.ephemeral(permErr);
 
           const createdTs = Math.floor(channel.createdTimestamp / 1000);
@@ -258,7 +244,7 @@ const data = {
         await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
         const channel = ctx.get("canal");
-        const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageChannels]);
+        const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageChannels]);
         if (permErr) return ctx.ephemeral(permErr);
         const rawName = String(ctx.get("nombre") ?? "").trim();
         const isTextLike = channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement;
@@ -335,7 +321,7 @@ const data = {
         await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
         const channel = ctx.get("canal") ?? ctx.channel;
-        const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageChannels]);
+        const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageChannels]);
         if (permErr) return ctx.ephemeral(permErr);
         const modTag = ctx.user?.tag;
         const seconds = parseSlowmode(ctx.get("tiempo"));
@@ -393,7 +379,7 @@ const data = {
         const authorId = ctx.user?.id;
 
         if (!guild) return noGuildReply(ctx);
-        const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.Administrator]);
+        const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.Administrator]);
         if (permErr) return ctx.ephemeral(permErr);
         await ctx.defer();
 
@@ -500,7 +486,7 @@ const data = {
         await ctx.defer();
         if (!ctx.guild) return noGuildReply(ctx);
         const channel = ctx.get("canal") ?? ctx.channel;
-        const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageChannels]);
+        const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageChannels]);
         if (permErr) return ctx.ephemeral(permErr);
         const modTag = ctx.user?.tag;
 
@@ -725,7 +711,7 @@ const autopurgeCommand = {
       }));
     }
 
-    const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageMessages]);
+    const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageMessages]);
     if (permErr) return ctx.ephemeral(permErr);
 
     if (action === "remove") {
@@ -789,7 +775,7 @@ const stickyCommand = {
       }));
     }
 
-    const permErr = checkTargetChannelPerms(ctx, channel, [PermissionFlagsBits.ManageMessages]);
+    const permErr = checkTargetChannelAccess(ctx, channel, [PermissionFlagsBits.ManageMessages]);
     if (permErr) return ctx.ephemeral(permErr);
 
     if (action === "remove") {
@@ -1057,15 +1043,11 @@ const voiceStatusCommand = {
         (ctx.channel?.type === ChannelType.GuildVoice ? ctx.channel : null);
 
       if (targetCh) {
-        if (isObfuscatedChannel(targetCh) || targetCh.guildId !== ctx.guild.id) {
-          return ctx.ephemeral("No tengo acceso a ese canal");
-        }
-        if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof targetCh.permissionsFor === "function") {
-          const callerPerms = targetCh.permissionsFor(ctx.member);
-          if (callerPerms && !callerPerms.has(PermissionFlagsBits.ViewChannel)) {
-            return ctx.ephemeral("No tienes permisos para ver ese canal");
-          }
-        }
+        const accessErr = checkTargetChannelAccess(ctx, targetCh, [], {
+          crossGuildMsg: "No tengo acceso a ese canal",
+          permMsg: "No tienes permisos para ver ese canal",
+        });
+        if (accessErr) return ctx.ephemeral(accessErr);
       }
 
       if (!rawEstado && !clearFlag) {
@@ -1099,7 +1081,7 @@ const voiceStatusCommand = {
         }
       }
 
-      const me = ctx.guild.members.me ?? await ctx.guild.members.fetchMe().catch(() => null);
+      const me = await fetchBotMember(ctx.guild);
       const botPerms = me && typeof targetCh.permissionsFor === "function" ? targetCh.permissionsFor(me) : null;
       if (
         !botPerms?.has?.(PermissionFlagsBits.ViewChannel) ||

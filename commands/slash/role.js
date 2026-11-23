@@ -22,8 +22,9 @@ const {
   wait,
   formatRoleColorInfo,
   fetchComputedChannelPermissions,
-  isObfuscatedChannel,
 } = require("../../src/runtime");
+const { buildImageCard, buildListCard, slicePage } = require("../../src/shared/ui");
+const { checkTargetChannelAccess, fetchBotMember } = require("../../src/shared/utils");
 const { JoinRole, ReactionRolePanel, VoiceLink } = require("../../src/database");
 const { logAction } = require("../../src/guild");
 const { formatDuration, parseDuration } = require("../../src/moderation");
@@ -199,12 +200,12 @@ function buildRoleInfoCard(role, memberCount = null) {
 }
 
 function buildRoleIconCard(role) {
-  const url = role.iconURL({ size: 4096, extension: "png" });
-  return new ComponentsV2Builder({ color: role.color || DARK })
-    .addText(`${V2Text.subtext(role.name, 120)}\n${V2Text.heading("Icono del rol", 3)}`)
-    .addGallery(url)
-    .addSpacer("small")
-    .addButton({ label: "Abrir imagen", style: "link", url });
+  return buildImageCard({
+    title: "Icono del rol",
+    subtitle: role.name,
+    imageUrl: role.iconURL({ size: 4096, extension: "png" }),
+    color: role.color || DARK,
+  });
 }
 
 function buildRoleColorCard(role) {
@@ -233,18 +234,14 @@ function parseHexInt(raw) {
 }
 
 function buildRoleListCard({ role, title, lines, pageIndex, totalPages, footer = null, controls = null }) {
-  const builder = new ComponentsV2Builder({ color: role.color || DARK })
-    .addSection(
-      [V2Text.heading(title, 3, 200)],
-      { thumbnail: roleIconUrl(role), fallbackToText: true }
-    )
-    .addSeparator("small")
-    .addText(V2Text.clip(lines.join("\n"), 3600));
-
-  const resolvedFooter = footer ?? (totalPages > 1 ? `Página ${pageIndex + 1}/${totalPages}` : null);
-  if (resolvedFooter) builder.addText(V2Text.subtext(resolvedFooter, 200));
-  if (controls?.length) builder.addSpacer("small").addButtonsRow(controls);
-  return builder;
+  return buildListCard({
+    title,
+    lines,
+    footer: footer ?? (totalPages > 1 ? `Página ${pageIndex + 1}/${totalPages}` : null),
+    thumbnail: roleIconUrl(role),
+    color: role.color || DARK,
+    controls,
+  });
 }
 
 function createMemberRoleCommand({ name, description, isAdd }) {
@@ -451,13 +448,11 @@ const data = {
             builder = buildRoleIconCard(role);
           } else if (state.tab === "permissions" || state.tab === "users") {
             const items = state.tab === "permissions" ? perms : (cachedUsers ?? []);
-            const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-            const safePage = Math.max(0, Math.min(totalPages - 1, state.pageIndex));
-            const pageItems = items.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-            const controls = !isEnded && totalPages > 1
+            const sliced = slicePage(items, state.pageIndex, PAGE_SIZE);
+            const controls = !isEnded && sliced.totalPages > 1
               ? [
-                  { label: "◀", customId: view.id("page", "prev"), style: "secondary", disabled: safePage <= 0 },
-                  { label: "▶", customId: view.id("page", "next"), style: "secondary", disabled: safePage >= totalPages - 1 },
+                  { label: "◀", customId: view.id("page", "prev"), style: "secondary", disabled: sliced.pageIndex <= 0 },
+                  { label: "▶", customId: view.id("page", "next"), style: "secondary", disabled: sliced.pageIndex >= sliced.totalPages - 1 },
                 ]
               : null;
 
@@ -465,17 +460,17 @@ const data = {
               ? buildRoleListCard({
                   role,
                   title: `Permisos de ${role.name}`,
-                  lines: pageItems,
-                  pageIndex: safePage,
-                  totalPages,
+                  lines: sliced.items,
+                  pageIndex: sliced.pageIndex,
+                  totalPages: sliced.totalPages,
                   controls,
                 })
               : buildRoleListCard({
                   role,
-                  title: `Usuarios con ${role.name} (${safePage + 1}/${totalPages})`,
-                  lines: pageItems,
-                  pageIndex: safePage,
-                  totalPages,
+                  title: `Usuarios con ${role.name} (${sliced.pageIndex + 1}/${sliced.totalPages})`,
+                  lines: sliced.items,
+                  pageIndex: sliced.pageIndex,
+                  totalPages: sliced.totalPages,
                   footer: `${items.length} usuarios en total`,
                   controls,
                 });
@@ -588,7 +583,7 @@ const data = {
         if (ctx.member?.id !== ctx.guild.ownerId && !ctx.member?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) {
           return ctx.ephemeral("Necesitas el permiso **Administrar roles** (`ManageRoles`) para editar colores de rol");
         }
-        const me = ctx.guild.members.me ?? await ctx.guild.members.fetchMe().catch(() => null);
+        const me = await fetchBotMember(ctx.guild);
         if (!me?.permissions?.has?.(PermissionFlagsBits.ManageRoles)) {
           return ctx.ephemeral("Necesito el permiso **Administrar roles** (`ManageRoles`) para editar el color del rol");
         }
@@ -970,14 +965,12 @@ const data = {
           if (!role) return ctx.send("No pude encontrar el rol");
 
           const canal = ctx.get("canal") ?? null;
-          if (canal && (canal.guildId !== ctx.guild.id || isObfuscatedChannel(canal))) {
-            return ctx.ephemeral("No tengo acceso a ese canal");
-          }
-          if (canal && ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof canal.permissionsFor === "function") {
-            const callerPerms = canal.permissionsFor(ctx.member);
-            if (callerPerms && !callerPerms.has(PermissionFlagsBits.ViewChannel)) {
-              return ctx.ephemeral("No tienes permisos para ver ese canal");
-            }
+          if (canal) {
+            const accessErr = checkTargetChannelAccess(ctx, canal, [], {
+              crossGuildMsg: "No tengo acceso a ese canal",
+              permMsg: "No tienes permisos para ver ese canal",
+            });
+            if (accessErr) return ctx.ephemeral(accessErr);
           }
 
           const invoker = ctx.user ?? ctx.member?.user;

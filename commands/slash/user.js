@@ -17,8 +17,9 @@ const {
   formatSortedRoles,
   formatRoleColorInfo,
   fetchComputedChannelPermissions,
-  isObfuscatedChannel,
 } = require("../../src/runtime");
+const { buildImageCard, buildListCard, slicePage } = require("../../src/shared/ui");
+const { checkTargetChannelAccess } = require("../../src/shared/utils");
 const { resolveMemberFlexible: resolveMember } = require("../../src/adapter");
 const { RED, DARK, BADGE_NAMES, USER_APP_CONFIG } = require("../../src/config");
 const { recordImageIfNew, replyWithImageHistory } = require("../../src/history");
@@ -58,29 +59,26 @@ async function resolveUser(ctx, input) {
   return null;
 }
 
+async function resolveUserAndMember(ctx, input, { forceFetch = false } = {}) {
+  if (!ctx.guild) {
+    const baseUser = await resolveUser(ctx, input);
+    if (!baseUser) return null;
+    const user = forceFetch ? await baseUser.fetch(true).catch(() => baseUser) : baseUser;
+    return { user, member: null };
+  }
+  const resolved = await resolveMember(ctx, input);
+  if (!resolved) return null;
+  if (isGuildMember(resolved)) {
+    const user = forceFetch ? await resolved.user.fetch(true).catch(() => resolved.user) : resolved.user;
+    const member = forceFetch ? await resolved.fetch(true).catch(() => resolved) : resolved;
+    return { user, member };
+  }
+  const user = forceFetch ? await resolved.fetch(true).catch(() => resolved) : resolved;
+  return { user, member: null };
+}
+
 function getMemberColor(member, fallback = DARK) {
   return member?.displayColor ? `#${member.displayColor.toString(16).padStart(6, "0")}` : fallback;
-}
-
-function slicePage(items, pageIndex = 0, perPage = PAGE_SIZE) {
-  const totalPages = Math.max(1, Math.ceil(items.length / perPage));
-  const safePage = Math.max(0, Math.min(totalPages - 1, pageIndex));
-  const start = safePage * perPage;
-  return { pageIndex: safePage, totalPages, start, items: items.slice(start, start + perPage) };
-}
-
-function buildListCard({ title, subtitle = null, lines, footer = null, thumbnail, color, controls = null }) {
-  const headerLines = [V2Text.heading(title, 3, 200)];
-  if (subtitle) headerLines.push(V2Text.subtext(subtitle, 200));
-
-  const builder = new ComponentsV2Builder({ color })
-    .addSection(headerLines, { thumbnail, fallbackToText: true })
-    .addSeparator("small")
-    .addText(V2Text.clip(lines.join("\n"), 3600));
-
-  if (footer) builder.addText(V2Text.subtext(footer, 200));
-  if (controls?.length) builder.addSpacer("small").addButtonsRow(controls);
-  return builder;
 }
 
 function buildRolesCard(member, user, roles, pageIndex, totalPages, { controls = null } = {}) {
@@ -111,18 +109,13 @@ function buildPermsCard(user, perms, pageIndex, totalPages, color, { controls = 
 }
 
 function buildUserImageCard(user, { title, imageUrl, color, historyButtonId = null } = {}) {
-  const builder = new ComponentsV2Builder({ color })
-    .addText(`${V2Text.subtext(user.username, 120)}\n${V2Text.heading(title, 3, 200)}`)
-    .addGallery(imageUrl)
-    .addSpacer("small");
-
-  if (historyButtonId) {
-    return builder.addButtonsRow([
-      { label: "Abrir imagen", style: "link", url: imageUrl },
-      { customId: historyButtonId, label: "Historial", style: "secondary" },
-    ]);
-  }
-  return builder.addButton({ label: "Abrir imagen", style: "link", url: imageUrl });
+  return buildImageCard({
+    title,
+    subtitle: user.username,
+    imageUrl,
+    color,
+    historyButtonId,
+  });
 }
 
 async function sendImageSwitcher(
@@ -333,25 +326,10 @@ const data = {
           const invoker = ctx.user ?? ctx.member?.user;
           const guild = ctx.guild;
 
-          let user;
-          let fullMember = null;
-          let colorRol = RED;
-
-          if (!guild) {
-            const baseUser = await resolveUser(ctx, input);
-            if (!baseUser) return ctx.send("No pude encontrar al usuario");
-            user = await baseUser.fetch(true).catch(() => baseUser);
-          } else {
-            const resolved = await resolveMember(ctx, input);
-            if (!resolved) return ctx.send("No pude encontrar al usuario");
-            if (isGuildMember(resolved)) {
-              user = await resolved.user.fetch(true).catch(() => resolved.user);
-              fullMember = await resolved.fetch(true).catch(() => resolved);
-              colorRol = getMemberColor(resolved, DARK);
-            } else {
-              user = await resolved.fetch(true).catch(() => resolved);
-            }
-          }
+          const resolvedTarget = await resolveUserAndMember(ctx, input, { forceFetch: true });
+          if (!resolvedTarget) return ctx.send("No pude encontrar al usuario");
+          const { user, member: fullMember } = resolvedTarget;
+          const colorRol = fullMember ? getMemberColor(fullMember, DARK) : RED;
 
           const hasBanner = Boolean(user.banner || fullMember?.banner);
           const getBannerUrl = () => fullMember?.bannerURL?.({ size: 4096 }) ?? user.bannerURL({ size: 4096 }) ?? null;
@@ -487,22 +465,9 @@ const data = {
         try {
           const input = ctx.get("usuario") ?? null;
           const invoker = ctx.user ?? ctx.member?.user;
-          let user;
-          let member = null;
-
-          if (ctx.guild) {
-            const resolved = await resolveMember(ctx, input);
-            if (!resolved) return ctx.send("No pude encontrar al usuario");
-            if (isGuildMember(resolved)) {
-              member = resolved;
-              user = resolved.user;
-            } else {
-              user = resolved;
-            }
-          } else {
-            user = await resolveUser(ctx, input);
-            if (!user) return ctx.send("No pude encontrar al usuario");
-          }
+          const resolvedTarget = await resolveUserAndMember(ctx, input);
+          if (!resolvedTarget) return ctx.send("No pude encontrar al usuario");
+          const { user, member } = resolvedTarget;
 
           const avatarOpts = { extension: "png", size: 4096 };
           const serverAvatar = member ? member.displayAvatarURL(avatarOpts) : user.displayAvatarURL(avatarOpts);
@@ -549,23 +514,9 @@ const data = {
         try {
           const input = ctx.get("usuario") ?? null;
           const invoker = ctx.user ?? ctx.member?.user;
-          let user;
-          let member = null;
-
-          if (ctx.guild) {
-            const resolved = await resolveMember(ctx, input);
-            if (!resolved) return ctx.send("No pude encontrar al usuario");
-            if (isGuildMember(resolved)) {
-              user = await resolved.user.fetch(true).catch(() => resolved.user);
-              member = await resolved.fetch(true).catch(() => resolved);
-            } else {
-              user = await resolved.fetch(true).catch(() => resolved);
-            }
-          } else {
-            user = await resolveUser(ctx, input);
-            if (!user) return ctx.send("No pude encontrar al usuario");
-            user = await user.fetch(true).catch(() => user);
-          }
+          const resolvedTarget = await resolveUserAndMember(ctx, input, { forceFetch: true });
+          if (!resolvedTarget) return ctx.send("No pude encontrar al usuario");
+          const { user, member } = resolvedTarget;
 
           const serverBannerURL = member?.bannerURL?.({ size: 4096 }) ?? null;
           const globalBannerURL = user.bannerURL({ size: 4096 });
@@ -638,15 +589,11 @@ const data = {
         await ctx.defer();
         try {
           if (!ctx.guild) return noGuildReply(ctx);
-          if (canal.guildId !== ctx.guild.id || isObfuscatedChannel(canal)) {
-            return ctx.ephemeral("No tengo acceso a ese canal");
-          }
-          if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof canal.permissionsFor === "function") {
-            const callerPerms = canal.permissionsFor(ctx.member);
-            if (callerPerms && !callerPerms.has(PermissionFlagsBits.ViewChannel)) {
-              return ctx.ephemeral("No tienes permisos para ver ese canal");
-            }
-          }
+          const accessErr = checkTargetChannelAccess(ctx, canal, [], {
+            crossGuildMsg: "No tengo acceso a ese canal",
+            permMsg: "No tienes permisos para ver ese canal",
+          });
+          if (accessErr) return ctx.ephemeral(accessErr);
 
           const input = ctx.get("usuario") ?? null;
           const invoker = ctx.user ?? ctx.member?.user;
