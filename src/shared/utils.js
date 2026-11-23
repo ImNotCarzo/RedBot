@@ -172,6 +172,12 @@ async function fetchBotMember(guild, { force = false } = {}) {
   return guild.members?.me ?? guild.members?.fetchMe?.().catch(() => null) ?? null;
 }
 
+function extractSnowflake(raw) {
+  const str = String(raw ?? "").trim();
+  const mentionMatch = str.match(/^<(?:#|@&?|@!)(\d{17,22})>$/);
+  return mentionMatch ? mentionMatch[1] : str;
+}
+
 function memberHasRole(member, roleId) {
   if (!member || !roleId) return false;
   if (typeof member.roles?.cache?.has === "function") {
@@ -266,6 +272,7 @@ module.exports = {
   isValidImageAttachment,
   validateImageAttachment,
   fetchBotMember,
+  extractSnowflake,
   memberHasRole,
   canBotManageRole,
   validateRoleHierarchy,

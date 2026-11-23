@@ -2,7 +2,7 @@ const { PermissionFlagsBits } = require("discord.js");
 const { AutoRule, AutoTimer, CustomCommand } = require("./database");
 const { TtlCache } = require("./guild");
 const { Logger } = require("./runtime");
-const { canBotManageRole, fetchBotMember, isDbReady, isSafeRegexPattern, memberHasRole } = require("./shared/utils");
+const { canBotManageRole, extractSnowflake, fetchBotMember, isDbReady, isSafeRegexPattern, memberHasRole } = require("./shared/utils");
 const { resolveEmbedTemplate, runTagScript, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("AUTOMATION");
@@ -168,10 +168,10 @@ function matchesRuleCondition(rule, { message = null, member = null, channel = n
   const val = String(rule.conditionValue || "");
   if (type === "always") return true;
   if (type === "contains" && message) return (message.content || "").toLowerCase().includes(val.toLowerCase());
-  if (type === "has_role" && member) return memberHasRole(member, val);
+  if (type === "has_role" && member) return memberHasRole(member, extractSnowflake(val));
   if (type === "is_bot" && member) return Boolean(member.user?.bot);
   if (type === "not_bot" && member) return !member.user?.bot;
-  if (type === "in_channel" && channel) return channel.id === val;
+  if (type === "in_channel" && channel) return channel.id === extractSnowflake(val);
   if (type === "account_age_lt_days" && member?.user?.createdTimestamp) {
     const days = Number(val) || 7;
     return Date.now() - member.user.createdTimestamp < days * 86_400_000;
@@ -194,7 +194,7 @@ async function dispatchAutoRules(event, { guild, message = null, member = null, 
 
       if (rule.actionType === "send_channel") {
         const pipeIdx = actionVal.indexOf("|");
-        const firstPart = pipeIdx >= 0 ? actionVal.slice(0, pipeIdx).trim() : "";
+        const firstPart = pipeIdx >= 0 ? extractSnowflake(actionVal.slice(0, pipeIdx)) : "";
         let targetCh = channel;
         let msgText = actionVal;
         if (pipeIdx >= 0 && SNOWFLAKE_RE.test(firstPart)) {
@@ -208,13 +208,13 @@ async function dispatchAutoRules(event, { guild, message = null, member = null, 
         if (actionVal) await targetMember.user.send({ content: actionVal }).catch(() => {});
       } else if (rule.actionType === "add_role" && targetMember) {
         const me = await fetchBotMember(guild);
-        const role = guild.roles.cache.get(actionVal.trim());
+        const role = guild.roles.cache.get(extractSnowflake(actionVal));
         if (canBotManageRole(me, role)) {
           await targetMember.roles.add(role, `AutoRule: ${rule.name}`).catch(() => {});
         }
       } else if (rule.actionType === "remove_role" && targetMember) {
         const me = await fetchBotMember(guild);
-        const role = guild.roles.cache.get(actionVal.trim());
+        const role = guild.roles.cache.get(extractSnowflake(actionVal));
         if (canBotManageRole(me, role)) {
           await targetMember.roles.remove(role, `AutoRule: ${rule.name}`).catch(() => {});
         }

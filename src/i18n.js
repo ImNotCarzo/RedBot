@@ -862,6 +862,9 @@ const EXACT_ES_TO_EN = {
   "Esto no es un ticket abierto.": "This is not an open ticket.",
   "Ese mensaje es muy corto para resumir (mínimo 60 caracteres).": "That message is too short to summarize (minimum 60 characters).",
   "No pude abrir el expediente de ese usuario. Intenta otra vez.": "Couldn't open that user's dossier. Try again.",
+  // Lote B2
+  "No encontré ese canal en el servidor": "Could not find that channel in this server",
+  "No encontré ese rol en el servidor": "Could not find that role in this server",
 };
 
 const LANG_NAME_ES_TO_EN = {

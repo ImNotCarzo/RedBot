@@ -13,7 +13,7 @@ const { AutoRule, AutoTimer, CustomCommand, EmbedTemplate } = require("../../src
 const { parseDuration, formatDuration } = require("../../src/moderation");
 const { noGuildReply } = require("../../src/runtime");
 const { createStandardListPaginator } = require("../../src/shared/ui");
-const { validateRoleHierarchy } = require("../../src/shared/utils");
+const { extractSnowflake, validateRoleHierarchy } = require("../../src/shared/utils");
 const { renderEmbedTemplate } = require("../../src/tagscript");
 
 const ADMIN_PLUGINS = [Plugins.hasPerms("ManageGuild")];
@@ -369,13 +369,36 @@ const data = {
         if (!ctx.guild) return noGuildReply(ctx);
         const name = String(ctx.get("nombre") ?? "").trim().toLowerCase().slice(0, 64);
         if (!name) return ctx.ephemeral("Indica un nombre válido");
+        const conditionType = ctx.get("condicion");
+        let conditionValue = String(ctx.get("valor_condicion") ?? "").slice(0, 200);
+        if (conditionType === "in_channel") {
+          const channelId = extractSnowflake(conditionValue);
+          if (!channelId || !ctx.guild.channels.cache.has(channelId)) {
+            return ctx.ephemeral("No encontré ese canal en el servidor");
+          }
+          conditionValue = channelId;
+        } else if (conditionType === "has_role") {
+          const roleId = extractSnowflake(conditionValue);
+          if (!roleId || !ctx.guild.roles.cache.has(roleId)) {
+            return ctx.ephemeral("No encontré ese rol en el servidor");
+          }
+          conditionValue = roleId;
+        }
+
         const actionType = ctx.get("accion");
-        const actionValue = String(ctx.get("valor_accion") ?? "").slice(0, 1500);
+        let actionValue = String(ctx.get("valor_accion") ?? "").slice(0, 1500);
         if (actionType === "add_role" || actionType === "remove_role") {
-          const roleId = actionValue.replace(/[<@&>]/g, "").trim();
+          const roleId = extractSnowflake(actionValue);
           const role = ctx.guild.roles.cache.get(roleId) ?? null;
           const roleErr = validateManageableRole(ctx, role);
           if (roleErr) return ctx.ephemeral(roleErr);
+          actionValue = roleId;
+        } else if (actionType === "send_channel" && actionValue.includes("|")) {
+          const pipeIdx = actionValue.indexOf("|");
+          const candidateId = extractSnowflake(actionValue.slice(0, pipeIdx));
+          if (/^\d{17,22}$/.test(candidateId)) {
+            actionValue = `${candidateId}|${actionValue.slice(pipeIdx + 1).trim()}`;
+          }
         }
 
         const existing = await AutoRule.findOne({ guildId: ctx.guild.id, name }).lean();
@@ -389,8 +412,8 @@ const data = {
           {
             $set: {
               event: ctx.get("evento"),
-              conditionType: ctx.get("condicion"),
-              conditionValue: String(ctx.get("valor_condicion") ?? "").slice(0, 200),
+              conditionType,
+              conditionValue,
               actionType,
               actionValue,
               enabled: true,

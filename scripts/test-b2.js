@@ -341,6 +341,156 @@ async function testB2Bug6MemberHasRole() {
   }
 }
 
+async function testB2Bug3AutoRuleMentions() {
+  const { AutoRule } = require(path.join(ROOT, "src/database"));
+  const { dispatchAutoRules, invalidateAutoRulesCache } = require(path.join(ROOT, "src/automation"));
+  const autoGroup = require(path.join(ROOT, "commands/slash/auto")).data.data;
+  const subs = autoGroup.commands ?? autoGroup.subcommands ?? [];
+  const ruleAddCmd = subs.find((c) => (c.data?.name ?? c.name) === "ruleadd");
+  assertCondition(ruleAddCmd, "B2 #3: no se encontró subcomando /auto ruleadd");
+
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origAutoFind = AutoRule.find;
+  const origAutoFindOne = AutoRule.findOne;
+  const origAutoCount = AutoRule.countDocuments;
+  const origAutoFindOneAndUpdate = AutoRule.findOneAndUpdate;
+
+  let savedUpdate = null;
+  const targetChId = "123456789012345678";
+  const targetRoleId = "987654321098765432";
+  const triggerRoleId = "555555555555555555";
+  const guildId = "g_auto_b2_3";
+
+  try {
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+    AutoRule.findOne = () => ({ lean: async () => null });
+    AutoRule.countDocuments = async () => 0;
+    AutoRule.findOneAndUpdate = (_filter, update) => {
+      savedUpdate = update.$set;
+      return { lean: async () => savedUpdate };
+    };
+
+    const roleObj = { id: targetRoleId, position: 5, managed: false };
+    const trigRoleObj = { id: triggerRoleId, position: 3, managed: false };
+    const chObj = { id: targetChId, isTextBased: () => true };
+    const guild = {
+      id: guildId,
+      ownerId: "u_owner",
+      channels: { cache: new Map([[targetChId, chObj]]) },
+      roles: {
+        cache: new Map([
+          [targetRoleId, roleObj],
+          [triggerRoleId, trigRoleObj],
+        ]),
+      },
+      members: {
+        me: {
+          permissions: { has: () => true },
+          roles: { highest: { position: 99 } },
+        },
+      },
+    };
+
+    const params = {
+      nombre: "regla_mencion",
+      evento: "message",
+      condicion: "in_channel",
+      valor_condicion: `  <#${targetChId}>  `,
+      accion: "add_role",
+      valor_accion: `<@&${targetRoleId}>`,
+    };
+    let sentCard = null;
+    await ruleAddCmd.code({
+      guild,
+      member: { id: "u_owner", permissions: { has: () => true } },
+      get: (k) => (Object.prototype.hasOwnProperty.call(params, k) ? params[k] : null),
+      ephemeral: async (msg) => { throw new Error(`ephemeral inesperado: ${msg}`); },
+      send: async (c) => { sentCard = c; },
+    });
+
+    assertCondition(
+      sentCard && savedUpdate?.conditionValue === targetChId && savedUpdate?.actionValue === targetRoleId,
+      `B2 #3 (guardado): no normalizó menciones (${JSON.stringify(savedUpdate)})`
+    );
+
+    // También probar envío con send_channel y prefijo <#canal>|texto al guardar
+    params.condicion = "has_role";
+    params.valor_condicion = `<@&${triggerRoleId}>`;
+    params.accion = "send_channel";
+    params.valor_accion = `<#${targetChId}>|Hola mundo`;
+    await ruleAddCmd.code({
+      guild,
+      member: { id: "u_owner", permissions: { has: () => true } },
+      get: (k) => (Object.prototype.hasOwnProperty.call(params, k) ? params[k] : null),
+      ephemeral: async (msg) => { throw new Error(`ephemeral inesperado: ${msg}`); },
+      send: async () => {},
+    });
+    assertCondition(
+      savedUpdate?.conditionValue === triggerRoleId && savedUpdate?.actionValue === `${targetChId}|Hola mundo`,
+      `B2 #3 (guardado has_role/send_channel): no normalizó (${JSON.stringify(savedUpdate)})`
+    );
+
+    // Evaluar reglas heredadas ya guardadas CON menciones sin migrar
+    invalidateAutoRulesCache(guildId);
+    const addedRoles = [];
+    const sentMessages = [];
+    AutoRule.find = () => ({
+      lean: async () => [
+        {
+          name: "legacy_in_ch_add_role",
+          conditionType: "in_channel",
+          conditionValue: `<#${targetChId}>`,
+          actionType: "add_role",
+          actionValue: `<@&${targetRoleId}>`,
+        },
+        {
+          name: "legacy_has_role_send_ch",
+          conditionType: "has_role",
+          conditionValue: `<@&${triggerRoleId}>`,
+          actionType: "send_channel",
+          actionValue: `<#${targetChId}>|Legacy ok`,
+        },
+      ],
+    });
+
+    const targetMember = {
+      id: "u_target",
+      user: { id: "u_target", bot: false, username: "target" },
+      roles: {
+        cache: new Set([triggerRoleId]),
+        add: async (role) => { addedRoles.push(role.id); },
+      },
+    };
+    const legacyChannel = {
+      id: targetChId,
+      name: "general",
+      isTextBased: () => true,
+      send: async (p) => { sentMessages.push(p.content); },
+    };
+    guild.channels.cache.set(targetChId, legacyChannel);
+
+    await dispatchAutoRules("message", {
+      guild,
+      member: targetMember,
+      channel: legacyChannel,
+      message: { author: targetMember.user, member: targetMember, content: "hola" },
+    });
+
+    assertCondition(
+      addedRoles.includes(targetRoleId) && sentMessages.includes("Legacy ok"),
+      `B2 #3 (evaluación legacy): roles=${JSON.stringify(addedRoles)} msgs=${JSON.stringify(sentMessages)}`
+    );
+  } finally {
+    invalidateAutoRulesCache(guildId);
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    AutoRule.find = origAutoFind;
+    AutoRule.findOne = origAutoFindOne;
+    AutoRule.countDocuments = origAutoCount;
+    AutoRule.findOneAndUpdate = origAutoFindOneAndUpdate;
+  }
+}
+
 async function runB2Tests() {
   const checks = [
     ["#1 decodeHtmlEntities", testB2Bug1DecodeHtmlEntities],
@@ -348,6 +498,7 @@ async function runB2Tests() {
     ["#4 sendLog 10003", testB2Bug4SendLogTransientErrors],
     ["#5 error.js 16 reglas", testB2Bug5ErrorRulesBaselineComparison],
     ["#6 memberHasRole APIGuildMember", testB2Bug6MemberHasRole],
+    ["#3 auto ruleadd menciones", testB2Bug3AutoRuleMentions],
   ];
   const extras = [];
   for (const [, fn] of checks) {
