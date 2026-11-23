@@ -491,6 +491,89 @@ async function testB2Bug3AutoRuleMentions() {
   }
 }
 
+async function testB2Bug2WarnModCaseSync() {
+  const { Warn, ModCase } = require(path.join(ROOT, "src/database"));
+  const { removeWarnById, clearWarnsForUser, listUnifiedHistoryForUser } = require(path.join(ROOT, "src/moderation"));
+
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origWarnFind = Warn.find;
+  const origWarnFindOneAndDelete = Warn.findOneAndDelete;
+  const origWarnDeleteMany = Warn.deleteMany;
+  const origCaseFind = ModCase.find;
+  const origCaseFindOneAndDelete = ModCase.findOneAndDelete;
+  const origCaseDeleteMany = ModCase.deleteMany;
+
+  let warnStore = [
+    { guildId: "g_mod_2", userId: "u_mod_2", warnId: "W11111", moderator: "m1", reason: "Spam", createdAt: new Date("2026-01-01T10:00:00Z") },
+    { guildId: "g_mod_2", userId: "u_mod_2", warnId: "W22222", moderator: "m1", reason: "Flood", createdAt: new Date("2026-01-02T10:00:00Z") },
+  ];
+  let caseStore = [
+    { guildId: "g_mod_2", userId: "u_mod_2", caseId: "W11111", type: "warn", moderator: "m1", reason: "Spam", createdAt: new Date("2026-01-01T10:00:00Z") },
+    { guildId: "g_mod_2", userId: "u_mod_2", caseId: "W22222", type: "warn", moderator: "m1", reason: "Flood", createdAt: new Date("2026-01-02T10:00:00Z") },
+    { guildId: "g_mod_2", userId: "u_mod_2", caseId: "M33333", type: "mute", moderator: "m1", reason: "Mute previo", createdAt: new Date("2026-01-03T10:00:00Z") },
+  ];
+
+  const makeQuery = (arr) => ({
+    sort() { return this; },
+    lean: async () => [...arr],
+  });
+
+  try {
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+
+    Warn.find = ({ guildId, userId }) => makeQuery(warnStore.filter((d) => d.guildId === guildId && d.userId === userId));
+    ModCase.find = ({ guildId, userId }) => makeQuery(caseStore.filter((d) => d.guildId === guildId && d.userId === userId));
+
+    Warn.findOneAndDelete = async ({ guildId, warnId }) => {
+      const idx = warnStore.findIndex((d) => d.guildId === guildId && d.warnId === warnId);
+      if (idx < 0) return null;
+      return warnStore.splice(idx, 1)[0];
+    };
+    ModCase.findOneAndDelete = async ({ guildId, type, caseId }) => {
+      const idx = caseStore.findIndex((d) => d.guildId === guildId && d.type === type && d.caseId === caseId);
+      if (idx < 0) return null;
+      return caseStore.splice(idx, 1)[0];
+    };
+    Warn.deleteMany = async ({ guildId, userId }) => {
+      const before = warnStore.length;
+      warnStore = warnStore.filter((d) => !(d.guildId === guildId && d.userId === userId));
+      return { deletedCount: before - warnStore.length };
+    };
+    ModCase.deleteMany = async ({ guildId, userId, type }) => {
+      const before = caseStore.length;
+      caseStore = caseStore.filter((d) => !(d.guildId === guildId && d.userId === userId && (!type || d.type === type)));
+      return { deletedCount: before - caseStore.length };
+    };
+
+    // 1. removeWarnById borra de Warn Y de ModCase
+    const rem = await removeWarnById({ guildId: "g_mod_2", warnId: "w11111" });
+    assertCondition(rem?.warnId === "W11111", "B2 #2: removeWarnById no devolvió el warn eliminado");
+    const histAfterOne = await listUnifiedHistoryForUser({ guildId: "g_mod_2", userId: "u_mod_2" });
+    assertCondition(
+      histAfterOne.map((c) => c.caseId).join(",") === "M33333,W22222",
+      `B2 #2: W11111 siguió apareciendo tras removeWarnById (${JSON.stringify(histAfterOne.map((c) => c.caseId))})`
+    );
+
+    // 2. clearWarnsForUser borra warns de Warn Y de ModCase conservando el caso mute M33333
+    const cleared = await clearWarnsForUser({ guildId: "g_mod_2", userId: "u_mod_2" });
+    assertCondition(cleared === 1, `B2 #2: clearWarnsForUser debía contar 1 eliminado (${cleared})`);
+    const histAfterClear = await listUnifiedHistoryForUser({ guildId: "g_mod_2", userId: "u_mod_2" });
+    assertCondition(
+      histAfterClear.length === 1 && histAfterClear[0].caseId === "M33333",
+      `B2 #2: historial tras clearWarns debía conservar solo M33333 (${JSON.stringify(histAfterClear.map((c) => c.caseId))})`
+    );
+  } finally {
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    Warn.find = origWarnFind;
+    Warn.findOneAndDelete = origWarnFindOneAndDelete;
+    Warn.deleteMany = origWarnDeleteMany;
+    ModCase.find = origCaseFind;
+    ModCase.findOneAndDelete = origCaseFindOneAndDelete;
+    ModCase.deleteMany = origCaseDeleteMany;
+  }
+}
+
 async function runB2Tests() {
   const checks = [
     ["#1 decodeHtmlEntities", testB2Bug1DecodeHtmlEntities],
@@ -499,6 +582,7 @@ async function runB2Tests() {
     ["#5 error.js 16 reglas", testB2Bug5ErrorRulesBaselineComparison],
     ["#6 memberHasRole APIGuildMember", testB2Bug6MemberHasRole],
     ["#3 auto ruleadd menciones", testB2Bug3AutoRuleMentions],
+    ["#2 removewarn/clearwarns ModCase", testB2Bug2WarnModCaseSync],
   ];
   const extras = [];
   for (const [, fn] of checks) {

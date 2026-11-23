@@ -154,12 +154,25 @@ async function addWarn({ guildId, userId, moderatorId, reason, warnId }) {
 }
 
 async function removeWarnById({ guildId, warnId }) {
-  return Warn.findOneAndDelete({ guildId, warnId: String(warnId).trim().toUpperCase() });
+  const normalizedWarnId = String(warnId).trim().toUpperCase();
+  const removed = await Warn.findOneAndDelete({ guildId, warnId: normalizedWarnId });
+  if (isDbReady(ModCase)) {
+    const deletedCase = await ModCase.findOneAndDelete({ guildId, type: "warn", caseId: normalizedWarnId }).catch(() => null);
+    if (!removed && deletedCase) {
+      return { userId: deletedCase.userId, warnId: deletedCase.caseId };
+    }
+  }
+  return removed;
 }
 
 async function clearWarnsForUser({ guildId, userId }) {
   const result = await Warn.deleteMany({ guildId, userId });
-  return result.deletedCount || 0;
+  let caseDeleted = 0;
+  if (isDbReady(ModCase)) {
+    const caseRes = await ModCase.deleteMany({ guildId, userId, type: "warn" }).catch(() => null);
+    caseDeleted = caseRes?.deletedCount || 0;
+  }
+  return Math.max(result?.deletedCount || 0, caseDeleted);
 }
 
 async function upsertTempBan({ guildId, userId, unbanAt }) {
