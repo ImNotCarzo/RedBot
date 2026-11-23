@@ -1,7 +1,7 @@
 const { EmbedBuilder } = require("discord.js");
-const mongoose = require("mongoose");
 const { RED } = require("./config");
 const { EmbedTemplate } = require("./database");
+const { isDbReady } = require("./shared/utils");
 
 const OPEN_BRACE_SENTINEL = "\uE000";
 const CLOSE_BRACE_SENTINEL = "\uE001";
@@ -236,7 +236,7 @@ function renderEmbedTemplate(doc, ctx = {}, extraVars = {}) {
 }
 
 async function resolveEmbedTemplate(guildId, name, ctx = {}, extraVars = {}) {
-  if (!guildId || !name || mongoose.connection.readyState !== 1) return null;
+  if (!guildId || !name || !isDbReady()) return null;
   const clean = String(name).trim().toLowerCase();
   const doc = await EmbedTemplate.findOne({ guildId, name: clean }).lean().catch(() => null);
   if (!doc) return null;

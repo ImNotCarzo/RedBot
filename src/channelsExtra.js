@@ -14,7 +14,7 @@ const stickyPresenceCache = new TtlCache(60_000, 4000);
 const tempChannelTimers = new Map();
 const voiceAutoStatusCache = new TtlCache(2 * 60_000, 2000);
 const voiceStatusTimers = new Map();
-const autoManagedVoiceStatus = new Map();
+const autoManagedVoiceStatus = new TtlCache(Infinity, MAX_MANAGED_VOICE_STATUS);
 let autopurgeInterval = null;
 let isSweepingAutopurge = false;
 
@@ -324,16 +324,8 @@ function clearManagedVoiceStatus(channelId) {
 
 function rememberManagedVoiceStatus(channelId, status) {
   if (!channelId) return;
-  if (!status) {
-    autoManagedVoiceStatus.delete(channelId);
-    return;
-  }
-  if (autoManagedVoiceStatus.size >= MAX_MANAGED_VOICE_STATUS && !autoManagedVoiceStatus.has(channelId)) {
-    const oldest = autoManagedVoiceStatus.keys().next().value;
-    if (oldest !== undefined) autoManagedVoiceStatus.delete(oldest);
-  }
-  autoManagedVoiceStatus.delete(channelId);
-  autoManagedVoiceStatus.set(channelId, status);
+  if (!status) autoManagedVoiceStatus.delete(channelId);
+  else autoManagedVoiceStatus.set(channelId, status);
 }
 
 async function setVoiceChannelStatus(client, channelId, status, reason = undefined) {

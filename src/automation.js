@@ -13,24 +13,17 @@ const MAX_RULES = 50;
 
 const customCommandsCache = new TtlCache(2 * 60_000, 2000);
 const autoRulesCache = new TtlCache(2 * 60_000, 4000);
-const compiledRegexCache = new Map();
 const MAX_REGEX_CACHE = 500;
+const compiledRegexCache = new TtlCache(Infinity, MAX_REGEX_CACHE);
 const SNOWFLAKE_RE = /^\d{17,22}$/;
 
 let timerInterval = null;
 let isRunningTimers = false;
 
 function getCompiledRegex(pattern) {
-  if (compiledRegexCache.has(pattern)) return compiledRegexCache.get(pattern);
-  if (!isSafeRegexPattern(pattern)) {
-    compiledRegexCache.set(pattern, null);
-    return null;
-  }
-  const re = new RegExp(pattern, "i");
-  if (compiledRegexCache.size >= MAX_REGEX_CACHE) {
-    const oldest = compiledRegexCache.keys().next().value;
-    if (oldest !== undefined) compiledRegexCache.delete(oldest);
-  }
+  const cached = compiledRegexCache.get(pattern);
+  if (cached !== undefined) return cached;
+  const re = isSafeRegexPattern(pattern) ? new RegExp(pattern, "i") : null;
   compiledRegexCache.set(pattern, re);
   return re;
 }

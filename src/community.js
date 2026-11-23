@@ -1,12 +1,13 @@
 const { PermissionFlagsBits } = require("discord.js");
 const { Birthday, GuildConfig, InviteJoin, InviteReward, InviteStat } = require("./database");
+const { TtlCache } = require("./guild");
 const { grantTempRole } = require("./reactionRoles");
 const { Logger } = require("./runtime");
 const { canBotManageRole, fetchBotMember, isDbReady } = require("./shared/utils");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
 
 const log = new Logger("COMMUNITY");
-const inviteCache = new Map(); // guildId -> Map<code, { uses, inviterId }>
+const inviteCache = new TtlCache(Infinity, 500); // guildId -> Map<code, { uses, inviterId }>
 let birthdayInterval = null;
 let isCheckingBirthdays = false;
 

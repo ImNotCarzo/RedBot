@@ -44,6 +44,14 @@ class TtlCache {
   delete(key) {
     this.store.delete(key);
   }
+
+  has(key) {
+    return this.get(key) !== undefined;
+  }
+
+  clear() {
+    this.store.clear();
+  }
 }
 
 const { detectLocaleLang, normalizeLang, translateEmbed } = require("./i18n");
