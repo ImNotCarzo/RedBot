@@ -42,14 +42,22 @@ Backlog priorizado de bugs detectados en la auditoría de Fase 1 que quedan fuer
 - **Archivo:** `events/autoModerationActionExecution.js` (`L13-59`).
 - **Problema:** Cuando una regla nativa de Discord AutoMod tiene varias acciones configuradas (por ejemplo `BlockMessage` + `SendAlertMessage` + `Timeout`), Discord emite un evento `autoModerationActionExecution` por cada acción sobre el mismo mensaje/ejecución. El listener envía múltiples embeds de log y múltiples tarjetas interactivas en Drama Watcher para el mismo incidente al no deduplicar por mensaje/ejecución.
 
+### 9. `/tickets claim` actualiza `Ticket` sin filtrar por `status: "open"`
+- **Archivo:** `commands/slash/tickets.js` (`claim`, `L208`).
+- **Problema:** Ejecuta `Ticket.updateOne({ channelId: ctx.channel.id }, { $set: { claimedBy: ctx.user.id } })` sin incluir `status: "open"` en el filtro. Si el ticket se cierra entre la validación de `requireTicketContext` (`L203-207`) y el `updateOne`, puede modificar un ticket ya cerrado o un registro histórico del mismo canal.
+
 ---
 
 ## Gravedad Baja
 
-### 9. `formatSlowmode(90)` trunca segundos y minutos restantes
+### 10. `formatSlowmode(90)` trunca segundos y minutos restantes
 - **Archivo:** `commands/slash/channel.js` (`formatSlowmode`, `L29-34`).
 - **Problema:** Usa `Math.floor(seconds / 60) + "m"` para valores `>= 60` y `Math.floor(seconds / 3600) + "h"` para `>= 3600`, por lo que `90` segundos se formatea como `"1m"` (perdiendo `30s`) y `5400` segundos como `"1h"` (perdiendo `30m`). Discord permite cualquier entero de `0` a `21600`s.
 
-### 10. Reglas `AutopurgeRule` huérfanas cuando el canal se borra en Discord
+### 11. Reglas `AutopurgeRule` huérfanas cuando el canal se borra en Discord
 - **Archivo:** `src/channelsExtra.js` (`runAutopurgeSweep`, `L90-104`).
 - **Problema:** Si se elimina en Discord un canal que tenía autopurge activo, el barrido cada 30 segundos sigue cargando su `AutopurgeRule` e intentando `client.channels.fetch(rule.channelId)` indefinidamente (en lugar de limpiar el documento si Discord responde `10003` `Unknown Channel`).
+
+### 12. Mejora de mensajes de permisos faltantes (`events/error.js` / `src/i18n.js`)
+- **Archivos:** `events/error.js` (`resolveMissingBotPermissions` en `L27-48`, `ERROR_RULES` en `L54-74`, `requiredFallback` en `L143`) y `src/i18n.js` (`error.missing_perm`, `error.missing_bot_perm`, `error.missing_channel_perm`).
+- **Problema:** Cuando no se puede determinar un permiso concreto (por ejemplo, en un `50013` por jerarquía de roles o un overwrite de canal), las plantillas envuelven el fallback genérico entre backticks (``necesito: `los requeridos` `` / ``I need: `the required ones` ``), lo cual se lee mal. Además, los 24 comandos que usan `Plugins.hasBotPerms(...)` crean closures opacos de `gralonium` cuyos permisos no pueden inspeccionarse ante un `50013` tardío; conviene separar una plantilla genérica sin backticks y valorar envolver `hasBotPerms` para comprobar también permisos declarados por el comando en el canal.
