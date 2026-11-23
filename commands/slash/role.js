@@ -47,11 +47,11 @@ const ADMIN_ROLE_PLUGINS = [Plugins.hasPerms("Administrator"), Plugins.hasBotPer
 function roleHierarchyCheck(ctx, role) {
   if (!ctx.guild) return "Este comando solo funciona en servidores";
   if (!role) return "Rol no encontrado";
-  if (role.managed) return "No puedo editar roles gestionados por integraciones";
+  if (role.managed) return "Ese rol lo gestiona un bot o integración y Discord no deja editarlo.";
   if (role.id === ctx.guild.id) return "No puedo editar el rol @everyone";
   const botMember = ctx.guild.members.me ?? ctx.guild.members.cache.get(ctx.client?.user?.id ?? ctx.bot?.user?.id);
   const botHighest = botMember?.roles?.highest?.position ?? 0;
-  if (role.position >= botHighest) return "No puedo actuar sobre ese rol porque está por encima del mío";
+  if (role.position >= botHighest) return "No puedo tocar ese rol: está igual o por encima de mi rol más alto.";
   const isOwner = ctx.member?.id === ctx.guild.ownerId;
   if (!isOwner) {
     const userHighest = ctx.member?.roles?.highest?.position ?? -1;
@@ -516,7 +516,7 @@ const data = {
               if (selected === "users") {
                 const users = await loadUsers();
                 if (!users.length) {
-                  await interaction.reply({ content: "Nadie tiene este rol", flags: MessageFlags.Ephemeral }).catch(() => {});
+                  await interaction.reply({ content: "Nadie tiene este rol todavía.", flags: MessageFlags.Ephemeral }).catch(() => {});
                   return false;
                 }
               }
@@ -658,7 +658,7 @@ const data = {
         if (!role) return ctx.ephemeral("No encontré ese rol");
 
         const members = Array.from(role.members.values()).map((m, i) => `${i + 1}. ${m}`);
-        if (!members.length) return ctx.ephemeral("Nadie tiene este rol");
+        if (!members.length) return ctx.ephemeral("Nadie tiene este rol todavía.");
 
         const authorId = ctx.user?.id;
         const paginator = createListPaginator({
@@ -1118,7 +1118,7 @@ const data = {
         }
 
         const panel = await ReactionRolePanel.findOne({ guildId: ctx.guild.id, panelId });
-        if (!panel) return ctx.ephemeral("Primero crea el panel con `accion:create`");
+        if (!panel) return ctx.ephemeral("Ese panel no existe todavía. Créalo primero con `/role reaction accion:create`.");
 
         if (action === "add") {
           const role = ctx.get("rol");

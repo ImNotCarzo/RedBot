@@ -327,7 +327,7 @@ const data = {
           const guild = ctx.guild;
 
           const resolvedTarget = await resolveUserAndMember(ctx, input, { forceFetch: true });
-          if (!resolvedTarget) return ctx.send("No pude encontrar al usuario");
+          if (!resolvedTarget) return ctx.send("No encontré a ese usuario. Pasa una mención o su ID.");
           const { user, member: fullMember } = resolvedTarget;
           const colorRol = fullMember ? getMemberColor(fullMember, DARK) : RED;
 
@@ -421,11 +421,11 @@ const data = {
                 if (!selected) return false;
 
                 if (selected === "banner" && !getBannerUrl()) {
-                  await interaction.reply({ content: "Este usuario no tiene banner", flags: MessageFlags.Ephemeral }).catch(() => {});
+                  await interaction.reply({ content: "Este usuario no tiene ningún banner configurado.", flags: MessageFlags.Ephemeral }).catch(() => {});
                   return false;
                 }
                 if (selected === "roles" && !sortedRoles.length) {
-                  await interaction.reply({ content: "Este usuario no tiene roles", flags: MessageFlags.Ephemeral }).catch(() => {});
+                  await interaction.reply({ content: "Este usuario todavía no tiene roles.", flags: MessageFlags.Ephemeral }).catch(() => {});
                   return false;
                 }
                 if (selected === "permissions" && !perms.length) {
@@ -466,7 +466,7 @@ const data = {
           const input = ctx.get("usuario") ?? null;
           const invoker = ctx.user ?? ctx.member?.user;
           const resolvedTarget = await resolveUserAndMember(ctx, input);
-          if (!resolvedTarget) return ctx.send("No pude encontrar al usuario");
+          if (!resolvedTarget) return ctx.send("No encontré a ese usuario. Pasa una mención o su ID.");
           const { user, member } = resolvedTarget;
 
           const avatarOpts = { extension: "png", size: 4096 };
@@ -515,12 +515,12 @@ const data = {
           const input = ctx.get("usuario") ?? null;
           const invoker = ctx.user ?? ctx.member?.user;
           const resolvedTarget = await resolveUserAndMember(ctx, input, { forceFetch: true });
-          if (!resolvedTarget) return ctx.send("No pude encontrar al usuario");
+          if (!resolvedTarget) return ctx.send("No encontré a ese usuario. Pasa una mención o su ID.");
           const { user, member } = resolvedTarget;
 
           const serverBannerURL = member?.bannerURL?.({ size: 4096 }) ?? null;
           const globalBannerURL = user.bannerURL({ size: 4096 });
-          if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene banner");
+          if (!globalBannerURL && !serverBannerURL) return ctx.send("Este usuario no tiene ningún banner configurado.");
 
           if (globalBannerURL) {
             await recordImageIfNew("banner", user.id, globalBannerURL);
@@ -562,7 +562,7 @@ const data = {
         return sendMemberListCommand(ctx, {
           logName: "user roles",
           getItems: (member) => formatSortedRoles(member.roles.cache, ctx.guild.id),
-          emptyMessage: "Este usuario no tiene roles",
+          emptyMessage: "Este usuario todavía no tiene roles.",
           render: ({ member, pageItems, pageIndex, totalPages, controls }) =>
             buildRolesCard(member, member.user, pageItems, pageIndex, totalPages, { controls }),
         });
@@ -670,7 +670,7 @@ const data = {
 
           if (!candidates.size) {
             return ctx.ephemeral(
-              role ? `No hay miembros con el rol ${role}` : "No se encontraron miembros en el servidor"
+              role ? `No hay miembros con el rol ${role}` : "No hay miembros disponibles para elegir aquí."
             );
           }
 

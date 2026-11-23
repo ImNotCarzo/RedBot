@@ -786,6 +786,23 @@ const EXACT_ES_TO_EN = {
   "No existe ningún temporizador con ese ID. Consulta los activos con `/auto timerlist`.": "No timer exists with that ID. Check active ones with `/auto timerlist`.",
   "No tienes permisos para ver ese canal": "You do not have permission to view that channel",
   "No tienes permisos para gestionar este ticket": "You do not have permission to manage this ticket",
+  // Lote 4 (user, server, role, channel)
+  "No encontré a ese usuario. Pasa una mención o su ID.": "Couldn't find that user. Pass a mention or their ID.",
+  "Este usuario todavía no tiene roles.": "This user doesn't have any roles yet.",
+  "Este usuario no tiene ningún banner configurado.": "This user doesn't have a banner set.",
+  "No hay miembros disponibles para elegir aquí.": "No members available to pick from here.",
+  "No es tu menú. Abre el tuyo con `/server custombot`.": "Not your menu. Open your own with `/server custombot`.",
+  "No modificaste ningún campo.": "You didn't modify any fields.",
+  "Elige al menos un campo para restablecer.": "Pick at least one field to reset.",
+  "Este servidor no tiene logo configurado.": "This server has no logo configured.",
+  "No hay roles en este servidor aparte de `@everyone`.": "There are no roles in this server other than `@everyone`.",
+  "Ese rol lo gestiona un bot o integración y Discord no deja editarlo.": "That role is managed by a bot or integration and Discord doesn't allow editing it.",
+  "No puedo tocar ese rol: está igual o por encima de mi rol más alto.": "I can't touch that role: it is equal to or above my highest role.",
+  "Nadie tiene este rol todavía.": "Nobody has this role yet.",
+  "Ese panel no existe todavía. Créalo primero con `/role reaction accion:create`.": "That panel doesn't exist yet. Create it first with `/role reaction accion:create`.",
+  "Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para quitarlo (máx. `6h`).": "Invalid duration. Use `5s`, `10m`, `1h`, or `0` to disable it (max `6h`).",
+  "Faltan mensajes para resumir (mínimo 3 de humanos en el historial reciente).": "Not enough messages to summarize (at least 3 from humans in recent history).",
+  "No detecté ningún canal de voz. Indica uno en `canal` o conéctate a voz.": "No voice channel detected. Specify one in `canal` or join a voice channel.",
 };
 
 const LANG_NAME_ES_TO_EN = {

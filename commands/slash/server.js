@@ -318,7 +318,7 @@ function buildCustomBotResetModal(modalId) {
 async function applyCustomBotResetScopes({ guild, moderator, scopes = ["avatar", "banner", "biografia", "apodo"] }) {
   const uniqueScopes = [...new Set((scopes ?? []).filter((s) => ["avatar", "banner", "biografia", "apodo"].includes(s)))];
   if (!uniqueScopes.length) {
-    return { error: "Debes seleccionar al menos un campo para restablecer" };
+    return { error: "Elige al menos un campo para restablecer." };
   }
 
   const me = await fetchBotMember(guild, { force: true });
@@ -423,7 +423,7 @@ async function sendCustomBotPanel(ctx) {
     authorId: author.id,
     timeout: 2 * 60 * 1000,
     thirdPartyMode: "reject",
-    thirdPartyMessage: "No puedes usar este menú",
+    thirdPartyMessage: "No es tu menú. Abre el tuyo con `/server custombot`.",
     onEnd: "static",
     state: { me },
     render: ({ state, view: activeView, isEnded }) => {
@@ -455,7 +455,7 @@ async function sendCustomBotPanel(ctx) {
         const bannerAttachment = submitted.fields.getUploadedFiles("banner")?.first?.() ?? null;
 
         if (!rawNick && !rawBio && !avatarAttachment && !bannerAttachment) {
-          await submitted.reply({ content: "No cambió nada", flags: MessageFlags.Ephemeral }).catch(() => {});
+          await submitted.reply({ content: "No modificaste ningún campo.", flags: MessageFlags.Ephemeral }).catch(() => {});
           return false;
         }
 
@@ -509,7 +509,7 @@ async function sendCustomBotPanel(ctx) {
 function getServerViewBuilder(guild, selected, { historyButtonId = null } = {}) {
   if (selected === "logo") {
     const iconURL = guild.iconURL({ size: 4096, extension: "png" });
-    if (!iconURL) return { error: "Este servidor no tiene logo" };
+    if (!iconURL) return { error: "Este servidor no tiene logo configurado." };
     return {
       targetType: "server_logo",
       imageUrl: iconURL,
@@ -815,7 +815,7 @@ const data = {
 
           const memberCounts = await guild.roles.fetchMemberCounts().catch(() => null);
           const roles = getSortedServerRoles(guild, memberCounts);
-          if (!roles.length) return ctx.send("No hay roles");
+          if (!roles.length) return ctx.send("No hay roles en este servidor aparte de `@everyone`.");
 
           const authorId = ctx.user?.id;
           const paginator = createListPaginator({

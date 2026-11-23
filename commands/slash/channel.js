@@ -327,7 +327,7 @@ const data = {
         const seconds = parseSlowmode(ctx.get("tiempo"));
 
         if (seconds === null) {
-          return ctx.ephemeral("Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para desactivar. Máximo 6h.");
+          return ctx.ephemeral("Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para quitarlo (máx. `6h`).");
         }
 
         try {
@@ -587,7 +587,7 @@ const recapCommand = {
         .filter(Boolean);
 
       if (lines.length < 3) {
-        return ctx.ephemeral("No hay suficientes mensajes para resumir");
+        return ctx.ephemeral("Faltan mensajes para resumir (mínimo 3 de humanos en el historial reciente).");
       }
 
       const isEn = getCurrentLang() === "en";
@@ -1068,7 +1068,7 @@ const voiceStatusCommand = {
       }
 
       if (!targetCh || targetCh.type !== ChannelType.GuildVoice) {
-        return ctx.ephemeral("Debes indicar un canal de voz o estar conectado a uno");
+        return ctx.ephemeral("No detecté ningún canal de voz. Indica uno en `canal` o conéctate a voz.");
       }
 
       if (ctx.member && ctx.member.id !== ctx.guild.ownerId && typeof targetCh.permissionsFor === "function") {
