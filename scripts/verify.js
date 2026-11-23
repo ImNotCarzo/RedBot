@@ -130,10 +130,39 @@ async function checkCountsAndLoad() {
     const { getCommands } = require(path.join(ROOT, "commands/slash/help"));
     const helpCommands = getCommands();
     const helpSlashNames = new Set();
-    for (const group of Object.values(helpCommands)) {
-      for (const entry of Object.values(group)) {
+    const prefixedByName = new Map(prefixedCmds.map((c) => [c.data.name, c.data]));
+    for (const [cat, group] of Object.entries(helpCommands)) {
+      for (const [key, entry] of Object.entries(group)) {
         helpSlashNames.add(entry.slash);
+        const prefixed = prefixedByName.get(entry.short);
+        assertCondition(
+          Boolean(prefixed),
+          `help.js (${cat}.${key}) apunta a prefijo inexistente "${entry.short}" en catalog.js`
+        );
+        assertCondition(
+          JSON.stringify(entry.aliases || []) === JSON.stringify(prefixed.aliases || []),
+          `Desfase alias help.js vs catalog.js en ${cat}.${key}`
+        );
+        const usageCmd = String(entry.usage || "").split(/\s+/)[0].replace(/^\./, "");
+        assertCondition(
+          usageCmd === entry.short,
+          `Desfase usage vs short en help.js (${cat}.${key}): "${usageCmd}" vs "${entry.short}"`
+        );
       }
+    }
+    const catalogSrc = fs.readFileSync(path.join(ROOT, "commands/prefixed/catalog.js"), "utf8");
+    for (const cmd of prefixedCmds) {
+      const { name, aliases = [] } = cmd.data;
+      const re = new RegExp(`\\{\\s*name:\\s*"${name}"[^}]*?descriptionText:\\s*"((?:[^"\\\\]|\\\\.)*)"`, "s");
+      const m = catalogSrc.match(re);
+      if (!m) continue;
+      const am = m[1].match(/\*\*Aliases:\*\*\\n([^\n\\]+)/);
+      assertCondition(Boolean(am), `Falta sección **Aliases:** en catalog.js para "${name}"`);
+      const listed = [...am[1].matchAll(/`([^`]+)`/g)].map((x) => x[1]);
+      assertCondition(
+        JSON.stringify(aliases) === JSON.stringify(listed),
+        `Desfase **Aliases:** en catalog.js para "${name}": ${JSON.stringify(listed)} vs ${JSON.stringify(aliases)}`
+      );
     }
     assertCondition(
       helpSlashNames.size === EXPECTED.helpEntries,
@@ -168,7 +197,7 @@ async function checkCountsAndLoad() {
       `Listeners de eventos: esperados ${EXPECTED.eventListeners}, encontrados ${events.listenerCount}`
     );
 
-    return { rawPayloads, slashRoots: slashPayloads.length, slashSubs: slashSubNames.size, prefixed: prefixedCmds.length, contextMenus: contextMenus.length, interactions: interactionCount, events };
+    return { rawPayloads, helpCommands, slashRoots: slashPayloads.length, slashSubs: slashSubNames.size, prefixed: prefixedCmds.length, contextMenus: contextMenus.length, interactions: interactionCount, events };
   } finally {
     await bot.destroy().catch(() => {});
   }
@@ -216,7 +245,7 @@ function assertLocalizationsComplete(node, trail) {
   }
 }
 
-function checkI18n(jsFiles, rawPayloads) {
+function checkI18n(jsFiles, rawPayloads, helpCommands = {}) {
   const newSource = fs.readFileSync(path.join(ROOT, "src/i18n.js"), "utf8");
   const currentI18n = loadI18nWithInternals(newSource);
   const { STRINGS, EXACT_ES_TO_EN, PATTERN_ES_TO_EN } = currentI18n.__internals;
@@ -366,7 +395,7 @@ function checkI18n(jsFiles, rawPayloads) {
     const addedMessages = new Set();
     for (const line of diffLines) {
       if (!line.startsWith("+") || line.startsWith("+++")) continue;
-      if (!/(?:ephemeral\(|replyError\(|error:|Msg\b)/.test(line)) continue;
+      if (!/(?:ephemeral\(|replyError\(|ctx\.send\(|return "|error:|Msg\b)/.test(line)) continue;
       for (const m of line.matchAll(/"([^"\n]{3,200})"/g)) {
         const msg = m[1];
         if (!/\s/.test(msg) || removedLiterals.has(msg)) continue;
@@ -385,6 +414,33 @@ function checkI18n(jsFiles, rawPayloads) {
       missingEn.length === 0,
       `Mensaje modificado sin traducción EN en src/i18n.js: ${missingEn.map((s) => `"${s}"`).join(", ")}`
     );
+
+    for (const [cat, group] of Object.entries(helpCommands)) {
+      for (const [key, entry] of Object.entries(group)) {
+        if (entry.aliases?.length) {
+          const aliasCodes = entry.aliases.map((a) => `\`.${a}\``).join(", ");
+          const trAlias = currentI18n.translatePayload({ content: `> **Alias:** ${aliasCodes}` }, "en").content;
+          assertCondition(
+            trAlias === `> **Aliases:** ${aliasCodes}`,
+            `Traducción EN de alias corrupta en help.js (${cat}.${key}): ${trAlias}`
+          );
+        }
+        const shortPrefix = `.${entry.short}`;
+        assertCondition(
+          currentI18n.translatePayload({ content: shortPrefix }, "en").content === shortPrefix,
+          `short alterado al traducir EN en help.js (${cat}.${key}): ${entry.short}`
+        );
+        const trUsage = currentI18n.translatePayload({ content: `> **Uso:** \`${entry.usage}\`` }, "en").content;
+        assertCondition(
+          trUsage.startsWith(`> **Usage:** \`.${entry.short}`),
+          `Traducción EN de usage corrupta en help.js (${cat}.${key}): ${trUsage}`
+        );
+        assertCondition(
+          !trUsage.includes("<titulo>"),
+          `Placeholder <titulo> sin traducir en help.js (${cat}.${key}): ${trUsage}`
+        );
+      }
+    }
 
     baselineStatus =
       `0 regresiones vs ${BASELINE_COMMIT} (${Object.keys(EXACT_ES_TO_EN).length} exact, ` +
@@ -412,7 +468,7 @@ async function main() {
     `${counts.events.listenerCount} eventos en ${counts.events.eventFiles} archivos`
   );
 
-  const i18nStats = checkI18n(jsFiles, counts.rawPayloads);
+  const i18nStats = checkI18n(jsFiles, counts.rawPayloads, counts.helpCommands);
   console.log(
     `[OK] i18n: ${i18nStats.stringsCount} claves STRINGS, ${i18nStats.exactCount} EXACT, ` +
     `${i18nStats.patternCount} PATTERN (${i18nStats.baselineStatus})`

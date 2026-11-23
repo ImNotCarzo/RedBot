@@ -803,6 +803,54 @@ const EXACT_ES_TO_EN = {
   "Tiempo inválido. Usa `5s`, `10m`, `1h` o `0` para quitarlo (máx. `6h`).": "Invalid duration. Use `5s`, `10m`, `1h`, or `0` to disable it (max `6h`).",
   "Faltan mensajes para resumir (mínimo 3 de humanos en el historial reciente).": "Not enough messages to summarize (at least 3 from humans in recent history).",
   "No detecté ningún canal de voz. Indica uno en `canal` o conéctate a voz.": "No voice channel detected. Specify one in `canal` or join a voice channel.",
+  // Lote 5 (util, ai, mod, role, catalog)
+  "No puedes tocar ese rol: está igual o por encima de tu rol más alto.": "You can't touch that role: it is at or above your highest role.",
+  "El prefijo admite máximo 3 caracteres.": "The prefix can be at most 3 characters long.",
+  "Escribe el texto que quieres traducir.": "Enter the text you want to translate.",
+  "No pude conectar con el traductor. Intenta de nuevo en un momento.": "Couldn't connect to the translation service. Try again in a moment.",
+  "No encontré ningún video en ese enlace. Revisa que sea público.": "Couldn't find any video in that link. Make sure it is public.",
+  "Ya tienes 25 recordatorios activos (el máximo). Borra alguno con `/util reminders`.": "You already have 25 active reminders (the maximum). Delete one with `/util reminders`.",
+  "No escuché voz clara en ese archivo. Prueba con otro audio.": "Couldn't detect clear speech in that file. Try another audio.",
+  "Ese texto es muy corto para resumir (mínimo 100 caracteres).": "That text is too short to summarize (minimum 100 characters).",
+  "No encontré texto legible en esa imagen.": "Couldn't find readable text in that image.",
+  "No tengo acceso a ese canal, o tú tampoco. Revisa los permisos.": "Neither you nor I have access to that channel. Check the permissions.",
+  "No veo ningún canal con permiso para buscar mensajes.": "I can't see any channel where we have permission to search messages.",
+  "No puedo banear a alguien con un rol igual o por encima del mío.": "I can't ban someone with a role equal to or above mine.",
+  "No puedes banear a alguien con un rol igual o por encima del tuyo.": "You can't ban someone with a role equal to or above yours.",
+  "No puedo softbanear a alguien con un rol igual o por encima del mío.": "I can't softban someone with a role equal to or above mine.",
+  "No puedes softbanear a alguien con un rol igual o por encima del tuyo.": "You can't softban someone with a role equal to or above yours.",
+  "No puedo expulsar a alguien con un rol igual o por encima del mío.": "I can't kick someone with a role equal to or above mine.",
+  "No puedes expulsar a alguien con un rol igual o por encima del tuyo.": "You can't kick someone with a role equal to or above yours.",
+  "No puedo silenciar a alguien con un rol igual o por encima del mío.": "I can't mute someone with a role equal to or above mine.",
+  "No puedes silenciar a alguien con un rol igual o por encima del tuyo.": "You can't mute someone with a role equal to or above yours.",
+  "No puedo quitar el silencio a alguien con un rol igual o por encima del mío.": "I can't unmute someone with a role equal to or above mine.",
+  "No puedes quitar el silencio a alguien con un rol igual o por encima del tuyo.": "You can't unmute someone with a role equal to or above yours.",
+  "No puedo actuar sobre alguien con un rol igual o por encima del mío.": "I can't act on someone with a role equal to or above mine.",
+  "No puedes actuar sobre alguien con un rol igual o por encima del tuyo.": "You can't act on someone with a role equal to or above yours.",
+  "No puedes advertir a alguien con un rol igual o por encima del tuyo.": "You can't warn someone with a role equal to or above yours.",
+  "Indica una cantidad entre 1 y 100 mensajes.": "Enter an amount between 1 and 100 messages.",
+  "Ya estoy enviando otro DM masivo en este servidor. Espera a que termine.": "I'm already sending a mass DM in this server. Wait for it to finish.",
+  ".dmall titulo,texto [--solo <@rol>] [--rol <@rol>] [--user <@user>] [--imagen <url>]": ".dmall title,text [--solo <@role>] [--rol <@role>] [--user <@user>] [--imagen <url>]",
+  ".dmall Noche de juegos,entran al voice en 5": ".dmall Game night,join voice in 5",
+  ".dmall Noche de juegos,miren esto --imagen https://i.imgur.com/abc.png": ".dmall Game night,check this out --imagen https://i.imgur.com/abc.png",
+  ".dmall Noche de juegos,solo los gamers --solo @gamers": ".dmall Game night,gamers only --solo @gamers",
+  ".dmall Noche de juegos,menos los ausentes --rol @afk": ".dmall Game night,excluding away members --rol @afk",
+  ".dmall Noche de juegos,todos menos el del spoiler --user @carlos": ".dmall Game night,everyone except the spoiler guy --user @carlos",
+  ".dmall Noche de juegos,solo @gamers sin @afk ni @carlos --solo @gamers --rol @afk --user @carlos --imagen https://i.imgur.com/abc.png```": ".dmall Game night,@gamers only without @afk or @carlos --solo @gamers --rol @afk --user @carlos --imagen https://i.imgur.com/abc.png```",
+  "Ejemplo: .rename #general sala-de-espera```": "Example: .rename #general waiting-room```",
+  "Ejemplo: .critica la pizza con piña```": "Example: .critica pineapple on pizza```",
+  "Ejemplo: .opinion madrugar un domingo```": "Example: .opinion waking up early on a Sunday```",
+  "Ejemplo: .ban @spambot enlaces raros```": "Example: .ban @spambot suspicious links```",
+  "Ejemplo: .kick @carlos spam en #memes```": "Example: .kick @carlos spam in #memes```",
+  "Ejemplo: .massban @bot1 @bot2 raid de bots```": "Example: .massban @bot1 @bot2 bot raid```",
+  "Ejemplo: .mute @carlos 10m karaoke en general```": "Example: .mute @carlos 10m karaoke in general```",
+  "Ejemplo: .softban @carlos limpiar spam```": "Example: .softban @carlos clean up spam```",
+  "Ejemplo: .tempban @carlos 7d spoiler sin avisar```": "Example: .tempban @carlos 7d unannounced spoiler```",
+  "Ejemplo: .unmute @carlos prometió portarse bien```": "Example: .unmute @carlos promised to behave```",
+  "Ejemplo: .warn @carlos memes en #anuncios```": "Example: .warn @carlos memes in #announcements```",
+  "Ejemplo: .rolerename @gamers trasnochadores```": "Example: .rolerename @gamers night-owls```",
+  "Ejemplo: .describe <captura-sospechosa.png>```": "Example: .describe <suspicious-screenshot.png>```",
+  "Ejemplo: .resume Mucho texto con las notas del último parche que nadie leyó completo...```": "Example: .resume Long text with the latest patch notes that nobody read in full...```",
 };
 
 const LANG_NAME_ES_TO_EN = {
@@ -966,7 +1014,8 @@ function applyPatterns(str) {
 function translateUsageCode(line) {
   if (!/^`\.[a-z]+/i.test(line)) return line;
   return line
-    .replace(/^`\.dm titulo,texto/, "`.dm title,text")
+    .replace(/^`\.dm(?:all)? titulo,texto/, (m) => m.replace("titulo,texto", "title,text"))
+    .replace(/<titulo>/g, "<title>")
     .replace(/\/razonOpcional\//g, "/optionalReason/")
     .replace(/<pregunta>/g, "<question>")
     .replace(/\[razón\]/g, "[reason]")

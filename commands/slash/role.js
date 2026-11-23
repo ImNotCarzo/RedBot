@@ -56,7 +56,7 @@ function roleHierarchyCheck(ctx, role) {
   if (!isOwner) {
     const userHighest = ctx.member?.roles?.highest?.position ?? -1;
     if (userHighest === -1 || role.position >= userHighest) {
-      return "No puedes gestionar un rol con igual o mayor posición que tu rol más alto";
+      return "No puedes tocar ese rol: está igual o por encima de tu rol más alto.";
     }
   }
   return null;

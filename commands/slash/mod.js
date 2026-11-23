@@ -66,13 +66,14 @@ function notifyUser(user, { description, color = RED, fields = null }) {
 
 function hierarchyChecks(ctx, member, action = "actuar sobre") {
   if (!member?.roles) return "No pude obtener al miembro en el servidor";
-  if (member.id === ctx.guild.ownerId) return `No puedo ${action} al dueño del servidor`;
-  if (member.id === ctx.guild.members.me?.id) return `No puedo ${action} a mí mismo`;
+  const baseAction = action.replace(/\s+a$/, "");
+  if (member.id === ctx.guild.ownerId) return `No puedo ${baseAction} al dueño del servidor`;
+  if (member.id === ctx.guild.members.me?.id) return `No puedo ${baseAction} a mí mismo`;
   if (member.roles.highest.position >= ctx.guild.members.me.roles.highest.position) {
-    return `No puedo ${action} alguien con igual o mayor rango que el mío`;
+    return `No puedo ${action} alguien con un rol igual o por encima del mío.`;
   }
   if (ctx.member.id !== ctx.guild.ownerId && member.roles.highest.position >= ctx.member.roles.highest.position) {
-    return `No puedes ${action} alguien con igual o mayor rango que el tuyo`;
+    return `No puedes ${action} alguien con un rol igual o por encima del tuyo.`;
   }
   return null;
 }
@@ -613,7 +614,7 @@ const data = {
         const tag = modTag(ctx);
 
         if (!Number.isInteger(parsedAmount) || parsedAmount < 1) {
-          return ctx.ephemeral("Ingresa un número válido entre 1 y 100");
+          return ctx.ephemeral("Indica una cantidad entre 1 y 100 mensajes.");
         }
 
         const amount = Math.min(100, parsedAmount);
@@ -690,7 +691,7 @@ const data = {
           return ctx.ephemeral("No puedes advertir a un bot");
         }
         if (ctx.member.id !== ctx.guild.ownerId && member.roles.highest.position >= ctx.member.roles.highest.position) {
-          return ctx.ephemeral("No puedes advertir a alguien con igual o mayor rango que el tuyo");
+          return ctx.ephemeral("No puedes advertir a alguien con un rol igual o por encima del tuyo.");
         }
 
         try {

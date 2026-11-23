@@ -238,7 +238,7 @@ const data = {
             return ctx.ephemeral("El archivo no puede superar los 25MB");
           }
           if (!res.text) {
-            return ctx.ephemeral("No se detectó voz inteligible en el archivo");
+            return ctx.ephemeral("No escuché voz clara en ese archivo. Prueba con otro audio.");
           }
 
           const meta = formatAttachmentMeta(attachment, "audio");
@@ -320,7 +320,7 @@ const data = {
         const texto = ctx.get("texto");
 
         if (texto.length < 100) {
-          return ctx.ephemeral("El texto es demasiado corto para resumir");
+          return ctx.ephemeral("Ese texto es muy corto para resumir (mínimo 100 caracteres).");
         }
 
         try {
@@ -371,7 +371,7 @@ const data = {
           const texto = await generateVision(prompt, attachment.url);
 
           if (!texto || texto.includes("SIN_TEXTO")) {
-            return ctx.ephemeral("No se detectó texto legible en la imagen");
+            return ctx.ephemeral("No encontré texto legible en esa imagen.");
           }
 
           const meta = formatAttachmentMeta(attachment, "imagen");
@@ -690,7 +690,7 @@ ${datosUsuario}`;
         let allowedChannelIds = [];
         if (filterChannel) {
           if (!canReadChannel(filterChannel)) {
-            return ctx.ephemeral("No tienes permisos o no tengo acceso para buscar en ese canal");
+            return ctx.ephemeral("No tengo acceso a ese canal, o tú tampoco. Revisa los permisos.");
           }
           allowedChannelIds = [filterChannel.id];
         } else {
@@ -698,7 +698,7 @@ ${datosUsuario}`;
         }
 
         if (!allowedChannelIds.length) {
-          return ctx.ephemeral("No hay canales visibles donde pueda buscar mensajes");
+          return ctx.ephemeral("No veo ningún canal con permiso para buscar mensajes.");
         }
         const allowedSet = new Set(allowedChannelIds);
 

@@ -269,7 +269,7 @@ const data = {
         }
 
         if (nuevo.length > 3) {
-          return ctx.ephemeral("El prefix no puede tener más de 3 caracteres");
+          return ctx.ephemeral("El prefijo admite máximo 3 caracteres.");
         }
 
         const anterior = await getPrefix(ctx.guild.id);
@@ -432,7 +432,7 @@ const data = {
     async code(ctx) {
       await ctx.defer();
       const texto = String(ctx.get("texto") ?? "").trim().slice(0, 3000);
-      if (!texto) return ctx.ephemeral("Debes ingresar texto para traducir");
+      if (!texto) return ctx.ephemeral("Escribe el texto que quieres traducir.");
       const idioma = ctx.get("idioma") ?? getCurrentLang();
 
       try {
@@ -459,7 +459,7 @@ const data = {
         if (err.name === "TooManyRequestsError") {
           return ctx.ephemeral("Google Translate está saturado, intenta en unos segundos");
         }
-        await ctx.ephemeral("No se pudo conectar con el servicio de traducción");
+        await ctx.ephemeral("No pude conectar con el traductor. Intenta de nuevo en un momento.");
       }
     },
   })
@@ -491,7 +491,7 @@ const data = {
         const meta = await resolveVideoMetadata(url);
         if (!meta?.videoUrl) {
           log.warn("[util download] sin video extraíble", { url });
-          return ctx.ephemeral("No pude extraer ningún video de ese enlace. Verifica que sea público y contenga un video.");
+          return ctx.ephemeral("No encontré ningún video en ese enlace. Revisa que sea público.");
         }
 
         const maxBytes = getGuildUploadLimitBytes(ctx.guild);
@@ -863,7 +863,7 @@ const remindCommand = {
       });
 
       if (result.error === "limit") {
-        return ctx.ephemeral(`Ya tienes ${result.max} recordatorios pendientes, espera a que alguno se cumpla`);
+        return ctx.ephemeral(`Ya tienes ${result.max} recordatorios activos (el máximo). Borra alguno con \`/util reminders\`.`);
       }
 
       const ts = Math.floor(remindAt.getTime() / 1000);
