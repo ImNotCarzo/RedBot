@@ -96,7 +96,16 @@ const buttonData = {
             isEn ? "Only support staff can claim tickets." : "Solo el equipo de soporte puede reclamar tickets."
           );
         }
-        await Ticket.updateOne({ channelId: interaction.channelId }, { $set: { claimedBy: interaction.user.id } }).catch(() => {});
+        const claimRes = await Ticket.updateOne(
+          { channelId: interaction.channelId, status: "open" },
+          { $set: { claimedBy: interaction.user.id } }
+        ).catch(() => null);
+        if (claimRes && claimRes.matchedCount === 0) {
+          return replyInteractionEphemeral(
+            interaction,
+            isEn ? "This is not an open ticket." : "Esto no es un ticket abierto."
+          );
+        }
         const updatedCard = buildTicketControlCard({
           ticket,
           openerId: ticket.openerId,
