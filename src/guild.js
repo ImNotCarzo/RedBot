@@ -56,19 +56,50 @@ class TtlCache {
 
 const { detectLocaleLang, normalizeLang, translateEmbed } = require("./i18n");
 
-const prefixCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
-const langCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
-const langSourceCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
+const guildConfigCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const oauthGuildLangCache = new TtlCache(10 * 60_000, 1000);
 const recentWelcomeCache = new TtlCache(3 * 60_000, 500);
 const userLangCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
-const aiContextCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
-const warnPolicyCache = new TtlCache(PREFIX_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const logChannelCache = new TtlCache(LOG_CACHE_TTL_MS, PREFIX_CACHE_MAX);
 const afkCache = new TtlCache(AFK_CACHE_TTL_MS, AFK_CACHE_MAX);
 
 const DEFAULT_WARN_MUTE_MS = 10 * 60 * 1000;
 const VALID_LANG_SOURCES = new Set(["auto", "oauth", "manual"]);
+
+function invalidateGuildConfigCache(guildId = null) {
+  if (guildId) guildConfigCache.delete(guildId);
+  else guildConfigCache.clear();
+}
+
+function patchOfflineGuildConfigCache(guildId, patch) {
+  if (!guildId || !patch) return;
+  const current = guildConfigCache.get(guildId) ?? {};
+  guildConfigCache.set(guildId, { ...current, ...patch });
+}
+
+async function getGuildConfigCached(guildId) {
+  if (!guildId) return null;
+  const cached = guildConfigCache.get(guildId);
+  if (cached !== undefined) return cached;
+  if (!isDbReady(GuildConfig)) return null;
+  try {
+    const query = GuildConfig.findOne({ guildId });
+    const leanQuery = typeof query?.lean === "function" ? query.lean() : query;
+    const doc = await withTimeout(
+      leanQuery,
+      PREFIX_QUERY_TIMEOUT_MS,
+      "Lectura de configuración de servidor"
+    );
+    const val = doc ? { ...doc } : {};
+    guildConfigCache.set(guildId, val);
+    return val;
+  } catch {
+    // Fallo transitorio de DB: cache corta para no fijar valores por defecto durante media hora
+    const fallback = {};
+    guildConfigCache.set(guildId, fallback, 15_000);
+    return fallback;
+  }
+}
 
 function detectDefaultGuildLang(guild) {
   return detectLocaleLang(guild?.preferredLocale);
@@ -76,47 +107,20 @@ function detectDefaultGuildLang(guild) {
 
 async function getLang(guildId) {
   if (!guildId) return "es";
-  const cached = langCache.get(guildId);
-  if (cached !== undefined) return cached;
-  if (!isDbReady(GuildConfig)) return "es";
-  try {
-    const doc = await withTimeout(
-      GuildConfig.findOne({ guildId }).select("lang langSource").lean(),
-      PREFIX_QUERY_TIMEOUT_MS,
-      "Lectura de idioma de servidor"
-    );
-    const lang = doc?.lang === "en" ? "en" : "es";
-    langCache.set(guildId, lang);
-    if (VALID_LANG_SOURCES.has(doc?.langSource)) {
-      langSourceCache.set(guildId, doc.langSource);
-    }
-    return lang;
-  } catch {
-    return "es";
-  }
+  const doc = await getGuildConfigCached(guildId);
+  return doc?.lang === "en" ? "en" : "es";
 }
 
 async function getLangSource(guildId) {
   if (!guildId) return "auto";
-  const cached = langSourceCache.get(guildId);
-  if (cached) return cached;
-  if (!isDbReady(GuildConfig)) return "auto";
-  try {
-    const doc = await GuildConfig.findOne({ guildId }).select("langSource").lean();
-    const source = VALID_LANG_SOURCES.has(doc?.langSource) ? doc.langSource : "auto";
-    langSourceCache.set(guildId, source);
-    return source;
-  } catch {
-    return "auto";
-  }
+  const doc = await getGuildConfigCached(guildId);
+  return VALID_LANG_SOURCES.has(doc?.langSource) ? doc.langSource : "auto";
 }
 
 async function setLang(guildId, lang, { source = "manual" } = {}) {
   const resolved = normalizeLang(lang);
   const resolvedSource = VALID_LANG_SOURCES.has(source) ? source : "manual";
   if (!guildId) return resolved;
-  langCache.set(guildId, resolved);
-  langSourceCache.set(guildId, resolvedSource);
   const recent = recentWelcomeCache.get(guildId);
   if (recent) {
     recent.lang = resolved;
@@ -130,6 +134,9 @@ async function setLang(guildId, lang, { source = "manual" } = {}) {
         { upsert: true, returnDocument: "after" }
       );
     } catch {}
+    invalidateGuildConfigCache(guildId);
+  } else {
+    patchOfflineGuildConfigCache(guildId, { lang: resolved, langSource: resolvedSource });
   }
   return resolved;
 }
@@ -225,23 +232,13 @@ async function resolveContextLang({ guildId = null, userId = null, locale = null
 
 async function getAiContext(guildId) {
   if (!guildId) return "";
-  const cached = aiContextCache.get(guildId);
-  if (cached !== undefined) return cached;
-  if (!isDbReady(GuildConfig)) return "";
-  try {
-    const doc = await GuildConfig.findOne({ guildId }).select("aiContext").lean();
-    const ctxText = typeof doc?.aiContext === "string" ? doc.aiContext.trim() : "";
-    aiContextCache.set(guildId, ctxText);
-    return ctxText;
-  } catch {
-    return "";
-  }
+  const doc = await getGuildConfigCached(guildId);
+  return typeof doc?.aiContext === "string" ? doc.aiContext.trim() : "";
 }
 
 async function setAiContext(guildId, text) {
   const clean = typeof text === "string" ? text.trim().slice(0, 1000) : "";
   if (!guildId) return clean;
-  aiContextCache.set(guildId, clean);
   if (isDbReady(GuildConfig)) {
     try {
       await GuildConfig.findOneAndUpdate(
@@ -250,6 +247,9 @@ async function setAiContext(guildId, text) {
         { upsert: true, returnDocument: "after" }
       );
     } catch {}
+    invalidateGuildConfigCache(guildId);
+  } else {
+    patchOfflineGuildConfigCache(guildId, { aiContext: clean });
   }
   return clean;
 }
@@ -257,20 +257,12 @@ async function setAiContext(guildId, text) {
 async function getWarnPolicy(guildId) {
   const fallback = { warnThreshold: 0, warnMuteMs: DEFAULT_WARN_MUTE_MS };
   if (!guildId) return fallback;
-  const cached = warnPolicyCache.get(guildId);
-  if (cached) return cached;
-  if (!isDbReady(GuildConfig)) return fallback;
-  try {
-    const doc = await GuildConfig.findOne({ guildId }).select("warnThreshold warnMuteMs").lean();
-    const policy = {
-      warnThreshold: Number.isFinite(doc?.warnThreshold) ? doc.warnThreshold : 0,
-      warnMuteMs: Number.isFinite(doc?.warnMuteMs) && doc.warnMuteMs > 0 ? doc.warnMuteMs : DEFAULT_WARN_MUTE_MS,
-    };
-    warnPolicyCache.set(guildId, policy);
-    return policy;
-  } catch {
-    return fallback;
-  }
+  const doc = await getGuildConfigCached(guildId);
+  if (!doc) return fallback;
+  return {
+    warnThreshold: Number.isFinite(doc.warnThreshold) ? doc.warnThreshold : 0,
+    warnMuteMs: Number.isFinite(doc.warnMuteMs) && doc.warnMuteMs > 0 ? doc.warnMuteMs : DEFAULT_WARN_MUTE_MS,
+  };
 }
 
 async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_WARN_MUTE_MS } = {}) {
@@ -278,7 +270,6 @@ async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_
   const muteMs = Math.max(60_000, Number(warnMuteMs) || DEFAULT_WARN_MUTE_MS);
   const policy = { warnThreshold: threshold, warnMuteMs: muteMs };
   if (!guildId) return policy;
-  warnPolicyCache.set(guildId, policy);
   if (isDbReady(GuildConfig)) {
     try {
       await GuildConfig.findOneAndUpdate(
@@ -287,28 +278,17 @@ async function setWarnPolicy(guildId, { warnThreshold = 0, warnMuteMs = DEFAULT_
         { upsert: true, returnDocument: "after" }
       );
     } catch {}
+    invalidateGuildConfigCache(guildId);
+  } else {
+    patchOfflineGuildConfigCache(guildId, policy);
   }
   return policy;
 }
 
 async function getPrefix(guildId) {
-  const cached = prefixCache.get(guildId);
-  if (cached !== undefined) return cached;
-  if (!isDbReady(GuildConfig)) return DEFAULT_PREFIX;
-  try {
-    const doc = await withTimeout(
-      GuildConfig.findOne({ guildId }).lean(),
-      PREFIX_QUERY_TIMEOUT_MS,
-      "Lectura de prefijo de servidor"
-    );
-    const prefix = doc?.prefix || DEFAULT_PREFIX;
-    prefixCache.set(guildId, prefix);
-    return prefix;
-  } catch {
-    // Fallo transitorio de DB: cache corta para no fijar el prefijo por defecto durante media hora
-    prefixCache.set(guildId, DEFAULT_PREFIX, 15_000);
-    return DEFAULT_PREFIX;
-  }
+  if (!guildId) return DEFAULT_PREFIX;
+  const doc = await getGuildConfigCached(guildId);
+  return doc?.prefix || DEFAULT_PREFIX;
 }
 
 async function setPrefix(guildId, prefix) {
@@ -322,7 +302,7 @@ async function setPrefix(guildId, prefix) {
     PREFIX_QUERY_TIMEOUT_MS,
     "Actualización de prefijo de servidor"
   );
-  prefixCache.set(guildId, normalized);
+  invalidateGuildConfigCache(guildId);
   return normalized;
 }
 
@@ -443,6 +423,8 @@ function logAction(guild, { title = null, description = null, color = null, fiel
 module.exports = {
   TtlCache,
   DEFAULT_PREFIX,
+  getGuildConfigCached,
+  invalidateGuildConfigCache,
   getPrefix,
   setPrefix,
   detectDefaultGuildLang,

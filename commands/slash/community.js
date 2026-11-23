@@ -2,6 +2,7 @@ const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builde
 const { RED, GREEN } = require("../../src/config");
 const { getMemberInviteStats, sendWelcomeOrGoodbye } = require("../../src/community");
 const { Birthday, GuildConfig, InviteReward, InviteStat } = require("../../src/database");
+const { getGuildConfigCached, invalidateGuildConfigCache } = require("../../src/guild");
 const { avatarUrl, noGuildReply } = require("../../src/runtime");
 const { createStandardListPaginator } = require("../../src/shared/ui");
 const { validateRoleHierarchy } = require("../../src/shared/utils");
@@ -36,9 +37,13 @@ async function runGreetingConfig(ctx, { configKey, kind, title, allowDm = false,
     setObj[`${configKey}.dmMessage`] = ctx.get("dm").slice(0, 2000);
   }
 
-  const doc = Object.keys(setObj).length
-    ? await GuildConfig.findOneAndUpdate({ guildId: ctx.guild.id }, { $set: setObj }, { upsert: true, returnDocument: "after" }).lean()
-    : await GuildConfig.findOne({ guildId: ctx.guild.id }).select(configKey).lean();
+  let doc;
+  if (Object.keys(setObj).length) {
+    doc = await GuildConfig.findOneAndUpdate({ guildId: ctx.guild.id }, { $set: setObj }, { upsert: true, returnDocument: "after" }).lean();
+    invalidateGuildConfigCache(ctx.guild.id);
+  } else {
+    doc = await getGuildConfigCached(ctx.guild.id);
+  }
 
   if (ctx.get("probar") === "true" && ctx.member) {
     if (testMeta) {
@@ -211,13 +216,17 @@ const data = {
         }
         if (ctx.get("mensaje")) setObj["birthdayConfig.message"] = ctx.get("mensaje").slice(0, 1000);
 
-        const doc = Object.keys(setObj).length
-          ? await GuildConfig.findOneAndUpdate(
-              { guildId: ctx.guild.id },
-              { $set: setObj },
-              { upsert: true, returnDocument: "after" }
-            ).lean()
-          : await GuildConfig.findOne({ guildId: ctx.guild.id }).select("birthdayConfig").lean();
+        let doc;
+        if (Object.keys(setObj).length) {
+          doc = await GuildConfig.findOneAndUpdate(
+            { guildId: ctx.guild.id },
+            { $set: setObj },
+            { upsert: true, returnDocument: "after" }
+          ).lean();
+          invalidateGuildConfigCache(ctx.guild.id);
+        } else {
+          doc = await getGuildConfigCached(ctx.guild.id);
+        }
         const cfg = doc?.birthdayConfig ?? {};
         await ctx.send(ComponentsV2Builder.card({
           title: "Configuración de cumpleaños",

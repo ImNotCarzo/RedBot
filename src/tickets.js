@@ -12,6 +12,7 @@ const {
 const { ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("./config");
 const { GuildConfig, Ticket } = require("./database");
+const { getGuildConfigCached, getLang, invalidateGuildConfigCache } = require("./guild");
 const { getCurrentLang } = require("./i18n");
 const { Logger } = require("./runtime");
 const { escapeHtml } = require("./security");
@@ -33,12 +34,8 @@ async function getTicketConfig(guildId) {
     counter: 0,
   };
   if (!guildId || !isDbReady()) return defaults;
-  try {
-    const doc = await GuildConfig.findOne({ guildId }).select("ticketConfig").lean();
-    return { ...defaults, ...(doc?.ticketConfig || {}) };
-  } catch {
-    return defaults;
-  }
+  const doc = await getGuildConfigCached(guildId);
+  return { ...defaults, ...(doc?.ticketConfig || {}) };
 }
 
 async function updateTicketConfig(guildId, patch) {
@@ -50,6 +47,7 @@ async function updateTicketConfig(guildId, patch) {
     { $set: setObj },
     { upsert: true, returnDocument: "after" }
   ).lean();
+  invalidateGuildConfigCache(guildId);
   return doc?.ticketConfig ?? null;
 }
 
@@ -519,7 +517,7 @@ function buildTicketPanelModal(customId, cfg = null, lang = "es") {
 async function sendTicketSetupPanel(ctx, { initialCfg = null } = {}) {
   const guild = ctx.guild;
   const author = ctx.user;
-  const lang = await require("./guild").getLang(guild.id).catch(() => getCurrentLang());
+  const lang = await getLang(guild.id).catch(() => getCurrentLang());
   const isEn = lang === "en";
   const cfg = initialCfg ?? await getTicketConfig(guild.id);
 
@@ -715,6 +713,7 @@ async function openTicket({ guild, user, category = "General", categoryChannelId
       },
       { upsert: true, returnDocument: "after" }
     ).lean();
+    invalidateGuildConfigCache(guild.id);
 
     const cfg = updatedGuild?.ticketConfig ?? {};
     const catList = Array.isArray(cfg.categories) ? cfg.categories : [];

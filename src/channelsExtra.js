@@ -1,6 +1,6 @@
 const { ActivityType, ChannelType, PermissionFlagsBits, Routes } = require("discord.js");
-const { AutopurgeRule, GuildConfig, StickyMessage, TempChannel, VoiceLink } = require("./database");
-const { TtlCache } = require("./guild");
+const { AutopurgeRule, StickyMessage, TempChannel, VoiceLink } = require("./database");
+const { TtlCache, getGuildConfigCached, invalidateGuildConfigCache } = require("./guild");
 const { Logger } = require("./runtime");
 const { canBotManageRole, clearTimerMap, fetchBotMember, isDbReady, scheduleLongTimeout } = require("./shared/utils");
 const { resolveEmbedTemplate, substituteVars, buildTagVariables } = require("./tagscript");
@@ -12,7 +12,6 @@ const stickyDebounceTimers = new Map();
 const stickyInFlight = new Set();
 const stickyPresenceCache = new TtlCache(60_000, 4000);
 const tempChannelTimers = new Map();
-const voiceAutoStatusCache = new TtlCache(2 * 60_000, 2000);
 const voiceStatusTimers = new Map();
 const autoManagedVoiceStatus = new TtlCache(Infinity, MAX_MANAGED_VOICE_STATUS);
 let autopurgeInterval = null;
@@ -249,7 +248,7 @@ async function handleVoiceHubTransition(oldState, newState) {
   // Crear sala dinámica al entrar al Voice Hub
   const joinedId = newState?.channelId;
   if (joinedId && joinedId !== oldState?.channelId && newState?.member && !newState.member.user?.bot) {
-    const cfgDoc = await GuildConfig.findOne({ guildId: guild.id }).select("voiceHubId voiceHubCategoryId voiceHubTemplate").lean().catch(() => null);
+    const cfgDoc = await getGuildConfigCached(guild.id);
     if (cfgDoc?.voiceHubId && cfgDoc.voiceHubId === joinedId) {
       const count = await TempChannel.countDocuments({ guildId: guild.id }).catch(() => 0);
       if (count >= MAX_TEMP_CHANNELS_PER_GUILD) return;
@@ -301,17 +300,13 @@ const VOICE_ACTIVITY_META = {
 };
 
 function invalidateVoiceAutoStatusCache(guildId) {
-  if (guildId) voiceAutoStatusCache.delete(guildId);
+  invalidateGuildConfigCache(guildId);
 }
 
 async function isVoiceAutoStatusEnabled(guildId) {
   if (!guildId || !isDbReady()) return false;
-  const cached = voiceAutoStatusCache.get(guildId);
-  if (cached !== undefined) return cached;
-  const doc = await GuildConfig.findOne({ guildId }).select("voiceAutoStatus").lean().catch(() => null);
-  const enabled = Boolean(doc?.voiceAutoStatus);
-  voiceAutoStatusCache.set(guildId, enabled);
-  return enabled;
+  const doc = await getGuildConfigCached(guildId);
+  return Boolean(doc?.voiceAutoStatus);
 }
 
 function getManagedVoiceStatus(channelId) {

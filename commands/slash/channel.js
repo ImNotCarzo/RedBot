@@ -1,7 +1,7 @@
 const { ChannelFlags, ChannelType, PermissionFlagsBits } = require("discord.js");
 const { GroupBuilder, CommandBuilder, ParamsBuilder, Plugins, ComponentsV2Builder, V2Text, V2View } = require("gralonium");
 const { RED, GREEN } = require("../../src/config");
-const { logAction } = require("../../src/guild");
+const { invalidateGuildConfigCache, logAction } = require("../../src/guild");
 const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, buildActionCard, avatarUrl, failWith } = require("../../src/runtime");
 const { checkTargetChannelAccess, fetchBotMember } = require("../../src/shared/utils");
 const { getMessageText } = require("../../src/adapter");
@@ -848,6 +848,7 @@ const tempChannelCommand = {
 
     if (mode === "off") {
       await GuildConfig.findOneAndUpdate({ guildId: ctx.guild.id }, { $set: { voiceHubId: null } }, { upsert: true, returnDocument: "after" });
+      invalidateGuildConfigCache(ctx.guild.id);
       return ctx.send(ComponentsV2Builder.card({ title: "Voice Hub desactivado", description: "Ya no se crearán salas automáticas.", color: RED }));
     }
 
@@ -862,6 +863,7 @@ const tempChannelCommand = {
         { $set: { voiceHubId: hub.id, voiceHubCategoryId: hub.parentId ?? null, voiceHubTemplate: tpl } },
         { upsert: true, returnDocument: "after" }
       );
+      invalidateGuildConfigCache(ctx.guild.id);
       return ctx.send(ComponentsV2Builder.card({
         title: "Voice Hub activado",
         description: `Al entrar a ${hub} se creará una sala temporal (\`${tpl}\`) que se borrará al quedar vacía.`,

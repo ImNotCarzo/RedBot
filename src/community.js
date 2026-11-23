@@ -1,6 +1,6 @@
 const { PermissionFlagsBits } = require("discord.js");
-const { Birthday, GuildConfig, InviteJoin, InviteReward, InviteStat } = require("./database");
-const { TtlCache } = require("./guild");
+const { Birthday, InviteJoin, InviteReward, InviteStat } = require("./database");
+const { TtlCache, getGuildConfigCached } = require("./guild");
 const { grantTempRole } = require("./reactionRoles");
 const { Logger } = require("./runtime");
 const { canBotManageRole, fetchBotMember, isDbReady } = require("./shared/utils");
@@ -138,7 +138,7 @@ async function sendWelcomeOrGoodbye(member, kind, inviteInfo = null) {
   if (!guild?.id || !isDbReady()) return;
 
   const field = kind === "goodbye" ? "goodbyeConfig" : "welcomeConfig";
-  const doc = await GuildConfig.findOne({ guildId: guild.id }).select(field).lean().catch(() => null);
+  const doc = await getGuildConfigCached(guild.id);
   const cfg = doc?.[field];
   if (!cfg?.enabled) return;
 
@@ -195,19 +195,13 @@ async function checkBirthdaysToday(client) {
     }).lean().catch(() => []);
     if (!due.length) return;
 
-    const guildCfgCache = new Map();
-
     for (const b of due) {
       try {
         const guild = client.guilds.cache.get(b.guildId) ?? await client.guilds.fetch(b.guildId).catch(() => null);
         if (!guild) continue;
 
-        let cfg = guildCfgCache.get(guild.id);
-        if (cfg === undefined) {
-          const cfgDoc = await GuildConfig.findOne({ guildId: guild.id }).select("birthdayConfig").lean().catch(() => null);
-          cfg = cfgDoc?.birthdayConfig ?? null;
-          guildCfgCache.set(guild.id, cfg);
-        }
+        const cfgDoc = await getGuildConfigCached(guild.id);
+        const cfg = cfgDoc?.birthdayConfig ?? null;
         if (!cfg?.enabled) continue;
 
         const member = await guild.members.fetch(b.userId).catch(() => null);

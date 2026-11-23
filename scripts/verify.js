@@ -783,6 +783,365 @@ async function checkSchedulersAndRestoration() {
   }
 }
 
+async function checkGuildConfigCacheInvalidation() {
+  const mongoose = require("mongoose");
+  const { PermissionFlagsBits, ChannelType } = require("discord.js");
+  const { GuildConfig, Ticket } = require(path.join(ROOT, "src/database"));
+  const {
+    getGuildConfigCached,
+    invalidateGuildConfigCache,
+    getPrefix,
+    setPrefix,
+    getLang,
+    setLang,
+    getAiContext,
+    setAiContext,
+    getWarnPolicy,
+    setWarnPolicy,
+  } = require(path.join(ROOT, "src/guild"));
+  const { getAutomodConfig, updateAutomodConfig, getDramaChannelId } = require(path.join(ROOT, "src/moderationExtra"));
+  const { getTicketConfig, updateTicketConfig, openTicket } = require(path.join(ROOT, "src/tickets"));
+  const { isVoiceAutoStatusEnabled } = require(path.join(ROOT, "src/channelsExtra"));
+
+  const channelSlash = require(path.join(ROOT, "commands/slash/channel")).data.data;
+  const communitySlash = require(path.join(ROOT, "commands/slash/community")).data.data;
+  const modSlash = require(path.join(ROOT, "commands/slash/mod")).data.data;
+
+  const findSubcommand = (group, name) => {
+    const subs = group.commands ?? group.subcommands ?? [];
+    return subs.find((c) => (c.data?.name ?? c.name) === name);
+  };
+
+  const tempCmd = findSubcommand(channelSlash, "temp");
+  const voiceStatusCmd = findSubcommand(channelSlash, "voicestatus");
+  const welcomeCmd = findSubcommand(communitySlash, "welcome");
+  const goodbyeCmd = findSubcommand(communitySlash, "goodbye");
+  const birthdaySetupCmd = findSubcommand(communitySlash, "birthdaysetup");
+  const dramaWatcherCmd = findSubcommand(modSlash, "dramawatcher");
+
+  const origConnDesc = Object.getOwnPropertyDescriptor(mongoose.connection, "readyState");
+  const origFindOne = GuildConfig.findOne;
+  const origFindOneAndUpdate = GuildConfig.findOneAndUpdate;
+  const origTicketFindOne = Ticket.findOne;
+  const origTicketCreate = Ticket.create;
+
+  let findOneCount = 0;
+  let updateCount = 0;
+  let currentDoc = {};
+
+  const applyDotPatch = (target, patchObj) => {
+    const next = structuredClone(target);
+    for (const [k, v] of Object.entries(patchObj)) {
+      const parts = k.split(".");
+      let cur = next;
+      for (let i = 0; i < parts.length - 1; i++) {
+        cur[parts[i]] = cur[parts[i]] && typeof cur[parts[i]] === "object" ? { ...cur[parts[i]] } : {};
+        cur = cur[parts[i]];
+      }
+      cur[parts[parts.length - 1]] = v;
+    }
+    return next;
+  };
+
+  try {
+    Object.defineProperty(mongoose.connection, "readyState", { value: 1, configurable: true, writable: true });
+
+    GuildConfig.findOne = ({ guildId }) => {
+      findOneCount++;
+      const snapshot = { guildId, ...structuredClone(currentDoc) };
+      const queryObj = {
+        select() {
+          return this;
+        },
+        lean: async () => snapshot,
+        then(onFulfilled, onRejected) {
+          return Promise.resolve(snapshot).then(onFulfilled, onRejected);
+        },
+      };
+      return queryObj;
+    };
+
+    GuildConfig.findOneAndUpdate = ({ guildId }, update = {}) => {
+      updateCount++;
+      let next = { guildId, ...structuredClone(currentDoc) };
+      if (update.$set) next = applyDotPatch(next, update.$set);
+      if (update.$inc) {
+        for (const [k, delta] of Object.entries(update.$inc)) {
+          const parts = k.split(".");
+          let cur = next;
+          for (let i = 0; i < parts.length - 1; i++) {
+            cur[parts[i]] = cur[parts[i]] && typeof cur[parts[i]] === "object" ? { ...cur[parts[i]] } : {};
+            cur = cur[parts[i]];
+          }
+          const leaf = parts[parts.length - 1];
+          cur[leaf] = (Number(cur[leaf]) || 0) + Number(delta);
+        }
+      }
+      for (const [k, v] of Object.entries(update)) {
+        if (!k.startsWith("$")) next[k] = v;
+      }
+      currentDoc = next;
+      const snapshot = structuredClone(currentDoc);
+      return {
+        lean: async () => snapshot,
+        then(onFulfilled, onRejected) {
+          return Promise.resolve(snapshot).then(onFulfilled, onRejected);
+        },
+      };
+    };
+
+    Ticket.findOne = () => ({ lean: async () => null });
+    Ticket.create = async (data) => ({ ...data });
+
+    const makeMockCtx = (guildId, params = {}) => ({
+      guild: {
+        id: guildId,
+        name: "TestGuild",
+        ownerId: "u_admin",
+        roles: { everyone: { id: guildId }, cache: new Map() },
+        channels: { cache: new Map() },
+      },
+      user: { id: "u_admin", tag: "admin#0001", username: "admin" },
+      member: {
+        id: "u_admin",
+        permissions: { has: () => true },
+        roles: { highest: { position: 99 }, cache: new Map() },
+      },
+      get: (k) => (Object.prototype.hasOwnProperty.call(params, k) ? params[k] : null),
+      defer: async () => {},
+      send: async () => {},
+      ephemeral: async () => {},
+    });
+
+    const guildId = "g_cache_test";
+    const verifyWriteInvalidates = async (label, writeFn, readAndAssertFn) => {
+      currentDoc = {
+        guildId,
+        prefix: ".",
+        lang: "es",
+        langSource: "auto",
+        aiContext: "inicial",
+        warnThreshold: 0,
+        warnMuteMs: 600_000,
+        automodConfig: { enabled: false },
+        dramaChannelId: null,
+        voiceAutoStatus: false,
+        voiceHubId: "vh_old",
+        ticketConfig: { enabled: true, counter: 1, categoryId: null },
+        welcomeConfig: { enabled: false },
+        goodbyeConfig: { enabled: false },
+        birthdayConfig: { enabled: false },
+      };
+      invalidateGuildConfigCache(guildId);
+      findOneCount = 0;
+      updateCount = 0;
+
+      // Calentar caché unificada y comprobar que múltiples lectores comparten la misma entrada
+      await getPrefix(guildId);
+      await getLang(guildId);
+      await getAiContext(guildId);
+      await getWarnPolicy(guildId);
+      await getAutomodConfig(guildId);
+      await getDramaChannelId(guildId);
+      await getTicketConfig(guildId);
+      await isVoiceAutoStatusEnabled(guildId);
+      assertCondition(
+        findOneCount === 1,
+        `Caché unificada GuildConfig (${label}): se esperaban 1 lectura DB al calentar, ocurrieron ${findOneCount}`
+      );
+
+      const prevUpdates = updateCount;
+      await writeFn();
+      assertCondition(
+        updateCount === prevUpdates + 1,
+        `Escritura GuildConfig (${label}): no ejecutó findOneAndUpdate`
+      );
+
+      // La siguiente lectura debe consultar DB de nuevo (findOneCount: 1 -> 2) por haberse invalidado la caché
+      await readAndAssertFn();
+      assertCondition(
+        findOneCount === 2,
+        `Invalidación GuildConfig (${label}): la caché no se invalidó tras escribir (findOneCount=${findOneCount}, esperado=2)`
+      );
+    };
+
+    // 1. setLang
+    await verifyWriteInvalidates(
+      "setLang",
+      () => setLang(guildId, "en"),
+      async () => {
+        const lang = await getLang(guildId);
+        assertCondition(lang === "en", "setLang: no devolvió el nuevo idioma tras invalidar");
+      }
+    );
+
+    // 2. setAiContext
+    await verifyWriteInvalidates(
+      "setAiContext",
+      () => setAiContext(guildId, "contexto actualizado"),
+      async () => {
+        const ctxText = await getAiContext(guildId);
+        assertCondition(ctxText === "contexto actualizado", "setAiContext: no devolvió el nuevo contexto tras invalidar");
+      }
+    );
+
+    // 3. setWarnPolicy
+    await verifyWriteInvalidates(
+      "setWarnPolicy",
+      () => setWarnPolicy(guildId, { warnThreshold: 4, warnMuteMs: 120_000 }),
+      async () => {
+        const pol = await getWarnPolicy(guildId);
+        assertCondition(pol.warnThreshold === 4 && pol.warnMuteMs === 120_000, "setWarnPolicy: no devolvió la nueva política");
+      }
+    );
+
+    // 4. setPrefix
+    await verifyWriteInvalidates(
+      "setPrefix",
+      () => setPrefix(guildId, "!"),
+      async () => {
+        const p = await getPrefix(guildId);
+        assertCondition(p === "!", "setPrefix: no devolvió el nuevo prefijo");
+      }
+    );
+
+    // 5. updateAutomodConfig
+    await verifyWriteInvalidates(
+      "updateAutomodConfig",
+      () => updateAutomodConfig(guildId, { enabled: true }),
+      async () => {
+        const cfg = await getAutomodConfig(guildId);
+        assertCondition(cfg.enabled === true, "updateAutomodConfig: no devolvió automod activado");
+      }
+    );
+
+    // 6. updateTicketConfig
+    await verifyWriteInvalidates(
+      "updateTicketConfig",
+      () => updateTicketConfig(guildId, { categoryId: "cat_99" }),
+      async () => {
+        const cfg = await getTicketConfig(guildId);
+        assertCondition(cfg.categoryId === "cat_99", "updateTicketConfig: no devolvió la nueva categoría");
+      }
+    );
+
+    // 7. openTicket
+    await verifyWriteInvalidates(
+      "openTicket",
+      () =>
+        openTicket({
+          guild: {
+            id: guildId,
+            roles: { everyone: { id: guildId }, cache: new Map() },
+            members: {
+              me: { id: "bot_1", permissions: { has: (p) => p === PermissionFlagsBits.ManageChannels } },
+            },
+            channels: {
+              cache: new Map(),
+              create: async () => ({ id: "tkt_ch_1", send: async () => {}, delete: async () => {} }),
+            },
+          },
+          user: { id: "u_opener", username: "opener" },
+        }),
+      async () => {
+        const cfg = await getTicketConfig(guildId);
+        assertCondition(cfg.counter === 2, "openTicket: no reflejó el incremento de counter tras invalidar");
+      }
+    );
+
+    // 8. /channel temp (off)
+    await verifyWriteInvalidates(
+      "/channel temp (off)",
+      () => tempCmd.code(makeMockCtx(guildId, { modo: "off" })),
+      async () => {
+        const doc = await getGuildConfigCached(guildId);
+        assertCondition(doc?.voiceHubId === null, "/channel temp (off): no invalidó voiceHubId");
+      }
+    );
+
+    // 9. /channel temp (hub)
+    await verifyWriteInvalidates(
+      "/channel temp (hub)",
+      () =>
+        tempCmd.code(
+          makeMockCtx(guildId, {
+            modo: "hub",
+            canal_hub: { id: "vh_new", type: ChannelType.GuildVoice, parentId: "cat_v" },
+            nombre: "Sala {user.username}",
+          })
+        ),
+      async () => {
+        const doc = await getGuildConfigCached(guildId);
+        assertCondition(doc?.voiceHubId === "vh_new", "/channel temp (hub): no invalidó voiceHubId");
+      }
+    );
+
+    // 10. /channel voicestatus (modo_auto)
+    await verifyWriteInvalidates(
+      "/channel voicestatus (modo_auto)",
+      () => voiceStatusCmd.code(makeMockCtx(guildId, { modo_auto: "on" })),
+      async () => {
+        const enabled = await isVoiceAutoStatusEnabled(guildId);
+        assertCondition(enabled === true, "/channel voicestatus: no reflejó voiceAutoStatus=true");
+      }
+    );
+
+    // 11a. /community welcome
+    await verifyWriteInvalidates(
+      "/community welcome",
+      () => welcomeCmd.code(makeMockCtx(guildId, { estado: "on", mensaje: "Hola {user}" })),
+      async () => {
+        const doc = await getGuildConfigCached(guildId);
+        assertCondition(doc?.welcomeConfig?.enabled === true, "/community welcome: no invalidó welcomeConfig");
+      }
+    );
+
+    // 11b. /community goodbye
+    await verifyWriteInvalidates(
+      "/community goodbye",
+      () => goodbyeCmd.code(makeMockCtx(guildId, { estado: "on", mensaje: "Adiós {user}" })),
+      async () => {
+        const doc = await getGuildConfigCached(guildId);
+        assertCondition(doc?.goodbyeConfig?.enabled === true, "/community goodbye: no invalidó goodbyeConfig");
+      }
+    );
+
+    // 12. /community birthdaysetup
+    await verifyWriteInvalidates(
+      "/community birthdaysetup",
+      () => birthdaySetupCmd.code(makeMockCtx(guildId, { estado: "on" })),
+      async () => {
+        const doc = await getGuildConfigCached(guildId);
+        assertCondition(doc?.birthdayConfig?.enabled === true, "/community birthdaysetup: no invalidó birthdayConfig");
+      }
+    );
+
+    // 13. /mod dramawatcher
+    await verifyWriteInvalidates(
+      "/mod dramawatcher",
+      () =>
+        dramaWatcherCmd.code(
+          makeMockCtx(guildId, {
+            accion: "set",
+            canal: { id: "ch_drama_1", isTextBased: () => true },
+          })
+        ),
+      async () => {
+        const id = await getDramaChannelId(guildId);
+        assertCondition(id === "ch_drama_1", "/mod dramawatcher: no invalidó dramaChannelId");
+      }
+    );
+  } finally {
+    invalidateGuildConfigCache();
+    if (origConnDesc) Object.defineProperty(mongoose.connection, "readyState", origConnDesc);
+    else delete mongoose.connection.readyState;
+    GuildConfig.findOne = origFindOne;
+    GuildConfig.findOneAndUpdate = origFindOneAndUpdate;
+    Ticket.findOne = origTicketFindOne;
+    Ticket.create = origTicketCreate;
+  }
+}
+
 async function main() {
   const jsFiles = collectJsFiles(ROOT);
   const checkedFiles = checkSyntax(jsFiles);
@@ -803,6 +1162,9 @@ async function main() {
 
   await checkSchedulersAndRestoration();
   console.log("[OK] Schedulers: scheduleLongTimeout (<24.8d, >24.8d, cancelación) y restauración de 4 servicios verificados");
+
+  await checkGuildConfigCacheInvalidation();
+  console.log("[OK] GuildConfig: caché unificada (8 lectores) e invalidación en los 14 flujos de escritura verificadas");
 }
 
 main()

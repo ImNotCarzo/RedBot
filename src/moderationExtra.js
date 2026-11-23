@@ -2,7 +2,7 @@ const { PermissionFlagsBits } = require("discord.js");
 const { ComponentsV2Builder, V2Text } = require("gralonium");
 const { RED, YELLOW, GREEN } = require("./config");
 const { GuildConfig } = require("./database");
-const { logAction, TtlCache } = require("./guild");
+const { getGuildConfigCached, invalidateGuildConfigCache, logAction } = require("./guild");
 const { addModCase, addWarn } = require("./moderation");
 const { Logger } = require("./runtime");
 const { fetchBotMember, isDbReady } = require("./shared/utils");
@@ -11,8 +11,6 @@ const { substituteVars, buildTagVariables } = require("./tagscript");
 const log = new Logger("MOD_EXTRA");
 const spamTracker = new Map();
 const dramaInFlight = new Set();
-const automodConfigCache = new TtlCache(2 * 60_000, 2000);
-const dramaChannelCache = new TtlCache(2 * 60_000, 2000);
 
 const DRAMA_EMOJIS = {
   "🔨": "ban",
@@ -40,16 +38,8 @@ const AUTOMOD_DEFAULTS = {
 
 async function getAutomodConfig(guildId) {
   if (!guildId || !isDbReady()) return { ...AUTOMOD_DEFAULTS };
-  const cached = automodConfigCache.get(guildId);
-  if (cached !== undefined) return cached;
-  try {
-    const doc = await GuildConfig.findOne({ guildId }).select("automodConfig").lean();
-    const cfg = { ...AUTOMOD_DEFAULTS, ...(doc?.automodConfig || {}) };
-    automodConfigCache.set(guildId, cfg);
-    return cfg;
-  } catch {
-    return { ...AUTOMOD_DEFAULTS };
-  }
+  const doc = await getGuildConfigCached(guildId);
+  return { ...AUTOMOD_DEFAULTS, ...(doc?.automodConfig || {}) };
 }
 
 async function updateAutomodConfig(guildId, patch) {
@@ -61,24 +51,18 @@ async function updateAutomodConfig(guildId, patch) {
     { $set: setObj },
     { upsert: true, returnDocument: "after" }
   ).lean();
-  const updated = doc?.automodConfig ? { ...AUTOMOD_DEFAULTS, ...doc.automodConfig } : null;
-  if (updated) automodConfigCache.set(guildId, updated);
-  else automodConfigCache.delete(guildId);
-  return updated;
+  invalidateGuildConfigCache(guildId);
+  return doc?.automodConfig ? { ...AUTOMOD_DEFAULTS, ...doc.automodConfig } : null;
 }
 
 function invalidateDramaChannelCache(guildId) {
-  if (guildId) dramaChannelCache.delete(guildId);
+  invalidateGuildConfigCache(guildId);
 }
 
 async function getDramaChannelId(guildId) {
   if (!guildId || !isDbReady()) return null;
-  const cached = dramaChannelCache.get(guildId);
-  if (cached !== undefined) return cached;
-  const doc = await GuildConfig.findOne({ guildId }).select("dramaChannelId").lean().catch(() => null);
-  const id = doc?.dramaChannelId ?? null;
-  dramaChannelCache.set(guildId, id);
-  return id;
+  const doc = await getGuildConfigCached(guildId);
+  return doc?.dramaChannelId ?? null;
 }
 
 async function postToDramaWatcher({ guild, targetUser, channelId = null, reason, ruleName = "AutoMod", excerpt = "" }) {
