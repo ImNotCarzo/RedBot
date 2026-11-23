@@ -1169,6 +1169,10 @@ async function main() {
   const { runB2Tests } = require("./test-b2");
   const b2Summary = await runB2Tests();
   console.log(`[OK] B2: ${b2Summary}`);
+
+  const { runAdapterTests } = require("./test-adapter");
+  const adapterSummary = runAdapterTests();
+  console.log(`[OK] Adapter: ${adapterSummary}`);
 }
 
 main()
