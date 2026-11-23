@@ -14,8 +14,8 @@ const {
 const { RED, GREEN, BADGE_NAMES, MAX_HISTORIAL, USER_APP_CONFIG } = require("../../src/config");
 const { resolveContextLang, getAiContext } = require("../../src/guild");
 const { getCurrentLang } = require("../../src/i18n");
-const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, isObfuscatedChannel, wait } = require("../../src/runtime");
-const { MAX_IMAGE_SIZE_BYTES, VALID_IMAGE_TYPES, num, validateImageAttachment } = require("../../src/shared/utils");
+const { Logger, THINKING_TEXT, noGuildReply, handleCommandError, wait } = require("../../src/runtime");
+const { checkTargetChannelAccess, fetchBotMember, num, validateImageAttachment } = require("../../src/shared/utils");
 
 const log = new Logger("CMD_AI");
 
@@ -540,7 +540,7 @@ const data = {
           const rawUser = isMember ? fetched.user : (baseTarget?.user ?? baseTarget);
           const user = await rawUser.fetch(true).catch(() => rawUser);
           const avatarUrl = user.displayAvatarURL({ size: 256, extension: "png", forceStatic: true });
-          const imagePart = await fetchImageAsInlineData(avatarUrl).catch(() => fetchImageAsInlineData(avatarUrl)).catch(() => null);
+          const imagePart = await fetchImageAsInlineData(avatarUrl).catch(() => null);
           const username = user.globalName ?? user.username;
           const usertag = user.username;
 
@@ -675,21 +675,16 @@ ${datosUsuario}`;
         const filterUser = ctx.get("usuario") ?? null;
         const explicitHas = ctx.get("contiene") ?? null;
         const guild = ctx.guild;
-        const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+        const me = await fetchBotMember(guild);
 
         const canReadChannel = (ch) => {
-          if (!ch || isObfuscatedChannel(ch) || ch.guildId !== guild.id) return false;
-          if (typeof ch.isTextBased !== "function" || !ch.isTextBased()) return false;
-          const userOk =
-            ctx.member?.id === guild.ownerId ||
-            Boolean(ch.permissionsFor?.(ctx.member)?.has?.(PermissionFlagsBits.ViewChannel) &&
-              ch.permissionsFor?.(ctx.member)?.has?.(PermissionFlagsBits.ReadMessageHistory));
+          if (!ch || typeof ch.isTextBased !== "function" || !ch.isTextBased()) return false;
+          if (checkTargetChannelAccess(ctx, ch, [PermissionFlagsBits.ReadMessageHistory])) return false;
           const botPerms = me ? ch.permissionsFor?.(me) : null;
-          const botOk = Boolean(
+          return Boolean(
             botPerms?.has?.(PermissionFlagsBits.ViewChannel) &&
             botPerms?.has?.(PermissionFlagsBits.ReadMessageHistory)
           );
-          return userOk && botOk;
         };
 
         let allowedChannelIds = [];

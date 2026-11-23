@@ -1023,11 +1023,16 @@ const data = {
         const patch = {};
         if (ctx.get("estado")) patch.enabled = ctx.get("estado") === "on";
         if (ctx.get("accion")) patch.action = ctx.get("accion");
-        if (ctx.get("antispam")) patch.antiSpam = ctx.get("antispam") === "true";
-        if (ctx.get("antiinvites")) patch.antiInvites = ctx.get("antiinvites") === "true";
-        if (ctx.get("antilinks")) patch.antiLinks = ctx.get("antilinks") === "true";
-        if (ctx.get("anticaps")) patch.antiCaps = ctx.get("anticaps") === "true";
-        if (ctx.get("antimentions")) patch.antiMentions = ctx.get("antimentions") === "true";
+        for (const [opt, key] of [
+          ["antispam", "antiSpam"],
+          ["antiinvites", "antiInvites"],
+          ["antilinks", "antiLinks"],
+          ["anticaps", "antiCaps"],
+          ["antimentions", "antiMentions"],
+        ]) {
+          const val = ctx.get(opt);
+          if (val) patch[key] = val === "true";
+        }
         if (ctx.get("palabras") !== null && ctx.get("palabras") !== undefined) {
           patch.blockedWords = String(ctx.get("palabras"))
             .split(",")

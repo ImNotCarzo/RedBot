@@ -29,7 +29,8 @@ const {
 const { version: botVersion } = require("../../package.json");
 const { createReminder, listUserReminders, cancelReminder } = require("../../src/reminders");
 const { parseDuration } = require("../../src/moderation");
-const { formatLanguageLabel, formatUptime, num } = require("../../src/shared/utils");
+const { formatLanguageLabel, formatUptime, isValidImageAttachment, num } = require("../../src/shared/utils");
+const { THIRD_PARTY_MESSAGE } = require("../../src/shared/ui");
 
 let graloniumVersion = "0.4.0";
 try {
@@ -571,13 +572,8 @@ const data = {
       const usuarioExcluido = ctx.get("excluir_usuario");
       const imagen = ctx.get("imagen");
 
-      if (imagen) {
-        const ct = imagen.contentType ?? "";
-        const attName = imagen.name ?? "";
-        const isImg = /^image\/(jpeg|png|gif|webp)/i.test(ct) || /\.(png|jpe?g|gif|webp)$/i.test(attName);
-        if (!isImg || (imagen.size ?? 0) > 8 * 1024 * 1024) {
-          return ctx.ephemeral("La imagen adjunta debe ser jpg, png, gif o webp de máximo 8MB");
-        }
+      if (imagen && !isValidImageAttachment(imagen)) {
+        return ctx.ephemeral("La imagen adjunta debe ser jpg, png, gif o webp de máximo 8MB");
       }
 
       await ctx.defer({ ephemeral: true });
@@ -1023,6 +1019,7 @@ const remindersCommand = {
         authorId: userId,
         timeout: 2 * 60_000,
         thirdPartyMode: "reject",
+        thirdPartyMessage: lang === "en" ? "This is not your command" : THIRD_PARTY_MESSAGE,
         onEnd: "static",
         state: { items },
         render: ({ state, view: activeView, isEnded }) => renderCard(state.items, activeView, isEnded),
@@ -1139,7 +1136,7 @@ const setlangCommand = {
           authorId: ctx.user?.id,
           timeout: 2 * 60_000,
           thirdPartyMode: "reject",
-          thirdPartyMessage: currentLang === "en" ? "This is not your command" : "No es tu comando",
+          thirdPartyMessage: currentLang === "en" ? "This is not your command" : THIRD_PARTY_MESSAGE,
           onEnd: "static",
           state: { lang: currentLang },
           render: ({ state, view: activeView, isEnded }) => buildLangPanel(state.lang, activeView, isEnded),
