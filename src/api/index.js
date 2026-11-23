@@ -42,7 +42,7 @@ async function handleRequest(req, res) {
   if (isTicketRoute && !["GET", "POST", "PUT"].includes(req.method)) {
     return json(res, 405, { error: "Method not allowed" });
   }
-  if (isLogoutRoute && !["GET", "POST"].includes(req.method)) {
+  if (isLogoutRoute && req.method !== "POST") {
     return json(res, 405, { error: "Method not allowed" });
   }
   if (!isTicketRoute && !isLogoutRoute && req.method !== "GET") {

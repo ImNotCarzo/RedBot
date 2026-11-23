@@ -613,14 +613,14 @@ async function runHttpContractSuite(apiMod, envCtrl) {
     assertCondition(rTktPanelOk.status === 200 && rTktPanelOk.json?.messageId === "777777777777777777", "POST panel esperado 200");
     snapshots.ticketsPanelOk = snapshotResponse(rTktPanelOk);
 
-    // Logout por GET (conservado para B3 #2) + revocación inmediata vista por handleTicketsRoute
-    const rLogoutGet = await httpRequest(port1, { path: "/auth/logout", headers: tktSessionHeaders });
+    // Logout por POST + revocación inmediata vista por handleTicketsRoute
+    const rLogoutPostPrimary = await httpRequest(port1, { method: "POST", path: "/auth/logout", headers: tktSessionHeaders });
     assertCondition(
-      rLogoutGet.status === 200 && rLogoutGet.json?.ok === true &&
-        normalizeCookies(rLogoutGet.headers["set-cookie"])[0]?.includes("Max-Age=0"),
-      "GET /auth/logout esperado 200 con Max-Age=0"
+      rLogoutPostPrimary.status === 200 && rLogoutPostPrimary.json?.ok === true &&
+        normalizeCookies(rLogoutPostPrimary.headers["set-cookie"])[0]?.includes("Max-Age=0"),
+      "POST /auth/logout esperado 200 con Max-Age=0"
     );
-    snapshots.logoutGet = snapshotResponse(rLogoutGet);
+    snapshots.logoutPostPrimary = snapshotResponse(rLogoutPostPrimary);
 
     const rRevokedTickets = await httpRequest(port1, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: tktSessionHeaders });
     assertCondition(rRevokedTickets.status === 401, "Token revocado tras logout debe dar 401 en tickets");
@@ -809,6 +809,89 @@ async function verifySplitModuleSingletons(envCtrl) {
   return { tested: true };
 }
 
+async function verifyB3LogoutPostOnly(currentApi, baselineApi, envCtrl) {
+  const { mockClient, silentLogger, resetStores, setTestEnv } = envCtrl;
+  resetStores();
+  setTestEnv({});
+
+  const configBase = {
+    API_HOST: "127.0.0.1",
+    TRUST_PROXY: true,
+    API_KEY: TEST_API_KEY,
+    CLIENT_ID: TEST_CLIENT_ID,
+    CLIENT_SECRET: TEST_CLIENT_SECRET,
+    SESSION_SECRET: TEST_SESSION_SECRET,
+    OAUTH_REDIRECT_URI: "http://127.0.0.1/api/oauth/callback",
+    DASHBOARD_URL: "https://redbot.me/tickets",
+  };
+
+  const port = await getFreePort();
+  await currentApi.startApi(mockClient, { ...configBase, API_PORT: port }, silentLogger);
+
+  try {
+    const rLogin = await httpRequest(port, { path: "/api/auth/login?return_to=http://127.0.0.1:4321/tickets" });
+    const dashState = extractCookieValue(rLogin.headers["set-cookie"], "redbot_oauth_state");
+    assertCondition(Boolean(dashState), "B3 #2: falta cookie redbot_oauth_state en login");
+
+    const rCb = await httpRequest(port, {
+      path: `/api/oauth/callback?code=dashcode&state=${encodeURIComponent(dashState)}`,
+      headers: { Cookie: `redbot_oauth_state=${dashState}` },
+    });
+    const sessionToken = extractCookieValue(rCb.headers["set-cookie"], "redbot_session");
+    assertCondition(Boolean(sessionToken), "B3 #2: falta cookie redbot_session en callback");
+
+    const sessionHeaders = { Cookie: `redbot_session=${encodeURIComponent(sessionToken)}` };
+
+    const rGetLegacy = await httpRequest(port, { method: "GET", path: "/auth/logout", headers: sessionHeaders });
+    assertCondition(
+      rGetLegacy.status === 405 &&
+        rGetLegacy.json?.error === "Method not allowed" &&
+        rGetLegacy.headers["set-cookie"] === undefined &&
+        rGetLegacy.headers["x-ratelimit-limit"] === undefined,
+      `B3 #2: GET /auth/logout esperado 405 sin Set-Cookie, obtuvo ${rGetLegacy.status}`
+    );
+
+    const rGetApi = await httpRequest(port, { method: "GET", path: "/api/auth/logout", headers: sessionHeaders });
+    assertCondition(
+      rGetApi.status === 405 &&
+        rGetApi.json?.error === "Method not allowed" &&
+        rGetApi.headers["set-cookie"] === undefined,
+      `B3 #2: GET /api/auth/logout esperado 405 sin Set-Cookie, obtuvo ${rGetApi.status}`
+    );
+
+    const rStillAuth = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: sessionHeaders });
+    assertCondition(rStillAuth.status === 200, `B3 #2: GET logout bloqueado no debe revocar sesión (${rStillAuth.status})`);
+
+    const rPostApi = await httpRequest(port, { method: "POST", path: "/api/auth/logout", headers: sessionHeaders });
+    assertCondition(
+      rPostApi.status === 200 &&
+        rPostApi.json?.ok === true &&
+        normalizeCookies(rPostApi.headers["set-cookie"])[0]?.includes("Max-Age=0"),
+      `B3 #2: POST /api/auth/logout esperado 200 con Max-Age=0, obtuvo ${rPostApi.status}`
+    );
+
+    const rAfterRevoke = await httpRequest(port, { path: `/api/tickets/${GUILD_ALLOWED}`, headers: sessionHeaders });
+    assertCondition(rAfterRevoke.status === 401, `B3 #2: tras POST logout la sesión debe devolver 401, obtuvo ${rAfterRevoke.status}`);
+  } finally {
+    await currentApi.stopApi();
+  }
+
+  let baselineGetStatus = null;
+  if (baselineApi) {
+    const portBase = await getFreePort();
+    await baselineApi.startApi(mockClient, { ...configBase, API_PORT: portBase }, silentLogger);
+    try {
+      const rBaseGet = await httpRequest(portBase, { method: "GET", path: "/auth/logout" });
+      baselineGetStatus = rBaseGet.status;
+      assertCondition(baselineGetStatus === 200, `Baseline ${BASELINE_COMMIT} debía aceptar GET /auth/logout con 200, obtuvo ${baselineGetStatus}`);
+    } finally {
+      await baselineApi.stopApi();
+    }
+  }
+
+  return { baselineGetStatus };
+}
+
 async function runApiTests({ verbose = false } = {}) {
   const envCtrl = installApiMocks();
   try {
@@ -833,11 +916,13 @@ async function runApiTests({ verbose = false } = {}) {
     }
 
     const splitChecks = await verifySplitModuleSingletons(envCtrl);
+    const b3LogoutCheck = await verifyB3LogoutPostOnly(currentApi, baselineApi, envCtrl);
 
     const modeLabel = singletonInfo.isSplit ? "modular (src/api/)" : "monolito (src/api.js)";
     const vsLabel = baselineRun ? `vs ${BASELINE_COMMIT}: 0 diffs` : "sin historial git";
     const summary =
       `${snapshotKeys.length} escenarios HTTP (${modeLabel}, ${vsLabel}), ` +
+      `B3 #2 (logout solo POST, GET->405 intencional vs ${BASELINE_COMMIT}), ` +
       `rate limit compartido, orden 204/405/429/401/404, stopApi sin fugas OK`;
 
     if (verbose) {
@@ -845,6 +930,9 @@ async function runApiTests({ verbose = false } = {}) {
       console.log(`Escenarios comparados: ${snapshotKeys.length}/${snapshotKeys.length} idénticos (${snapshotKeys.join(", ")})`);
       console.log(`Declaraciones únicas: ${JSON.stringify(singletonInfo.counts)}`);
       console.log(`Módulos split (session -> tickets + EPHEMERAL_SESSION_SECRET): ${splitChecks.tested ? "OK" : "N/A (aún monolito)"}`);
+      console.log(
+        `B3 #2 logout solo POST: GET /auth/logout y GET /api/auth/logout -> 405 (diff intencional vs ${BASELINE_COMMIT} GET->${b3LogoutCheck.baselineGetStatus ?? "N/A"}), POST -> 200 y revoca`
+      );
       console.log(
         `Handles tras stopApi(): TCPServerWrap ${currentRun.resourcesBefore.TCPServerWrap} -> ${currentRun.resourcesAfter.TCPServerWrap}, ` +
         `Timeout ${currentRun.resourcesBefore.Timeout} -> ${currentRun.resourcesAfter.Timeout}`
